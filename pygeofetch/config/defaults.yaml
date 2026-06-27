@@ -1,0 +1,86 @@
+# PyGeoFetch Default Configuration
+# These values can be overridden by ~/.pygeofetch/config.yaml,
+# environment variables (PYGEOFETCH_*), or CLI arguments.
+
+general:
+  output_dir: "./satellite_data"
+  temp_dir: null  # null = system temp
+  log_level: "INFO"
+  log_file: null  # null = stderr only
+
+download:
+  parallel: 2
+  chunk_size_mb: 8.0
+  retry_attempts: 3
+  retry_strategy: "exponential_jitter"
+  retry_delay_seconds: 1.0
+  verify_checksum: true
+  checksum_algorithm: "md5"
+  bandwidth_limit_mbps: 0  # 0 = unlimited
+  timeout_seconds: 300
+  overwrite: false
+  keep_original: false
+
+search:
+  max_results: 100
+  page_size: 100
+  cache_ttl_seconds: 3600  # 1 hour
+  deduplicate: true
+  sort_by: "datetime"
+  sort_ascending: false
+
+cache:
+  enabled: true
+  directory: "~/.pygeofetch/cache"
+  max_size_gb: 5.0
+  ttl_seconds: 86400  # 24 hours
+  provider_ttl:
+    usgs: 3600
+    copernicus: 3600
+    nasa_earthdata: 3600
+
+providers:
+  usgs:
+    base_url: "https://m2m.cr.usgs.gov/api/api/json/stable"
+    timeout: 60
+  copernicus:
+    base_url: "https://catalogue.dataspace.copernicus.eu/odata/v1"
+    auth_url: "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
+    timeout: 60
+  nasa_earthdata:
+    base_url: "https://cmr.earthdata.nasa.gov/search"
+    timeout: 60
+  opentopography:
+    base_url: "https://portal.opentopography.org/API"
+    timeout: 60
+  planet:
+    base_url: "https://api.planet.com"
+    timeout: 60
+    rate_limit_per_minute: 60
+  sentinel_hub:
+    base_url: "https://services.sentinel-hub.com"
+    timeout: 60
+  aws_earth:
+    region: "us-west-2"
+    timeout: 60
+  jaxa:
+    base_url: "https://www.eorc.jaxa.jp"
+    timeout: 60
+  noaa_big_data:
+    base_url: "https://registry.opendata.aws"
+    timeout: 60
+
+notifications:
+  webhook: null
+  email: null
+  slack: null
+
+proxy:
+  http: null
+  https: null
+  no_proxy: []
+
+security:
+  verify_ssl: true
+  credential_storage: "keyring"  # keyring | encrypted_file | plain_file
+  credential_file: "~/.pygeofetch/credentials.enc"

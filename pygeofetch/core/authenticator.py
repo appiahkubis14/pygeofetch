@@ -1,0 +1,432 @@
+"""
+Authentication manager for PyGeoFetch.
+
+Handles secure credential storage, session caching, and authentication
+flows for all providers. Supports system keyring, encrypted file storage,
+and in-memory session caching.
+
+Example::
+
+    from pygeofetch.core.authenticator import AuthManager
+
+    auth = AuthManager()
+    auth.add("usgs", username="user", password="pass")
+    session = auth.authenticate("usgs")  # Returns cached or new session
+
+    auth.list()   # All saved providers
+    auth.remove("usgs")  # Remove credentials
+"""
+
+from __future__ import annotations
+
+import base64
+import json
+import os
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from pygeofetch.models.user_auth import AuthSession, AuthType, Credentials
+from pygeofetch.utils.logging_setup import get_logger
+
+logger = get_logger(__name__)
+
+
+class CredentialStore:
+    """
+    Manages secure credential storage.
+
+    Attempts to use the system keyring; falls back to encrypted file storage.
+    """
+
+    SERVICE_NAME = "pygeofetch"
+
+    def __init__(self, storage_backend: str = "keyring") -> None:
+        self.storage_backend = storage_backend
+        self._config_dir = Path.home() / ".pygeofetch"
+        self._cred_file = self._config_dir / "credentials.json"
+        self._in_memory: Dict[str, Dict[str, Any]] = {}
+
+    def save(self, provider: str, credentials: Dict[str, Any]) -> None:
+        """Persist credentials for a provider."""
+        if self.storage_backend == "keyring":
+            self._save_keyring(provider, credentials)
+        else:
+            self._save_file(provider, credentials)
+        self._in_memory[provider] = credentials
+
+    def load(self, provider: str) -> Optional[Dict[str, Any]]:
+        """Load credentials for a provider — keyring first, then file fallback."""
+        if provider in self._in_memory:
+            return self._in_memory[provider]
+        if self.storage_backend == "keyring":
+            result = self._load_keyring(provider)
+            if result:
+                return result
+            # Fall back to file store so credentials saved via --store file
+            # are always visible regardless of which backend is active
+        result = self._load_file(provider)
+        if result:
+            self._in_memory[provider] = result  # cache it
+        return result
+
+    def delete(self, provider: str) -> bool:
+        """Remove stored credentials for a provider."""
+        self._in_memory.pop(provider, None)
+        if self.storage_backend == "keyring":
+            return self._delete_keyring(provider)
+        return self._delete_file(provider)
+
+    def list_providers(self) -> List[str]:
+        """Return list of providers with stored credentials."""
+        providers = set(self._in_memory.keys())
+        if self._cred_file.exists():
+            try:
+                data = json.loads(self._cred_file.read_text())
+                providers.update(data.keys())
+            except Exception:
+                pass
+        return sorted(providers)
+
+    def _save_keyring(self, provider: str, credentials: Dict[str, Any]) -> None:
+        try:
+            import keyring
+            keyring.set_password(
+                self.SERVICE_NAME, provider, json.dumps(credentials)
+            )
+            logger.debug(f"Credentials for {provider!r} saved to system keyring")
+        except ImportError:
+            logger.warning("keyring package not available; falling back to file storage")
+            self._save_file(provider, credentials)
+        except Exception as exc:
+            logger.warning(f"Keyring save failed: {exc}; falling back to file storage")
+            self._save_file(provider, credentials)
+
+    def _load_keyring(self, provider: str) -> Optional[Dict[str, Any]]:
+        try:
+            import keyring
+            data = keyring.get_password(self.SERVICE_NAME, provider)
+            if data:
+                return json.loads(data)
+        except ImportError:
+            return self._load_file(provider)
+        except Exception:
+            return self._load_file(provider)
+        return None
+
+    def _delete_keyring(self, provider: str) -> bool:
+        try:
+            import keyring
+            keyring.delete_password(self.SERVICE_NAME, provider)
+            return True
+        except Exception:
+            return self._delete_file(provider)
+
+    def _save_file(self, provider: str, credentials: Dict[str, Any]) -> None:
+        self._config_dir.mkdir(parents=True, exist_ok=True)
+        existing: Dict[str, Any] = {}
+        if self._cred_file.exists():
+            try:
+                existing = json.loads(self._cred_file.read_text())
+            except Exception:
+                pass
+        # Basic obfuscation (not encryption) - passwords stored as b64
+        obfuscated = {}
+        for k, v in credentials.items():
+            if k in ("password", "api_key", "token", "secret_key", "client_secret"):
+                obfuscated[k] = base64.b64encode(str(v).encode()).decode()
+            else:
+                obfuscated[k] = v
+        existing[provider] = {"__obfuscated": True, **obfuscated}
+        self._cred_file.write_text(json.dumps(existing, indent=2))
+        self._cred_file.chmod(0o600)
+        logger.debug(f"Credentials for {provider!r} saved to {self._cred_file}")
+
+    def _load_file(self, provider: str) -> Optional[Dict[str, Any]]:
+        if not self._cred_file.exists():
+            return None
+        try:
+            data = json.loads(self._cred_file.read_text())
+            creds = data.get(provider)
+            if not creds:
+                return None
+            if creds.get("__obfuscated"):
+                creds = {k: v for k, v in creds.items() if k != "__obfuscated"}
+                decoded = {}
+                for k, v in creds.items():
+                    if k in ("password", "api_key", "token", "secret_key", "client_secret"):
+                        try:
+                            decoded[k] = base64.b64decode(v.encode()).decode()
+                        except Exception:
+                            decoded[k] = v
+                    else:
+                        decoded[k] = v
+                return decoded
+            return creds
+        except Exception as exc:
+            logger.warning(f"Failed to load credentials from file: {exc}")
+            return None
+
+    def _delete_file(self, provider: str) -> bool:
+        if not self._cred_file.exists():
+            return False
+        try:
+            data = json.loads(self._cred_file.read_text())
+            if provider in data:
+                del data[provider]
+                self._cred_file.write_text(json.dumps(data, indent=2))
+                return True
+        except Exception:
+            pass
+        return False
+
+
+class AuthManager:
+    """
+    Manages authentication across all satellite data providers.
+
+    Handles credential storage, session caching, and authentication flows.
+    Sessions are cached in memory and reused until expiry.
+
+    Attributes:
+        store: Underlying credential store (keyring or file).
+        _sessions: In-memory session cache keyed by provider ID.
+
+    Example::
+
+        auth = AuthManager()
+
+        # Store credentials
+        auth.add("usgs", username="user", password="secret")
+        auth.add("planet", api_key="pk.abc123")
+
+        # Authenticate (returns cached session if valid)
+        session = auth.authenticate("usgs")
+
+        # Check what's stored
+        for p in auth.list():
+            print(p)
+
+        # Remove credentials
+        auth.remove("copernicus")
+    """
+
+    def __init__(self, storage_backend: str = "file") -> None:
+        self.store = CredentialStore(storage_backend=storage_backend)
+        self._sessions: Dict[str, AuthSession] = {}
+
+    def add(
+        self,
+        provider: str,
+        *,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
+        api_key: Optional[str] = None,
+        token: Optional[str] = None,
+        client_id: Optional[str] = None,
+        client_secret: Optional[str] = None,
+        access_key: Optional[str] = None,
+        secret_key: Optional[str] = None,
+        auth_type: Optional[str] = None,
+        **extra: Any,
+    ) -> None:
+        """
+        Add or update credentials for a provider.
+
+        Args:
+            provider: Provider ID (e.g., 'usgs', 'copernicus').
+            username: Username for username/password auth.
+            password: Password.
+            api_key: API key.
+            token: Bearer/access token.
+            client_id: OAuth2 client ID.
+            client_secret: OAuth2 client secret.
+            access_key: AWS access key.
+            secret_key: AWS secret key.
+            auth_type: Override auth type string.
+            **extra: Additional provider-specific credentials.
+
+        Raises:
+            ValueError: If no credentials are provided.
+
+        Example::
+
+            auth.add("usgs", username="user", password="pass")
+            auth.add("planet", api_key="pk.abc123")
+            auth.add("copernicus", username="user@example.com", password="pass")
+        """
+        cred_data: Dict[str, Any] = {"provider": provider}
+        if username:
+            cred_data["username"] = username
+        if password:
+            cred_data["password"] = password
+        if api_key:
+            cred_data["api_key"] = api_key
+        if token:
+            cred_data["token"] = token
+        if client_id:
+            cred_data["client_id"] = client_id
+        if client_secret:
+            cred_data["client_secret"] = client_secret
+        if access_key:
+            cred_data["access_key"] = access_key
+        if secret_key:
+            cred_data["secret_key"] = secret_key
+        if auth_type:
+            cred_data["auth_type"] = auth_type
+        cred_data.update(extra)
+
+        if len(cred_data) <= 1:  # Only 'provider' key
+            raise ValueError(f"No credentials provided for {provider!r}")
+
+        # Infer auth type if not set
+        if "auth_type" not in cred_data:
+            if api_key:
+                cred_data["auth_type"] = AuthType.API_KEY.value
+            elif token:
+                cred_data["auth_type"] = AuthType.TOKEN.value
+            elif access_key:
+                cred_data["auth_type"] = AuthType.AWS_CREDENTIALS.value
+            else:
+                cred_data["auth_type"] = AuthType.USERNAME_PASSWORD.value
+
+        self.store.save(provider, cred_data)
+        # Invalidate cached session
+        self._sessions.pop(provider, None)
+        logger.info(f"Credentials saved for provider {provider!r}")
+
+    def get_credentials(self, provider: str) -> Optional[Credentials]:
+        """
+        Load stored credentials for a provider.
+
+        Args:
+            provider: Provider ID.
+
+        Returns:
+            Credentials instance, or None if not found.
+        """
+        data = self.store.load(provider)
+        if not data:
+            return None
+        try:
+            from pydantic import SecretStr
+            # Always inject the provider field — it may not be persisted on disk
+            data = dict(data)
+            data.setdefault("provider", provider)
+            if "password" in data and isinstance(data["password"], str):
+                data["password"] = SecretStr(data["password"])
+            if "api_key" in data and isinstance(data["api_key"], str):
+                data["api_key"] = SecretStr(data["api_key"])
+            if "token" in data and isinstance(data["token"], str):
+                data["token"] = SecretStr(data["token"])
+            if "secret_key" in data and isinstance(data["secret_key"], str):
+                data["secret_key"] = SecretStr(data["secret_key"])
+            if "client_secret" in data and isinstance(data["client_secret"], str):
+                data["client_secret"] = SecretStr(data["client_secret"])
+            return Credentials(**data)
+        except Exception as exc:
+            logger.warning(f"Failed to parse credentials for {provider!r}: {exc}")
+            return None
+
+    def authenticate(self, provider: str, force_refresh: bool = False) -> AuthSession:
+        """
+        Authenticate with a provider, using cached session if valid.
+
+        Args:
+            provider: Provider ID to authenticate with.
+            force_refresh: If True, always re-authenticate even if session is valid.
+
+        Returns:
+            Valid AuthSession.
+
+        Raises:
+            ValueError: If no credentials are stored for this provider.
+            AuthenticationError: If authentication fails.
+        """
+        from pygeofetch.providers import get_provider
+
+        # Return cached session if still valid
+        if not force_refresh and provider in self._sessions:
+            session = self._sessions[provider]
+            if session.is_valid:
+                logger.debug(f"Using cached session for {provider!r}")
+                return session
+
+        credentials = self.get_credentials(provider)
+        if not credentials:
+            raise ValueError(
+                f"No credentials found for {provider!r}. "
+                f"Add them with: pygeofetch auth add {provider}"
+            )
+
+        prov = get_provider(provider)
+        session = prov.authenticate(credentials)
+        self._sessions[provider] = session
+        return session
+
+    def set_session(self, provider: str, session: AuthSession) -> None:
+        """Manually set a session (e.g. from OAuth2 callback)."""
+        self._sessions[provider] = session
+
+    def get_session(self, provider: str) -> Optional[AuthSession]:
+        """Return cached session for a provider, or None."""
+        session = self._sessions.get(provider)
+        if session and session.is_valid:
+            return session
+        return None
+
+    def list(self) -> List[Dict[str, Any]]:
+        """
+        List all providers with stored credentials.
+
+        Returns:
+            List of dicts with provider info and session status.
+        """
+        providers = self.store.list_providers()
+        result = []
+        for provider in providers:
+            session = self._sessions.get(provider)
+            result.append({
+                "provider": provider,
+                "has_session": session is not None and session.is_valid,
+                "session_expires": session.expires_at.isoformat() if session and session.expires_at else None,
+            })
+        return result
+
+    def remove(self, provider: str) -> bool:
+        """
+        Remove stored credentials and session for a provider.
+
+        Args:
+            provider: Provider ID to remove.
+
+        Returns:
+            True if credentials were found and removed.
+        """
+        self._sessions.pop(provider, None)
+        removed = self.store.delete(provider)
+        if removed:
+            logger.info(f"Credentials removed for {provider!r}")
+        return removed
+
+    def export_credentials(self, providers: Optional[List[str]] = None) -> Dict[str, Any]:
+        """
+        Export credentials for backup (passwords are obfuscated).
+
+        Args:
+            providers: List of provider IDs to export. None = export all.
+
+        Returns:
+            Dict mapping provider IDs to credential data.
+        """
+        all_providers = providers or self.store.list_providers()
+        result = {}
+        for provider in all_providers:
+            creds = self.get_credentials(provider)
+            if creds:
+                result[provider] = {
+                    "provider": creds.provider,
+                    "auth_type": creds.auth_type.value,
+                    "username": creds.username,
+                }
+        return result

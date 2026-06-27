@@ -1,0 +1,131 @@
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+wheels/
+share/python-wheels/
+MANIFEST
+
+# ── Virtual environments ──────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+.env
+.python-version
+
+# ── Testing & coverage ────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+*.cover
+*.py,cover
+.hypothesis/
+nosetests.xml
+test-results/
+junit.xml
+
+# ── Type checking ─────────────────────────────────────────────────────────────
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+.pyre/
+
+# ── Linting & formatting ──────────────────────────────────────────────────────
+.ruff_cache/
+
+# ── satfetch runtime data ─────────────────────────────────────────────────────
+# Credentials — never commit these
+~/.satfetch/credentials.enc
+credentials.enc
+credentials_backup.json
+*.credentials.json
+
+# Cache files
+.satfetch/
+satfetch_cache/
+*.cache
+
+# Search results and downloaded data
+results.geojson
+results.json
+results.parquet
+results.csv
+*.geojson
+*.parquet
+data/
+downloads/
+output/
+raw/
+weekly_data/
+pipeline_output/
+export/
+
+# Pipeline logs and history
+pipeline_logs/
+pipeline_history.jsonl
+download_history.jsonl
+scheduled_pipelines.json
+
+# Log files
+*.log
+satfetch.log
+satfetch_*.log
+
+# ── IDEs & editors ────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+*.sublime-project
+*.sublime-workspace
+
+# ── Build & packaging ─────────────────────────────────────────────────────────
+*.tar.gz
+*.whl
+*.zip
+dist/
+build/
+
+# ── Jupyter ───────────────────────────────────────────────────────────────────
+# .ipynb_checkpoints/
+# *.ipynb
+
+# ── Environment variables ─────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+
+# ── Docker ────────────────────────────────────────────────────────────────────
+.dockerignore
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini

@@ -1,0 +1,110 @@
+site_name: PyGeoVision v2.0
+site_description: Complete Geospatial AI Platform — 50+ models, 503 datasets, 15 CLI commands
+site_author: PyGeoVision Team
+site_url: https://pygeovision.org
+repo_url: https://github.com/pygeovision/pygeovision
+repo_name: pygeovision/pygeovision
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: teal
+      accent: deep-orange
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: teal
+      accent: deep-orange
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  font:
+    text: Roboto
+    code: Roboto Mono
+  icon:
+    repo: fontawesome/brands/github
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+
+markdown_extensions:
+  - admonition
+  - codehilite
+  - meta
+  - toc:
+      permalink: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - attr_list
+  - md_in_html
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: true
+            show_root_heading: true
+
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Quick Start: quickstart.md
+  - Architecture: architecture.md
+  - API Reference:
+    - Overview: api/index.md
+    - PyGeoVision Client: api/pygeovision.md
+    - Model Layer: api/models.md
+    - Auto-Labeling: api/labeling.md
+    - Loss Functions: api/losses.md
+    - Inference: api/inference.md
+    - Explainability (XAI): api/explainability.md
+    - Monitoring: api/monitoring.md
+    - Edge Deployment: api/edge.md
+    - Cloud Deployment: api/cloud.md
+    - Advanced AI: api/advanced.md
+    - Vision-Language Models: api/vlm.md
+    - Time Series: api/timeseries.md
+    - Point Cloud (3D): api/pointcloud.md
+    - Training Framework: api/training.md
+    - Serving API: api/serving.md
+    - Pipelines: api/pipelines.md
+    - Dataset Registry: api/datasets.md
+    - CLI Reference: api/cli.md
+    - Foundation Models: api/foundation.md
+  - Tutorials:
+    - Overview: tutorials/index.md
+    - Getting Started: tutorials/getting_started.md
+    - Authentication: tutorials/authentication.md
+    - Data Search: tutorials/data_search.md
+    - Data Download: tutorials/data_download.md
+    - Building Extraction: tutorials/building_extraction.md
+    - Land Cover Mapping: tutorials/land_cover.md
+    - Change Detection: tutorials/change_detection.md
+    - Custom Training: tutorials/custom_training.md
+    - Foundation Models: tutorials/foundation_models.md
+    - Deployment: tutorials/deployment.md
+  - Domain Examples:
+    - Overview: examples/index.md
+    - Agriculture: examples/agriculture.md
+    - Forestry: examples/forestry.md
+    - Urban Mapping: examples/urban.md
+    - Water & Floods: examples/water.md
+    - Disaster Response: examples/disaster.md
+    - Climate & Carbon: examples/climate.md
+  - FAQ: faq.md
+  - Contributing: contributing.md

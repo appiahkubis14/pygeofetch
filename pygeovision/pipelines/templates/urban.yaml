@@ -1,0 +1,40 @@
+name: urban_pipeline
+description: "PyGeoVision urban analysis pipeline"
+version: "2.0"
+
+defaults:
+  cloud_cover_max: 15
+  resolution_m: 10
+  output_dir: ./output/urban/
+
+steps:
+  - name: search
+    action: search
+    params:
+      providers: [planetary_computer, aws_earth]
+      cloud_cover_max: 15
+      sort_by: cloud_cover
+
+  - name: download
+    action: download
+    depends_on: [search]
+    retry_on_fail: 3
+    params:
+      parallel: 4
+      post_process: [reproject:EPSG:4326, cog]
+
+  - name: infer
+    action: infer
+    depends_on: [download]
+    params:
+      model: unet-r50
+      chip_size: 512
+      overlap: 64
+      blend_mode: gaussian
+
+  - name: export
+    action: export
+    depends_on: [infer]
+    params:
+      format: geojson
+      output_dir: ./output/urban/

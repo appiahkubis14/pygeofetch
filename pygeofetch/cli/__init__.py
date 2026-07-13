@@ -1,0 +1,1 @@
+"""PyGeoFetch CLI package."""

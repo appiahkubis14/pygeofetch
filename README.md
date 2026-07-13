@@ -1,0 +1,530 @@
+<div align="center">
+
+<!-- <img src="https://appiahkubis14.github.io/portfolio/logo/samuel_logo_dark.svg" alt="pygeofetch Logo" width="200"/> -->
+
+# pygeofetch 🛰️
+
+[![PyPI version](https://badge.fury.io/py/pygeofetch.svg)](https://pypi.org/project/pygeofetch/)
+[![Python Versions](https://img.shields.io/pypi/pyversions/pygeofetch.svg)](https://pypi.org/project/pygeofetch/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Tests](https://github.com/appiahkubis14/pygeofetch/actions/workflows/tests.yml/badge.svg)](https://github.com/appiahkubis14/pygeofetch/actions)
+[![Coverage](https://codecov.io/gh/appiahkubis14/pygeofetch/branch/main/graph/badge.svg)](https://codecov.io/gh/appiahkubis14/pygeofetch)
+
+**Universal satellite data pipeline + geospatial processing platform — unified access to 22+ satellite repositories, 17 spectral indices, full SAR processing, and chainable YAML pipelines. One CLI, one Python API.**
+
+</div>
+
+---
+
+## 📖 Introduction
+
+pygeofetch is a **production-ready satellite data acquisition and processing framework** that provides unified, authenticated access to 22+ Earth observation repositories — including Sentinel, Landsat, Planet, Maxar, Airbus, Copernicus, USGS, NASA, JAXA, and more — through a single consistent CLI and Python API.
+
+The package abstracts away the authentication complexity, API fragmentation, and format inconsistencies of individual satellite providers, and adds a complete geospatial processing engine on top. pygeofetch provides six core capabilities:
+
+1. **Authenticated access** to 22+ providers, with secure credential storage via system keyring (macOS Keychain, Windows Credential Manager, Linux Secret Service).
+2. **Unified federated search** across all providers, returning standardized STAC 1.0 GeoJSON, GeoParquet, or CSV results sortable by cloud cover, date, or relevance score.
+3. **Resilient parallel downloads** with band selection, checksum verification, resume support, exponential backoff, and atomic writes.
+4. **Preprocessing engine** — atmospheric correction, cloud masking, reprojection, resampling, pan-sharpening, mosaicking, and compositing.
+5. **17 spectral indices** — NDVI, EVI, SAVI, NDWI, MNDWI, NDBI, TCT, PCA, LST, Albedo, dNBR, GLCM texture, and more.
+6. **YAML pipeline orchestration** with cron scheduling, batch processing, and full execution history — enabling repeatable, automated geospatial workflows.
+
+---
+
+## 📝 Statement of Need
+
+Accessing satellite data at scale is surprisingly fragmented. Each provider — USGS, Copernicus, Planet, Maxar, NASA — exposes a different authentication scheme, a different query API, a different download protocol, and a different file format. Researchers and engineers working across multiple providers must maintain a patchwork of custom scripts, scattered credentials, and ad hoc download logic, making workflows difficult to reproduce and brittle to maintain.
+
+Existing tools address parts of this problem: EODAG supports several providers but lacks pipeline orchestration and commercial coverage; `pystac-client` handles STAC-compliant endpoints only; `sentinelsat` is Sentinel-specific. No single tool covers the full breadth of providers, processing, and automation needed for operational geospatial workflows.
+
+| Feature | pygeofetch | EODAG | pystac-client | satpy | sentinelsat |
+|---|---|---|---|---|---|
+| **Providers** | **22+** | 10+ | STAC only | Limited | Sentinel only |
+| **Processing Engine** | ✅ Full | ❌ | ❌ | Partial | ❌ |
+| **Spectral Indices** | ✅ 17+ | ❌ | ❌ | ❌ | ❌ |
+| **SAR Processing** | ✅ | ❌ | ❌ | ✅ | ❌ |
+| **YAML Pipelines** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Auth Management** | ✅ Keyring | Partial | ❌ | ❌ | ✅ |
+| **STAC 1.0 Output** | ✅ Native | ❌ | ✅ | ❌ | ❌ |
+| **Cron Scheduling** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Commercial Providers** | ✅ Planet/Maxar | ❌ | ❌ | ❌ | ❌ |
+
+---
+
+
+
+### 🛰️ 22+ Satellite Providers
+
+**Open access — no login required (10):**
+
+| Provider ID | Satellites | Capabilities |
+|---|---|---|
+| `planetary_computer` | Sentinel-1/2, Landsat 8/9, MODIS, NAIP, ALOS DEM | STAC, SAR |
+| `aws_earth` | Sentinel-2 COG, Landsat C2, NAIP | STAC |
+| `element84` | Sentinel-2 L2A, Landsat C2, Sentinel-1 RTC, COP-DEM | STAC, SAR |
+| `noaa_big_data` | GOES-16/17/18, NEXRAD radar | Weather |
+| `esa_scihub` | Sentinel-1/2/3/5P (public mirrors) | SAR |
+| `jaxa_earth` | ALOS 30m DSM, PALSAR-2 | SAR |
+| `isro_bhuvan` | ResourceSat-2/2A (5.8m), Cartosat-1 (2.5m) | — |
+| `inpe_cbers` | CBERS-4, CBERS-4A | — |
+| `digitalglobe` | WorldView open disaster response | <1m VHR |
+| `geoserver_generic` | Any OGC WMS/WFS/WCS endpoint | Generic |
+
+**Authenticated providers (12):** USGS · Copernicus CDSE · NASA Earthdata · NASA Earthdata Cloud · Alaska SAR Facility · OpenTopography · Planet Labs · Sentinel Hub · Maxar GBDX · Airbus OneAtlas · Google Earth Engine · TerraBotics
+
+### 🔍 Unified Search
+- Federated query across multiple providers simultaneously with deduplicated results
+- Filter by bbox, geometry file, date range, cloud cover, resolution, processing level, and CQL2 expressions
+- 7 output formats: `table` · `json` · `stac` · `geojson` · `geoparquet` · `csv` · `ids`
+
+### 📥 Resilient Downloads
+- Adaptive parallel downloads with configurable concurrency and real-time progress
+- Band selection (e.g. `B02,B03,B04` → download 150 MB instead of 600 MB full scene)
+- SHA256 checksum verification, resume support, exponential-backoff retries
+- Atomic writes — no partial files ever written to disk
+
+### ⚙️ Preprocessing Engine (`client.preprocess`)
+
+| Method | Description |
+|---|---|
+| `atmos()` | Atmospheric correction: DOS1, DOS2, Sen2Cor, FLAASH, 6S, iCOR |
+| `cloud_mask()` | Cloud masking: SCL, FMask, threshold, NDSI |
+| `cloud_fill()` | Fill cloud gaps from time-series |
+| `topo_correct()` | Topographic correction: cosine, Minnaert, C-correction |
+| `clip()` | Clip to bounding box or GeoJSON polygon |
+| `reproject()` | Reproject to any CRS (EPSG:4326, UTM, etc.) |
+| `resample()` | Change resolution: nearest, bilinear, cubic, lanczos |
+| `pansharpen()` | Pan-sharpening: Brovey, IHS, Gram-Schmidt |
+| `tile()` | Split into overlapping tiles for AI inference |
+| `mosaic()` | Merge scenes: first, last, min, max |
+| `composite()` | Multi-temporal: median, mean, max, best-pixel |
+
+### 📊 Spectral Indices (`client.indices`)
+
+| Index | Formula | Use Case |
+|---|---|---|
+| `ndvi` | (NIR−Red)/(NIR+Red) | Vegetation health |
+| `evi` | G·(NIR−Red)/(NIR+C1·Red−C2·Blue+L) | Dense canopy |
+| `savi` | (NIR−Red)/(NIR+Red+L)·(1+L) | Sparse vegetation |
+| `ndwi` | (Green−NIR)/(Green+NIR) | Water bodies |
+| `mndwi` | (Green−SWIR1)/(Green+SWIR1) | Urban water |
+| `ndbi` | (SWIR1−NIR)/(SWIR1+NIR) | Built-up areas |
+| `ndsi` | (Green−SWIR1)/(Green+SWIR1) | Snow / ice |
+| `ndmi` | (NIR−SWIR1)/(NIR+SWIR1) | Canopy moisture |
+| `nbr` / `dnbr` | (NIR−SWIR2)/(NIR+SWIR2) | Burn severity |
+| `tct` | Matrix coefficients | Brightness, Greenness, Wetness |
+| `pca` | Eigen decomposition | Dimensionality reduction |
+| `texture` | GLCM | Contrast, homogeneity, energy |
+| `lst` | Thermal → Kelvin / Celsius | Land surface temperature |
+| `albedo` | Narrowband→broadband (Liang 2001) | Surface reflectance |
+| `band_math` | Arbitrary expression on B[i] | Custom indices |
+
+### 🔧 Post-Processing (`client.post`)
+
+`vectorize` → `smooth` → `regularize` → `zonal_stats` → `buffer` → `centroids` → `compress` → `cog`
+
+### 📡 SAR Processing (`client.sar`)
+
+| Method | Description |
+|---|---|
+| `despeckle()` | Lee, Enhanced Lee, Frost, Gamma MAP, Boxcar |
+| `calibrate()` | DN → sigma0 / gamma0 / beta0 (dB or linear) |
+| `flood_map()` | Threshold or change-based flood detection |
+| `coherence()` | Interferometric coherence (stable surface / change) |
+
+### 📋 YAML Pipeline Orchestration
+- Define search → filter → download → process → export workflows in YAML
+- Chain any preprocessing, index, or post-processing step
+- Schedule with cron expressions, run history, and retry
+- 6 built-in templates: `ndvi` · `change_detection` · `flood_map` · `urban_mapping` · `sar_analysis` · `land_cover`
+
+### 🔐 Security by Default
+- Credentials stored in system keyring — never logged or written to disk in plaintext
+- TLS 1.2+ enforced, SSL verification always on, no telemetry, no analytics
+
+---
+
+## 📦 Installation
+
+```bash
+# Core — free providers work immediately, no extras needed
+pip install pygeofetch
+
+# + Raster/vector processing (rasterio, geopandas, shapely)
+pip install "pygeofetch[geo]"
+
+# + Cloud provider S3 access
+pip install "pygeofetch[cloud]"
+
+# + Cron scheduling
+pip install "pygeofetch[schedule]"
+
+# Everything
+pip install "pygeofetch[all]"
+```
+
+**Requirements:** Python 3.9+
+
+Verify your installation:
+```bash
+pygeofetch doctor
+# ✓ Python 3.11   ✓ httpx   ✓ pydantic   ✓ rich
+# ✓ AWS Earth Search: HTTP 200
+# ✓ Planetary Computer: HTTP 200
+# ✓ Element 84: HTTP 200
+```
+
+---
+
+## ⚡ Quick Start
+
+### CLI
+
+```bash
+# Add credentials (free providers need no credentials at all)
+pygeofetch auth add usgs --username USER --password PASS
+pygeofetch auth add copernicus --username email@example.com --password PASS
+pygeofetch auth add planet --api-key YOUR_KEY
+
+# Search (free — no login)
+pygeofetch search run \
+    --bbox "-74.1,40.6,-73.7,40.9" \
+    --start-date 2024-01-01 \
+    --cloud-cover 0-15 \
+    --providers planetary_computer,aws_earth \
+    --format table \
+    --output results.geojson
+
+# Download with band selection
+pygeofetch download run \
+    --from-search results.geojson \
+    --output ./data/ \
+    --parallel 4 \
+    --bands "B02,B03,B04" \
+    --max-items 3
+
+# Download with full post-processing chain
+pygeofetch download run \
+    --from-search results.geojson \
+    --output ./data/ \
+    --parallel 4 \
+    --verify-checksum \
+    --post-process "unzip,reproject:EPSG:4326,compress:lzw,cog"
+```
+
+### Python API
+
+```python
+from pathlib import Path
+from pygeofetch import PyGeoFetch
+from pygeofetch.models.search_query import SearchQuery, BoundingBox
+from pygeofetch.models.download_task import DownloadOptions
+
+client = PyGeoFetch()
+
+# Credentials
+client.add_credentials("usgs",       username="user", password="pass")
+client.add_credentials("copernicus", username="email@example.com", password="pass")
+client.add_credentials("planet",     api_key="PL_KEY")
+
+# Search
+results = client.search(
+    SearchQuery(
+        bbox=BoundingBox.from_string("-74.1,40.6,-73.7,40.9"),
+        start_date="2024-01-01",
+        end_date="2024-06-01",
+        cloud_cover_max=20,
+        sort_by="cloud_cover",
+        sort_ascending=True,
+    ),
+    providers=["usgs", "copernicus", "planetary_computer", "aws_earth"],
+)
+
+# Download
+downloads = client.download(
+    results[:5],
+    destination=Path("./data/"),
+    options=DownloadOptions(
+        parallel=4,
+        verify_checksum=True,
+        resume=True,
+        bands=["B02", "B03", "B04"],
+    ),
+)
+
+for dr in downloads:
+    if dr.success:
+        print(f"✓ {dr.data_id} ({dr.bytes_downloaded // 1024 // 1024:.1f} MB)")
+    else:
+        print(f"✗ {dr.data_id}: {dr.error}")
+
+# Process
+ndvi   = client.indices.ndvi(red="B04.tif", nir="B08.tif")
+clipped = client.preprocess.clip("scene.tif", bbox=(-74.1, 40.6, -73.7, 40.9))
+cog     = client.post.cog("ndvi.tif", compress="deflate")
+
+# End-to-end pipeline
+result = (
+    client.pipeline("sentinel2-ndvi")
+    .atmos(method="dos1")
+    .cloud_mask(method="scl", scl_band="SCL.tif")
+    .clip(bbox=(-74.1, 40.6, -73.7, 40.9))
+    .ndvi(red="B04.tif", nir="B08.tif")
+    .vectorize(threshold=0.3)
+    .cog(compress="deflate")
+    .run(input="scene.tif", output_dir="./processed/")
+)
+print(f"Pipeline: {result.success} in {result.duration_seconds:.1f}s")
+```
+
+### YAML Pipeline
+
+```yaml
+name: weekly-sentinel2-ndvi
+schedule: "0 6 * * 1"   # Every Monday 06:00 UTC
+description: Weekly NDVI monitoring — search, download, process, export
+
+steps:
+  - search:
+      providers: [copernicus, aws_earth, planetary_computer]
+      bbox: "-74.1,40.6,-73.7,40.9"
+      date_range: last_7_days
+      cloud_cover: "0-10"
+      max_results: 20
+
+  - filter:
+      expression: "data.cloud_cover < 5"
+
+  - download:
+      parallel: 4
+      output: ./raw/
+      verify_checksum: true
+      bands: [B04, B08]
+
+  - ndvi:
+      red: B04.tif
+      nir: B08.tif
+
+  - vectorize:
+      threshold: 0.3
+      format: geojson
+
+  - cog:
+      compress: deflate
+```
+
+```bash
+# Validate without running
+pygeofetch proc-pipeline validate weekly-sentinel2.yaml
+
+# Run once
+pygeofetch proc-pipeline run weekly-sentinel2.yaml --input scene.tif
+
+# Schedule (recurring)
+pygeofetch pipeline schedule weekly-sentinel2.yaml --name "ndvi-weekly"
+
+# Generate a starter template
+pygeofetch proc-pipeline template ndvi
+pygeofetch proc-pipeline template flood_map
+pygeofetch proc-pipeline template change_detection
+```
+
+---
+
+## 🖥️ Complete CLI Reference
+
+```
+SYSTEM
+  pygeofetch doctor                     diagnose installation + connectivity
+  pygeofetch status [--json]            provider and cache overview
+  pygeofetch version
+
+AUTH
+  pygeofetch auth add PROVIDER [--username U] [--password P] [--api-key K]
+  pygeofetch auth login PROVIDER        interactive prompt
+  pygeofetch auth list [--json]
+  pygeofetch auth test PROVIDER
+  pygeofetch auth remove PROVIDER [--yes]
+  pygeofetch auth export [--output FILE]
+
+PROVIDERS
+  pygeofetch providers list [--auth|--no-auth] [--capabilities sar] [--json]
+  pygeofetch providers info PROVIDER
+  pygeofetch providers search "TERM"
+
+SEARCH
+  pygeofetch search run \
+    --bbox "minlon,minlat,maxlon,maxlat"   or  --geometry-file area.geojson
+    --start-date YYYY-MM-DD  --end-date YYYY-MM-DD
+    --cloud-cover 0-20
+    --providers aws_earth,copernicus
+    --satellites Sentinel-2
+    --sort-by cloud_cover  --sort-order asc
+    --max-results 50
+    --cql2 "eo:cloud_cover < 5"
+    --format table|json|stac|geojson|geoparquet|csv|ids
+    --output results.geojson
+    --no-cache  --timeout 60
+
+DOWNLOAD
+  pygeofetch download run \
+    --from-search results.geojson
+    --output ./data/
+    --parallel 4  --retry 5
+    --bands "B02,B03,B04"
+    --verify-checksum  --resume
+    --bandwidth-limit 10MB
+    --post-process "reproject:EPSG:4326,compress:lzw,cog"
+    --on-failure skip
+    --max-items 10
+    --notify webhook:https://hooks.slack.com/YOUR/WEBHOOK
+    --json
+
+PREPROCESSING
+  pygeofetch preprocess atmos         scene.tif --method dos1|sen2cor|flaash|6s
+  pygeofetch preprocess cloud-mask    scene.tif --method scl|fmask|threshold
+  pygeofetch preprocess cloud-fill    cloudy.tif t1.tif t2.tif
+  pygeofetch preprocess topo-correct  scene.tif dem.tif --method cosine
+  pygeofetch preprocess clip          scene.tif --bbox "..." | --geometry file.geojson
+  pygeofetch preprocess reproject     scene.tif --crs EPSG:4326
+  pygeofetch preprocess resample      scene.tif --resolution 30
+  pygeofetch preprocess pansharpen    pan.tif ms.tif --method brovey
+  pygeofetch preprocess mosaic        s1.tif s2.tif --method first|last|min|max
+  pygeofetch preprocess composite     *.tif --method median|mean|max|best_pixel
+  pygeofetch preprocess tile          scene.tif --tile-size 512 --overlap 64
+
+SPECTRAL INDICES
+  pygeofetch index ndvi    --red B04.tif --nir B08.tif
+  pygeofetch index evi     --blue B02.tif --red B04.tif --nir B08.tif
+  pygeofetch index savi    --red B04.tif --nir B08.tif --soil-l 0.5
+  pygeofetch index ndwi    --green B03.tif --nir B08.tif
+  pygeofetch index mndwi   --green B03.tif --swir1 B11.tif
+  pygeofetch index ndbi    --nir B08.tif --swir1 B11.tif
+  pygeofetch index ndsi    --green B03.tif --swir1 B11.tif
+  pygeofetch index ndmi    --nir B08.tif --swir1 B11.tif
+  pygeofetch index nbr     --nir B08.tif --swir2 B12.tif
+  pygeofetch index dnbr    --pre-nir B08.tif --pre-swir2 B12.tif \
+                            --post-nir B08_post.tif --post-swir2 B12_post.tif
+  pygeofetch index tct     --blue B02.tif --green B03.tif --red B04.tif \
+                            --nir B08.tif --swir1 B11.tif --swir2 B12.tif
+  pygeofetch index pca     B02.tif B03.tif B04.tif B08.tif --components 3
+  pygeofetch index texture  B08.tif --window 7 --features contrast,homogeneity
+  pygeofetch index lst     B10.tif --emissivity 0.97 --sensor landsat8
+  pygeofetch index albedo  B02.tif B03.tif B04.tif B08.tif B11.tif B12.tif
+  pygeofetch index band-math B04.tif B08.tif --expr "(B[1]-B[0])/(B[1]+B[0]+1e-6)"
+  pygeofetch index stack   B02.tif B03.tif B04.tif
+
+POST-PROCESSING
+  pygeofetch post vectorize       ndvi.tif --threshold 0.3 --format geojson
+  pygeofetch post smooth          polygons.geojson --tolerance 0.5
+  pygeofetch post regularize      buildings.geojson
+  pygeofetch post zonal-stats     ndvi.tif parcels.geojson --output stats.csv
+  pygeofetch post buffer          roads.geojson --distance 15
+  pygeofetch post centroids       polygons.geojson
+  pygeofetch post geometry-metrics polygons.geojson
+  pygeofetch post compress        scene.tif --method lzw|deflate|zstd
+  pygeofetch post cog             scene.tif --compress deflate --blocksize 512
+
+SAR PROCESSING
+  pygeofetch sar despeckle  sar.tif --filter lee|enhanced_lee|frost|gamma --window 7
+  pygeofetch sar calibrate  sar.tif --output-type sigma0|gamma0|beta0 --db
+  pygeofetch sar flood-map  post.tif --threshold -15 [--reference pre.tif]
+  pygeofetch sar coherence  slc1.tif slc2.tif --window 7
+
+PROCESSING PIPELINES
+  pygeofetch proc-pipeline template ndvi|change_detection|flood_map|urban_mapping|...
+  pygeofetch proc-pipeline validate FILE
+  pygeofetch proc-pipeline run FILE [--input scene.tif] [--output-dir ./out/]
+
+DATA PIPELINES (search + download)
+  pygeofetch pipeline run|validate|schedule|list-scheduled|unschedule|history
+
+CACHE
+  pygeofetch cache stats|clear|ttl [show|set N]|location|prune --max-size 1GB
+
+CONFIG
+  pygeofetch config show|get KEY|set KEY VALUE|path|reset
+
+COMPLETION
+  pygeofetch --install-completion bash|zsh|fish
+```
+
+---
+
+## 🗂️ Project Structure
+
+```
+pygeofetch/
+├── pygeofetch/
+│   ├── core/                engine, authenticator, searcher, downloader, scheduler, cache
+│   ├── cli/                 11 CLI command modules
+│   ├── processing/          ← geospatial processing engine
+│   │   ├── preprocessor.py  atmospheric, cloud, geometric, resampling, compositing
+│   │   ├── indices.py       17 spectral indices + transformations
+│   │   ├── postprocessor.py vectorize, smooth, zonal stats, COG, compress
+│   │   ├── sar.py           despeckle, calibrate, flood map, coherence
+│   │   ├── pipeline.py      chainable builder + YAML loader + 6 templates
+│   │   └── batch.py         parallel batch processing
+│   ├── models/              Pydantic models (search, download, auth, satellite)
+│   ├── providers/           22 provider implementations
+│   ├── utils/               logging, retry, geo, file, validators
+│   └── config/              settings, defaults.yaml
+├── notebooks/               9 Jupyter notebooks (01–09)
+├── tests/                   60 unit + integration tests
+├── docs/assets/
+├── pyproject.toml
+├── Dockerfile · Makefile · .gitignore
+└── .github/workflows/tests.yml
+```
+
+---
+
+## 📚 Notebooks
+
+| Notebook | Topics |
+|---|---|
+| `01_getting_started.ipynb` | Install, doctor, first search, first download |
+| `02_authentication_and_providers.ipynb` | All 22 providers, credentials, capability filters |
+| `03_advanced_search.ipynb` | Federated search, CQL2 filters, 7 output formats, caching |
+| `04_download_and_postprocessing.ipynb` | Band selection, parallel downloads, post-processing |
+| `05_pipelines_and_scheduling.ipynb` | YAML pipelines, scheduling, Python builder API |
+| `06_real_world_workflows.ipynb` | NDVI time series, change detection, multi-sensor fusion |
+| `07_copernicus_and_authenticated_providers.ipynb` | Copernicus, USGS, NASA, Planet, ASF, OpenTopography |
+| `08_cli_complete_reference.ipynb` | Every CLI command with runnable examples |
+| `09_processing_complete.ipynb` | Full processing engine: preprocessing, indices, SAR, pipelines |
+
+```bash
+cd notebooks/
+jupyter lab
+```
+
+---
+
+## 📋 Documentation
+
+Full documentation: **https://appiahkubis14.github.io/pygeofetch-docs/**
+
+Covers: CLI reference · provider auth guides · pipeline configuration · post-processing catalogue · contributing guide.
+
+---
+
+## 🤝 Contributing
+
+Contributions of all kinds are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for full guidelines.
+
+Good first issues include implementing stub providers to full API integrations, improving test coverage, and adding new post-processing actions.
+
+```bash
+git clone https://github.com/appiahkubis14/pygeofetch
+cd pygeofetch
+pip install -e ".[dev,all]"
+pytest tests/unit/ -v
+```
+
+---
+
+## 📄 License
+
+pygeofetch is free and open source software, licensed under the [MIT License](LICENSE).
+
+© 2025 pygeofetch Contributors. Part of the **PyGeoVision** platform — [pygeofetch](https://github.com/appiahkubis14/pygeofetch) (data + processing) + [GeoAI](https://opengeoai.org) (AI) = complete Earth observation pipeline.

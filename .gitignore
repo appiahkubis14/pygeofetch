@@ -1,0 +1,374 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  PyGeoFetch — .gitignore
+#  Covers: Python, virtual envs, IDEs, OS files, runtime data, satellite data,
+#          credentials, raster/vector outputs, Docker, Jupyter, CI, docs builds
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+wheels/
+share/python-wheels/
+MANIFEST
+*.whl
+*.tar.gz
+*.zip
+
+# ── Virtual Environments ──────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+.env
+.python-version
+.conda/
+conda-env/
+
+# ── Environment Variables ─────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+.envrc
+
+# ── PyGeoFetch Runtime & Config ───────────────────────────────────────────────
+# Credentials — NEVER commit these
+credentials.enc
+credentials_backup.json
+*.credentials.json
+~/.pygeofetch/
+.pygeofetch/
+
+# Search result files
+results.geojson
+results.json
+results.parquet
+results.csv
+results.ndjson
+*.geojson
+*.parquet
+
+# Downloaded satellite imagery — can be gigabytes
+data/
+downloads/
+raw/
+output/
+outputs/
+processed/
+pipeline_output/
+pipeline_out/
+tiles/
+weekly_data/
+export/
+clipped/
+mosaics/
+composites/
+ndvi/
+evi/
+indices/
+sar_output/
+vectors/
+rasters/
+
+# Pipeline execution state
+pipeline_logs/
+pipeline_history.jsonl
+download_history.jsonl
+scheduled_pipelines.json
+*.pipeline.log
+
+# Cache
+.pygeofetch_cache/
+pygeofetch_cache/
+*.cache
+search_cache/
+
+# Log files
+*.log
+pygeofetch.log
+pygeofetch_*.log
+logs/
+
+# ── Satellite & Geospatial Data ───────────────────────────────────────────────
+# Raster files (can be 100s of MB to GB each)
+*.tif
+*.tiff
+*.img
+*.hdf
+*.h4
+*.h5
+*.hdf5
+*.nc
+*.netcdf
+*.jp2
+*.j2k
+*.asc
+*.bil
+*.bip
+*.bsq
+*.ers
+*.ecw
+*.vrt
+*.ovr
+*.aux
+*.aux.xml
+*.xml.aux
+
+# Vector files
+*.shp
+*.shx
+*.dbf
+*.prj
+*.sbn
+*.sbx
+*.cpg
+*.qix
+*.geojson
+*.gpkg
+*.kml
+*.kmz
+*.gpx
+*.gml
+*.dxf
+*.gdb/
+*.mdb
+
+# Point cloud
+*.las
+*.laz
+*.ply
+*.xyz
+*.pts
+
+# DEM / elevation
+*.dem
+*.dtm
+*.dsm
+
+# Metadata sidecars (but not the main codebase XML)
+*.IMD
+*.RPB
+*.til
+*.pvl
+
+# Archive formats for satellite data
+*.safe/
+*.SAFE/
+*.zip.part
+*.tar.gz.part
+
+# ── Jupyter Notebooks ─────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+# Keep .ipynb files but ignore their outputs (optional — comment out to keep outputs)
+# *.ipynb  ← do NOT ignore notebooks themselves
+
+# ── Testing & Coverage ────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+*.cover
+*.py,cover
+.hypothesis/
+nosetests.xml
+test-results/
+junit.xml
+pytest-report.html
+.tox/
+
+# ── Type Checking ─────────────────────────────────────────────────────────────
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+.pyre/
+
+# ── Linting & Formatting ──────────────────────────────────────────────────────
+.ruff_cache/
+.black/
+
+# ── IDEs & Editors ────────────────────────────────────────────────────────────
+# VSCode
+.vscode/
+*.code-workspace
+.history/
+
+# JetBrains (PyCharm, DataSpell, etc.)
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+
+# Vim / Neovim
+*.swp
+*.swo
+*~
+.netrwhist
+Session.vim
+.vim/
+
+# Emacs
+*#
+.#*
+\#*\#
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Spyder
+.spyderproject
+.spyproject
+
+# Rope
+.ropeproject/
+
+# Jupyter
+.jupyter/
+
+# Eclipse
+.classpath
+.project
+.settings/
+.metadata/
+
+# ── Operating System ──────────────────────────────────────────────────────────
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+.AppleDouble
+.LSOverride
+Icon?
+.fseventsd/
+.TemporaryItems/
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+desktop.ini
+$RECYCLE.BIN/
+*.lnk
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+
+# Linux
+*~
+.nfs*
+.fuse_hidden*
+
+# ── Docker ────────────────────────────────────────────────────────────────────
+.docker/
+docker-compose.override.yml
+*.env.docker
+
+# ── Documentation Builds ──────────────────────────────────────────────────────
+docs/_build/
+docs/build/
+docs/site/
+site/
+_site/
+.docusaurus/
+public/
+dist/
+
+# ── Node.js (for docs tooling) ────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.yarn/
+package-lock.json
+yarn.lock
+.pnpm-store/
+
+# ── Cloud & Infrastructure ────────────────────────────────────────────────────
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# AWS
+.aws/
+aws-credentials
+
+# Google Cloud
+.gcloud/
+application_default_credentials.json
+*.json.gcs
+service_account*.json
+
+# Azure
+.azure/
+azure_credentials.json
+
+# ── CI / CD ───────────────────────────────────────────────────────────────────
+.circleci/config.yml.local
+.travis.yml.local
+*.secret
+secrets/
+.secrets/
+
+# ── Profiling & Benchmarks ────────────────────────────────────────────────────
+*.prof
+*.lprof
+*.stats
+*.pstats
+perf.data
+flamegraph*.svg
+benchmarks/results/
+
+# ── Miscellaneous ─────────────────────────────────────────────────────────────
+*.pid
+*.seed
+*.pid.lock
+.lock-wscript
+*.orig
+*.rej
+*.bak
+*.old
+*.tmp
+*.temp
+tmp/
+temp/
+scratch/
+sandbox/
+playground/

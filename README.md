@@ -527,4 +527,4 @@ pytest tests/unit/ -v
 
 pygeofetch is free and open source software, licensed under the [MIT License](LICENSE).
 
-© 2025 pygeofetch Contributors. Part of the **pygeovision** platform — [pygeofetch](https://github.com/appiahkubis14/pygeofetch) (data + processing) + [pygeovision](https://appiahkubis14.github.io/pygeovision-docs/) (AI) = complete Earth observation pipeline.
+© 2026 pygeofetch Contributors. Part of the **pygeovision** platform — [pygeofetch](https://github.com/appiahkubis14/pygeofetch) (data + processing) + [pygeovision](https://appiahkubis14.github.io/pygeovision-docs/) (AI) = complete Earth observation pipeline.

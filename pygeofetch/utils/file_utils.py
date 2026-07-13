@@ -16,12 +16,14 @@ from __future__ import annotations
 
 import hashlib
 import json
-import shutil
-import zipfile
 import tarfile
 import tempfile
+import zipfile
 from pathlib import Path
-from typing import Any, Dict, Generator, List, Optional
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 
 def compute_checksum(path: Path, algorithm: str = "md5") -> str:
@@ -40,13 +42,15 @@ def compute_checksum(path: Path, algorithm: str = "md5") -> str:
         ValueError: If algorithm is unsupported.
     """
     if not path.exists():
-        raise FileNotFoundError(f"File not found: {path}")
+        msg = f"File not found: {path}"
+        raise FileNotFoundError(msg)
 
     algo = algorithm.lower().replace("-", "")
     try:
         hasher = hashlib.new(algo)
     except ValueError:
-        raise ValueError(f"Unsupported checksum algorithm: {algorithm}")
+        msg = f"Unsupported checksum algorithm: {algorithm}"
+        raise ValueError(msg)
 
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(1024 * 1024), b""):
@@ -74,7 +78,7 @@ def safe_extract(
     archive_path: Path,
     destination: Path,
     remove_archive: bool = False,
-) -> List[Path]:
+) -> list[Path]:
     """
     Safely extract a zip or tar archive, preventing path traversal.
 
@@ -90,7 +94,7 @@ def safe_extract(
         ValueError: If archive format is unsupported or path traversal detected.
     """
     destination.mkdir(parents=True, exist_ok=True)
-    extracted: List[Path] = []
+    extracted: list[Path] = []
 
     def is_safe_path(base: Path, target: Path) -> bool:
         try:
@@ -105,7 +109,8 @@ def safe_extract(
             for member in tar.getmembers():
                 target = destination / member.name
                 if not is_safe_path(destination, target):
-                    raise ValueError(f"Path traversal detected in archive: {member.name}")
+                    msg = f"Path traversal detected in archive: {member.name}"
+                    raise ValueError(msg)
             tar.extractall(destination)
             extracted = [destination / m.name for m in tar.getmembers() if m.isfile()]
     elif suffix == ".zip":
@@ -113,11 +118,13 @@ def safe_extract(
             for name in zf.namelist():
                 target = destination / name
                 if not is_safe_path(destination, target):
-                    raise ValueError(f"Path traversal detected in archive: {name}")
+                    msg = f"Path traversal detected in archive: {name}"
+                    raise ValueError(msg)
             zf.extractall(destination)
             extracted = [destination / n for n in zf.namelist() if not n.endswith("/")]
     else:
-        raise ValueError(f"Unsupported archive format: {archive_path.suffix}")
+        msg = f"Unsupported archive format: {archive_path.suffix}"
+        raise ValueError(msg)
 
     if remove_archive:
         archive_path.unlink(missing_ok=True)
@@ -188,9 +195,7 @@ def atomic_write(path: Path, content: bytes) -> None:
         content: Binary content to write.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        dir=path.parent, delete=False, suffix=".tmp"
-    ) as tmp:
+    with tempfile.NamedTemporaryFile(dir=path.parent, delete=False, suffix=".tmp") as tmp:
         tmp_path = Path(tmp.name)
         try:
             tmp.write(content)
@@ -201,9 +206,7 @@ def atomic_write(path: Path, content: bytes) -> None:
     tmp_path.replace(path)
 
 
-def chunk_file_reader(
-    path: Path, chunk_size: int = 1024 * 1024
-) -> Generator[bytes, None, None]:
+def chunk_file_reader(path: Path, chunk_size: int = 1024 * 1024) -> Generator[bytes, None, None]:
     """
     Yield file content in chunks.
 
@@ -222,7 +225,7 @@ def chunk_file_reader(
             yield chunk
 
 
-def find_files(directory: Path, pattern: str = "*", recursive: bool = True) -> List[Path]:
+def find_files(directory: Path, pattern: str = "*", recursive: bool = True) -> list[Path]:
     """
     Find files matching a glob pattern in a directory.
 
@@ -239,7 +242,7 @@ def find_files(directory: Path, pattern: str = "*", recursive: bool = True) -> L
     return sorted(directory.glob(pattern))
 
 
-def clean_directory(directory: Path, older_than_days: Optional[int] = None) -> int:
+def clean_directory(directory: Path, older_than_days: int | None = None) -> int:
     """
     Remove files from a directory, optionally only those older than N days.
 

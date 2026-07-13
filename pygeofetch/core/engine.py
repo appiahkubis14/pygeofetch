@@ -30,29 +30,38 @@ Example::
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable
 
 from pygeofetch.core.authenticator import AuthManager
 from pygeofetch.core.downloader import AdaptiveDownloader
+from pygeofetch.core.logging import configure_logging, get_logger
 from pygeofetch.core.searcher import FederatedSearcher
-from pygeofetch.models.download_task import DownloadOptions, DownloadResult
 from pygeofetch.models.satellite_data import SatelliteData
-from pygeofetch.models.search_query import SearchQuery
-from pygeofetch.core.logging import get_logger, configure_logging
-from pygeofetch.utils.geo_utils import _normalise_satellite_name
-
-# Backward-compatible alias
-def setup_logging(level: str = "INFO", use_rich: bool = True, **kwargs) -> None:
-    """Thin wrapper kept for backward compatibility with engine.__init__."""
-    configure_logging(level=level)
-from pygeofetch.processing.preprocessor import Preprocessor
+from pygeofetch.processing.batch import BatchProcessor
 from pygeofetch.processing.indices import SpectralIndices
 from pygeofetch.processing.postprocessor import PostProcessor
+from pygeofetch.processing.preprocessor import Preprocessor
 from pygeofetch.processing.sar import SARProcessor
-from pygeofetch.processing.batch import BatchProcessor
+from pygeofetch.utils.geo_utils import _normalise_satellite_name
 
+
+# Backward-compatible alias
+def setup_logging(level: str = "INFO", use_rich: bool = True, log_file=None, **kwargs) -> None:
+    """Thin wrapper kept for backward compatibility with engine.__init__."""
+    configure_logging(level=level, log_file=str(log_file) if log_file else None)
+
+
+if TYPE_CHECKING:
+    from pygeofetch.models.download_task import DownloadOptions, DownloadResult
+    from pygeofetch.models.search_query import SearchQuery
 
 logger = get_logger(__name__)
+
+
+def _dedup(lst: list) -> list:
+    """Deduplicate a list preserving order."""
+    # dict.fromkeys preserves insertion order (Python 3.7+)
+    return list(dict.fromkeys(lst))
 
 
 class PyGeoFetch:
@@ -81,12 +90,12 @@ class PyGeoFetch:
 
     def __init__(
         self,
-        config_path: Optional[Path] = None,
+        config_path: Path | None = None,
         log_level: str = "INFO",
         log_json: bool = False,
         cache_ttl: int = 3600,
         max_search_workers: int = 8,
-        progress_callback: Optional[Callable] = None,
+        progress_callback: Callable | None = None,
         auth_backend: str = "file",
     ) -> None:
         """
@@ -113,17 +122,16 @@ class PyGeoFetch:
             auth_manager=self.auth,
             progress_callback=progress_callback,
         )
-        self.config: Dict[str, Any] = {}
+        self.config: dict[str, Any] = {}
         if config_path:
             self._load_config(config_path)
 
-
         # Processing subsystems (lazy-free — always available)
         self.preprocess = Preprocessor()
-        self.indices    = SpectralIndices()
-        self.post       = PostProcessor()
-        self.sar        = SARProcessor()
-        self.batch      = BatchProcessor(engine=self)
+        self.indices = SpectralIndices()
+        self.post = PostProcessor()
+        self.sar = SARProcessor()
+        self.batch = BatchProcessor(engine=self)
         logger.info("PyGeoFetch ready")
 
     # ------------------------------------------------------------------
@@ -133,9 +141,9 @@ class PyGeoFetch:
     def search(
         self,
         query: SearchQuery,
-        providers: Optional[List[str]] = None,
+        providers: list[str] | None = None,
         use_cache: bool = True,
-    ) -> List[SatelliteData]:
+    ) -> list[SatelliteData]:
         """
         Search for satellite data across one or more providers.
 
@@ -173,8 +181,8 @@ class PyGeoFetch:
         self,
         query: SearchQuery,
         output: Path,
-        providers: Optional[List[str]] = None,
-    ) -> List[SatelliteData]:
+        providers: list[str] | None = None,
+    ) -> list[SatelliteData]:
         """
         Search and save results to a GeoJSON file.
 
@@ -194,17 +202,23 @@ class PyGeoFetch:
     # Download
     # ------------------------------------------------------------------
 
-
     # ── SLC product routing ─────────────────────────────────────────────────
 
-    _SLC_CAPABLE  = {"copernicus", "alaska_satellite_facility", "asf_vertex",
-                     "asf", "eodag", "copernicus_dataspace", "nasa_earthdata"}
-    _GRD_ONLY     = {"planetary_computer", "aws_earth", "element84"}
-
+    _SLC_CAPABLE = {
+        "copernicus",
+        "alaska_satellite_facility",
+        "asf_vertex",
+        "asf",
+        "eodag",
+        "copernicus_dataspace",
+        "nasa_earthdata",
+    }
+    _GRD_ONLY = {"planetary_computer", "aws_earth", "element84"}
 
     def _warn_if_outdated_constellation(self, results: list) -> None:
         """Log a warning if results contain only decommissioned satellites after S1A decomm."""
         from datetime import date
+
         S1A_DECOM = date(2026, 7, 1)
         if date.today() >= S1A_DECOM:
             platforms = {getattr(r, "satellite", "") or "" for r in results}
@@ -228,24 +242,24 @@ class PyGeoFetch:
                 fallback = "copernicus"
                 routed.append(fallback)
                 logger.info(
-                    "Provider %r does not host SLC products. "
-                    "Automatically routing to %r instead.", p, fallback
+                    "Provider %r does not host SLC products. Automatically routing to %r instead.",
+                    p,
+                    fallback,
                 )
             elif p in self._SLC_CAPABLE:
                 routed.append(p)
             else:
                 routed.append(p)  # unknown provider — pass through, let it fail naturally
         # Deduplicate, preserve order
-        seen = set()
-        return [x for x in routed if not (x in seen or seen.add(x))]
+        return _dedup(routed)
 
     def download(
         self,
-        data: Union[SatelliteData, List[SatelliteData]],
+        data: SatelliteData | list[SatelliteData],
         destination: Path,
-        options: Optional[DownloadOptions] = None,
+        options: DownloadOptions | None = None,
         item_done_callback=None,
-    ) -> List[DownloadResult]:
+    ) -> list[DownloadResult]:
         """
         Download one or more satellite data products.
 
@@ -267,14 +281,16 @@ class PyGeoFetch:
         """
         if isinstance(data, SatelliteData):
             data = [data]
-        return self.downloader.download_many(data, Path(destination), options, item_done_callback=item_done_callback)
+        return self.downloader.download_many(
+            data, Path(destination), options, item_done_callback=item_done_callback
+        )
 
     def download_from_file(
         self,
         search_results_path: Path,
         destination: Path,
-        options: Optional[DownloadOptions] = None,
-    ) -> List[DownloadResult]:
+        options: DownloadOptions | None = None,
+    ) -> list[DownloadResult]:
         """
         Load search results from a GeoJSON file and download them.
 
@@ -297,14 +313,14 @@ class PyGeoFetch:
     def add_credentials(
         self,
         provider: str,
-        username: Optional[str] = None,
-        password: Optional[str] = None,
-        api_key: Optional[str] = None,
-        client_id: Optional[str] = None,
-        client_secret: Optional[str] = None,
-        token: Optional[str] = None,
-        access_key: Optional[str] = None,
-        secret_key: Optional[str] = None,
+        username: str | None = None,
+        password: str | None = None,
+        api_key: str | None = None,
+        client_id: str | None = None,
+        client_secret: str | None = None,
+        token: str | None = None,
+        access_key: str | None = None,
+        secret_key: str | None = None,
         **kwargs: Any,
     ) -> None:
         """
@@ -322,16 +338,20 @@ class PyGeoFetch:
             sb.add_credentials("usgs", username="user", password="s3cr3t")
             sb.add_credentials("planet", api_key="PL_KEY")
         """
-        creds = {k: v for k, v in {
-            "username":      username,
-            "password":      password,
-            "api_key":       api_key,
-            "client_id":     client_id,
-            "client_secret": client_secret,
-            "token":         token,
-            "access_key":    access_key,
-            "secret_key":    secret_key,
-        }.items() if v is not None}
+        creds = {
+            k: v
+            for k, v in {
+                "username": username,
+                "password": password,
+                "api_key": api_key,
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "token": token,
+                "access_key": access_key,
+                "secret_key": secret_key,
+            }.items()
+            if v is not None
+        }
         creds.update({k: str(v) for k, v in kwargs.items() if v is not None})
         self.auth.add_credentials(provider, creds)
 
@@ -339,7 +359,7 @@ class PyGeoFetch:
     # Status
     # ------------------------------------------------------------------
 
-    def status(self) -> Dict[str, Any]:
+    def status(self) -> dict[str, Any]:
         """
         Return a summary of the current system status.
 
@@ -347,8 +367,8 @@ class PyGeoFetch:
             Dict with keys: ``providers_authenticated``, ``providers_free``,
             ``cache_entries``, ``version``.
         """
-        from pygeofetch.providers import list_provider_info, get_free_providers
         from pygeofetch import __version__
+        from pygeofetch.providers import get_free_providers
 
         try:
             authed = [item["provider"] for item in self.auth.list()]
@@ -386,23 +406,22 @@ class PyGeoFetch:
         self.config.update(extra)
         logger.debug(f"Loaded extra config from {path}")
 
-
     def pipeline(self, name: str):
         """Create a chainable processing pipeline."""
         from pygeofetch.processing.pipeline import ProcessingPipeline
+
         return ProcessingPipeline(name=name, engine=self)
 
     def batch_process(self, inputs, chain, output_dir=".", parallel=2):
         """Batch process multiple files through a processing chain."""
         return self.batch.process(inputs, chain, output_dir=output_dir, parallel=parallel)
 
-
     def fetch_orbit_file(
         self,
         product_name: str,
         output_dir: str = "./orbits/",
         orbit_type: str = "precise",
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Download the precise orbit file for a Sentinel-1 SLC product.
 
@@ -430,12 +449,11 @@ class PyGeoFetch:
             )
         """
         from pygeofetch.core.orbits import fetch_orbit_file as _fetch_orbit
+
         return _fetch_orbit(product_name, output_dir, orbit_type)
 
     def __repr__(self) -> str:
         authed = [item["provider"] for item in self.auth.list()]
         return (
-            f"PyGeoFetch("
-            f"authenticated={authed}, "
-            f"cache_entries={len(self.searcher.cache._cache)})"
+            f"PyGeoFetch(authenticated={authed}, cache_entries={len(self.searcher.cache._cache)})"
         )

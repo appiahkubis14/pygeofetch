@@ -25,19 +25,19 @@ import hashlib
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
-from uuid import uuid4
+from typing import TYPE_CHECKING, Any, Callable
 
+from pygeofetch.utils.gcp_recovery import needs_recovery, recover_georeference
+from pygeofetch.core.logging import DownloadProgress, get_logger
 from pygeofetch.models.download_task import (
     DownloadOptions,
-    DownloadProgress as _ModelDownloadProgress,
     DownloadResult,
     DownloadStatus,
     DownloadTask,
 )
-from pygeofetch.models.satellite_data import SatelliteData
-from pygeofetch.core.logging import (get_logger, _render_progress_bar,
-    DownloadProgress)
+
+if TYPE_CHECKING:
+    from pygeofetch.models.satellite_data import SatelliteData
 
 logger = get_logger(__name__)
 
@@ -62,19 +62,19 @@ class AdaptiveDownloader:
 
     def __init__(
         self,
-        auth_manager: Optional[Any] = None,
-        progress_callback: Optional[Callable[[DownloadProgress], None]] = None,
+        auth_manager: Any | None = None,
+        progress_callback: Callable[[DownloadProgress], None] | None = None,
     ) -> None:
         self.auth_manager = auth_manager
         self.progress_callback = progress_callback
-        self._active_tasks: Dict[str, DownloadTask] = {}
-        self._provider_cache: Dict[str, Any] = {}
+        self._active_tasks: dict[str, DownloadTask] = {}
+        self._provider_cache: dict[str, Any] = {}
 
     def download(
         self,
         data: SatelliteData,
         destination: Path,
-        options: Optional[DownloadOptions] = None,
+        options: DownloadOptions | None = None,
     ) -> DownloadResult:
         """
         Download a single satellite data product.
@@ -109,41 +109,50 @@ class AdaptiveDownloader:
                     result = result.model_copy(update={"duration_seconds": elapsed})
                 if result.success:
                     # BUG 3: validate file integrity before claiming success
-                    for out_p in (result.output_paths or [result.output_path]):
+                    for out_p in result.output_paths or [result.output_path]:
                         if out_p and out_p.exists():
                             is_valid, err_msg = self._validate_downloaded_file(out_p)
                             if not is_valid:
-                                result = result.model_copy(update={
-                                    "status": DownloadStatus.FAILED,
-                                    "error": f"Download appeared complete but file validation failed: {err_msg}",
-                                    "output_path": None,
-                                })
-                                logger.warning(
-                                    f"File validation failed for {data.id!r}: {err_msg}"
+                                result = result.model_copy(
+                                    update={
+                                        "status": DownloadStatus.FAILED,
+                                        "error": (
+                                            f"Download appeared complete but"
+                                            f" file validation failed: {err_msg}"
+                                        ),
+                                        "output_path": None,
+                                    }
                                 )
+                                logger.warning(f"File validation failed for {data.id!r}: {err_msg}")
                                 break
                     if result.success:
                         if options.verify_checksum:
                             result = self._verify_checksums(result, data, options)
                         if options.post_process:
                             result = self._run_post_process(result, options)
-                    size_mb = result.bytes_downloaded / (1024 * 1024) if result.bytes_downloaded else 0
-                    speed = (size_mb / result.duration_seconds) if result.duration_seconds > 0 else 0
+                    size_mb = (
+                        result.bytes_downloaded / (1024 * 1024) if result.bytes_downloaded else 0
+                    )
+                    (size_mb / result.duration_seconds) if result.duration_seconds > 0 else 0
                     logger.info(
                         "  ✓ %-45s %6.0f MB  %5.1fs",
-                        str(data.id)[:45], size_mb, result.duration_seconds
+                        str(data.id)[:45],
+                        size_mb,
+                        result.duration_seconds,
                     )
                 return result
             except Exception as exc:
                 if attempt < options.retry_attempts:
                     delay = self._backoff(attempt, options)
                     logger.warning(
-                        f"Download attempt {attempt+1}/{options.retry_attempts+1} failed "
+                        f"Download attempt {attempt + 1}/{options.retry_attempts + 1} failed "
                         f"for {data.id!r}: {exc}. Retrying in {delay:.1f}s..."
                     )
                     time.sleep(delay)
                 else:
-                    logger.error(f"Download failed after {options.retry_attempts+1} attempts: {exc}")
+                    logger.error(
+                        f"Download failed after {options.retry_attempts + 1} attempts: {exc}"
+                    )
                     return DownloadResult(
                         status=DownloadStatus.FAILED,
                         data_id=data.id,
@@ -162,11 +171,11 @@ class AdaptiveDownloader:
 
     def download_many(
         self,
-        data_list: List[SatelliteData],
+        data_list: list[SatelliteData],
         destination: Path,
-        options: Optional[DownloadOptions] = None,
-        item_done_callback: Optional[Callable[[int, int, DownloadResult], None]] = None,
-    ) -> List[DownloadResult]:
+        options: DownloadOptions | None = None,
+        item_done_callback: Callable[[int, int, DownloadResult], None] | None = None,
+    ) -> list[DownloadResult]:
         """
         Download multiple satellite data products in parallel.
 
@@ -181,7 +190,7 @@ class AdaptiveDownloader:
             List of DownloadResults in same order as input.
         """
         options = options or DownloadOptions()
-        results: List[Optional[DownloadResult]] = [None] * len(data_list)
+        results: list[DownloadResult | None] = [None] * len(data_list)
         completed_count = 0
         total = len(data_list)
 
@@ -191,11 +200,12 @@ class AdaptiveDownloader:
         def _run_one(data: SatelliteData, idx: int) -> tuple:
             """Download one item and return (idx, result, bytes, duration)."""
             import time as _it
+
             t0 = _it.time()
             dp.start_item(str(data.id))
             try:
                 result = self.download(data, destination / data.provider, options)
-                dur    = _it.time() - t0
+                dur = _it.time() - t0
                 dp.complete_item(
                     success=result.success,
                     bytes_total=result.bytes_downloaded or 0,
@@ -203,7 +213,7 @@ class AdaptiveDownloader:
                 )
                 return idx, result
             except Exception as exc:
-                dur    = _it.time() - t0
+                dur = _it.time() - t0
                 result = DownloadResult(
                     status=DownloadStatus.FAILED,
                     data_id=data.id,
@@ -214,10 +224,7 @@ class AdaptiveDownloader:
                 return idx, result
 
         with ThreadPoolExecutor(max_workers=options.parallel) as executor:
-            futures = {
-                executor.submit(_run_one, data, i): i
-                for i, data in enumerate(data_list)
-            }
+            futures = {executor.submit(_run_one, data, i): i for i, data in enumerate(data_list)}
             for future in as_completed(futures):
                 idx, result = future.result()
                 results[idx] = result
@@ -236,22 +243,24 @@ class AdaptiveDownloader:
                     error="Download future returned no result (internal error)",
                 )
 
-        completed = sum(1 for r in results if r and r.success)
-        failed    = sum(1 for r in results if r and not r.success)
+        sum(1 for r in results if r and r.success)
+        sum(1 for r in results if r and not r.success)
         dp.__exit__(None, None, None)
         assert len(results) == len(data_list), (
             f"BUG: result count {len(results)} != input count {len(data_list)}"
         )
-        total_mb = sum(
-            r.bytes_downloaded / (1024*1024)
-            for r in results if r and r.success and r.bytes_downloaded
+        sum(
+            r.bytes_downloaded / (1024 * 1024)
+            for r in results
+            if r and r.success and r.bytes_downloaded
         )
         # summary printed by DownloadProgress footer
-        return results  # type: ignore — all slots filled, never None
+        return results  # noqa: RETURNVALUE
 
     def _get_provider(self, provider_id: str) -> Any:
         """Get a provider instance with a fresh authenticated session."""
         from pygeofetch.providers import get_provider
+
         prov = get_provider(provider_id)
         if self.auth_manager and prov.REQUIRES_AUTH:
             try:
@@ -296,22 +305,21 @@ class AdaptiveDownloader:
                 hasher.update(chunk)
         return hasher.hexdigest()
 
-    def _run_post_process(
-        self, result: DownloadResult, options: DownloadOptions
-    ) -> DownloadResult:
+    def _run_post_process(self, result: DownloadResult, options: DownloadOptions) -> DownloadResult:
         """Run configured post-download processing actions."""
         for action in options.post_process:
             try:
                 result = self._apply_action(result, action)
             except Exception as exc:
                 logger.warning(f"Post-process action {action.action!r} failed: {exc}")
-        result.post_process_completed = True
+        result.post_process_completed.append("completed")
         return result
 
     def _apply_action(self, result: DownloadResult, action: Any) -> DownloadResult:
         """Apply a single post-process action to download results."""
         if action.action == "unzip":
             from pygeofetch.utils.file_utils import safe_extract
+
             new_paths = []
             for path in result.output_paths:
                 if path.suffix in (".zip", ".tar", ".gz"):
@@ -328,7 +336,8 @@ class AdaptiveDownloader:
             target_crs = action.params.get("value", "EPSG:4326")
             try:
                 import rasterio
-                from rasterio.warp import calculate_default_transform, reproject, Resampling
+                from rasterio.warp import Resampling, reproject  # noqa: F401
+
                 new_paths = []
                 for path in result.output_paths:
                     if path.suffix.lower() in (".tif", ".tiff"):
@@ -345,14 +354,16 @@ class AdaptiveDownloader:
             method = action.params.get("value", "lzw")
             try:
                 import rasterio
+
                 new_paths = []
                 for path in result.output_paths:
                     if path.suffix.lower() in (".tif", ".tiff"):
                         out_path = path.with_stem(f"{path.stem}_{method}")
                         with rasterio.open(path) as src:
                             profile = src.profile.copy()
-                            profile.update(compress=method, tiled=True,
-                                           blockxsize=512, blockysize=512)
+                            profile.update(
+                                compress=method, tiled=True, blockxsize=512, blockysize=512
+                            )
                             with rasterio.open(out_path, "w", **profile) as dst:
                                 dst.write(src.read())
                         new_paths.append(out_path)
@@ -367,17 +378,25 @@ class AdaptiveDownloader:
         elif action.action == "cog":
             compress = action.params.get("value", "deflate")
             try:
-                import rasterio, tempfile
+                import tempfile
+
+                import rasterio
                 from rasterio.enums import Resampling as RS
+
                 new_paths = []
                 for path in result.output_paths:
                     if path.suffix.lower() in (".tif", ".tiff"):
                         out_path = path.with_stem(f"{path.stem}_cog")
                         with rasterio.open(path) as src:
                             profile = src.profile.copy()
-                            profile.update(compress=compress, tiled=True,
-                                           blockxsize=512, blockysize=512,
-                                           interleave="band", driver="GTiff")
+                            profile.update(
+                                compress=compress,
+                                tiled=True,
+                                blockxsize=512,
+                                blockysize=512,
+                                interleave="band",
+                                driver="GTiff",
+                            )
                             data = src.read()
                             with tempfile.NamedTemporaryFile(suffix=".tif", delete=False) as tmp:
                                 tmp_path = Path(tmp.name)
@@ -401,12 +420,14 @@ class AdaptiveDownloader:
 
         elif action.action == "clip":
             import json
+
             geom_src = action.params.get("value", "")
             try:
                 import rasterio
                 from rasterio.mask import mask as rasterio_mask
+
                 shapes = []
-                if geom_src.endswith(".geojson") or geom_src.endswith(".json"):
+                if geom_src.endswith((".geojson", ".json")):
                     with open(geom_src) as f:
                         gj = json.load(f)
                     if gj.get("type") == "FeatureCollection":
@@ -420,6 +441,7 @@ class AdaptiveDownloader:
                     try:
                         parts = [float(x) for x in geom_src.split(",")]
                         from shapely.geometry import box as sbox
+
                         shapes = [sbox(*parts).__geo_interface__]
                     except Exception:
                         pass
@@ -431,8 +453,11 @@ class AdaptiveDownloader:
                             with rasterio.open(path) as src:
                                 out_img, out_transform = rasterio_mask(src, shapes, crop=True)
                                 profile = src.profile.copy()
-                                profile.update(height=out_img.shape[1], width=out_img.shape[2],
-                                               transform=out_transform)
+                                profile.update(
+                                    height=out_img.shape[1],
+                                    width=out_img.shape[2],
+                                    transform=out_transform,
+                                )
                                 with rasterio.open(out_path, "w", **profile) as dst:
                                     dst.write(out_img)
                             new_paths.append(out_path)
@@ -449,6 +474,7 @@ class AdaptiveDownloader:
             try:
                 import rasterio
                 from rasterio.enums import Resampling as RS
+
                 new_paths = []
                 for path in result.output_paths:
                     if path.suffix.lower() in (".tif", ".tiff"):
@@ -461,11 +487,13 @@ class AdaptiveDownloader:
                             except (ValueError, ZeroDivisionError):
                                 scale_x = scale_y = 0.5
                             new_h = max(1, int(src.height * scale_y))
-                            new_w = max(1, int(src.width  * scale_x))
-                            data = src.read(out_shape=(src.count, new_h, new_w),
-                                            resampling=RS.bilinear)
+                            new_w = max(1, int(src.width * scale_x))
+                            data = src.read(
+                                out_shape=(src.count, new_h, new_w), resampling=RS.bilinear
+                            )
                             transform = src.transform * src.transform.scale(
-                                src.width / new_w, src.height / new_h)
+                                src.width / new_w, src.height / new_h
+                            )
                             profile = src.profile.copy()
                             profile.update(height=new_h, width=new_w, transform=transform)
                         out_path = path.with_stem(f"{path.stem}_resamp")
@@ -483,45 +511,60 @@ class AdaptiveDownloader:
         elif action.action == "ndvi":
             # Compute NDVI from downloaded bands — expects B04 (Red) and B08 (NIR)
             import numpy as np
+
             try:
                 import rasterio
-                red_path = next((p for p in result.output_paths if "B04" in p.name or "red" in p.name.lower()), None)
-                nir_path = next((p for p in result.output_paths if "B08" in p.name or "nir" in p.name.lower()), None)
+
+                red_path = next(
+                    (p for p in result.output_paths if "B04" in p.name or "red" in p.name.lower()),
+                    None,
+                )
+                nir_path = next(
+                    (p for p in result.output_paths if "B08" in p.name or "nir" in p.name.lower()),
+                    None,
+                )
                 if red_path and nir_path:
                     with rasterio.open(red_path) as rs:
                         red = rs.read(1).astype(np.float32)
                         profile = rs.profile.copy()
                     with rasterio.open(nir_path) as ns:
-                        nir = ns.read(1, out_shape=red.shape,
-                                      resampling=rasterio.enums.Resampling.bilinear).astype(np.float32)
+                        nir = ns.read(
+                            1, out_shape=red.shape, resampling=rasterio.enums.Resampling.bilinear
+                        ).astype(np.float32)
                     with np.errstate(divide="ignore", invalid="ignore"):
                         ndvi = np.where(nir + red > 0, (nir - red) / (nir + red), -9999.0)
                     ndvi_path = red_path.parent / "ndvi.tif"
                     profile.update(count=1, dtype="float32", nodata=-9999.0)
                     with rasterio.open(ndvi_path, "w", **profile) as dst:
                         dst.write(ndvi[np.newaxis, :, :])
-                    result.output_paths.append(ndvi_path)
+                    (result.output_paths or []).append(ndvi_path)
                     result.output_path = ndvi_path
                     logger.info(f"NDVI computed → {ndvi_path}")
                 else:
-                    logger.warning("ndvi action: could not find B04 (Red) and B08 (NIR) in output paths")
+                    logger.warning(
+                        "ndvi action: could not find B04 (Red) and B08 (NIR) in output paths"
+                    )
             except ImportError:
                 logger.warning("rasterio/numpy not installed; skipping ndvi action")
 
         elif action.action in ("pan-sharpen", "pan_sharpen"):
-            logger.info("pan-sharpen action: use PyGeoFetch preprocess pansharpen for this operation")
+            logger.info(
+                "pan-sharpen action: use PyGeoFetch preprocess pansharpen for this operation"
+            )
 
         elif action.action == "merge":
             try:
                 import rasterio
                 from rasterio.merge import merge
+
                 tifs = [p for p in result.output_paths if p.suffix.lower() in (".tif", ".tiff")]
                 if len(tifs) > 1:
                     src_files = [rasterio.open(p) for p in tifs]
                     mosaic, transform = merge(src_files)
                     profile = src_files[0].profile.copy()
-                    profile.update(height=mosaic.shape[1], width=mosaic.shape[2],
-                                   transform=transform)
+                    profile.update(
+                        height=mosaic.shape[1], width=mosaic.shape[2], transform=transform
+                    )
                     merge_path = tifs[0].parent / "merged.tif"
                     with rasterio.open(merge_path, "w", **profile) as dst:
                         dst.write(mosaic)
@@ -550,9 +593,10 @@ class AdaptiveDownloader:
             (is_valid: bool, error_message: str)
         """
         import os
+
         path_str = str(path)
         path_obj = Path(path_str)
-        suffix   = path_obj.suffix.lower()
+        suffix = path_obj.suffix.lower()
 
         # ── 0. File must exist and be non-empty ───────────────────────────
         try:
@@ -566,6 +610,7 @@ class AdaptiveDownloader:
         if suffix == ".zip" or path_str.endswith(".zip"):
             try:
                 import zipfile
+
                 with zipfile.ZipFile(path_str) as zf:
                     bad = zf.testzip()
                     if bad:
@@ -573,13 +618,14 @@ class AdaptiveDownloader:
                 return True, ""
             except zipfile.BadZipFile as exc:
                 return False, f"Invalid ZIP file: {exc}"
-            except Exception as exc:
+            except Exception:
                 # If we can't import zipfile or something weird — just trust size
                 return True, ""
 
         if suffix in (".gz", ".tgz") or path_str.endswith(".tar.gz"):
             try:
                 import tarfile
+
                 with tarfile.open(path_str) as tf:
                     tf.getmembers()
                 return True, ""
@@ -590,19 +636,28 @@ class AdaptiveDownloader:
 
         # ── 2. Non-raster text/data formats — size check only ─────────────
         NON_RASTER = {
-            ".json", ".geojson", ".xml", ".csv", ".txt",
-            ".html", ".md", ".yaml", ".yml", ".parquet", ".nc",
-            ".EOF",   # orbit files
+            ".json",
+            ".geojson",
+            ".xml",
+            ".csv",
+            ".txt",
+            ".html",
+            ".md",
+            ".yaml",
+            ".yml",
+            ".parquet",
+            ".nc",
+            ".EOF",  # orbit files
         }
         if suffix in NON_RASTER or not suffix:
-            return True, ""   # already passed size > 0 above
+            return True, ""  # already passed size > 0 above
 
         # ── 3. Raster formats — open with rasterio ────────────────────────
-        RASTER_SUFFIXES = {".tif", ".tiff", ".jp2", ".img", ".vrt",
-                           ".hdf", ".h4", ".h5", ".hdf5"}
+        RASTER_SUFFIXES = {".tif", ".tiff", ".jp2", ".img", ".vrt", ".hdf", ".h4", ".h5", ".hdf5"}
         if suffix in RASTER_SUFFIXES:
             try:
                 import rasterio
+
                 with rasterio.open(path_str) as src:
                     if src.count == 0:
                         return False, "Raster has zero bands"
@@ -635,6 +690,7 @@ class AdaptiveDownloader:
         """
         try:
             import rasterio
+
             with rasterio.open(str(path)) as src:
                 t = src.transform
                 return (
@@ -654,25 +710,27 @@ class AdaptiveDownloader:
         Raises RuntimeError if reprojection produces an identity transform.
         """
         import rasterio
-        from rasterio.warp import calculate_default_transform, reproject, Resampling
         from rasterio.enums import Resampling as RS
+        from rasterio.warp import calculate_default_transform, reproject
 
         with rasterio.open(str(source_path)) as src:
-            src_crs       = src.crs
+            src_crs = src.crs
             src_transform = src.transform
-            src_width     = src.width
-            src_height    = src.height
+            src_width = src.width
+            src_height = src.height
 
             dst_transform, dst_width, dst_height = calculate_default_transform(
                 src_crs, target_crs, src_width, src_height, *src.bounds
             )
             kwargs = src.meta.copy()
-            kwargs.update({
-                "crs":       target_crs,
-                "transform": dst_transform,
-                "width":     dst_width,
-                "height":    dst_height,
-            })
+            kwargs.update(
+                {
+                    "crs": target_crs,
+                    "transform": dst_transform,
+                    "width": dst_width,
+                    "height": dst_height,
+                }
+            )
             with rasterio.open(str(target_path), "w", **kwargs) as dst:
                 for band_idx in range(1, src.count + 1):
                     reproject(
@@ -686,41 +744,36 @@ class AdaptiveDownloader:
                     )
 
         if self._has_identity_transform(target_path):
-            raise RuntimeError(
+            msg = (
                 f"Reprojection produced identity transform in {target_path}. "
                 f"Source: {source_path}, Target CRS: {target_crs}. "
                 "This is a known rasterio/GDAL edge case with certain input CRS."
             )
+            raise RuntimeError(msg)
 
     def _backoff(self, attempt: int, options: DownloadOptions) -> float:
         """Calculate retry delay based on strategy."""
         import random
-        delay = options.retry_delay_seconds * (2 ** attempt)
+
+        delay = options.retry_delay_seconds * (2**attempt)
         delay = min(delay, 60.0)
         if "jitter" in options.retry_strategy:
-            delay *= (0.5 + random.random() * 0.5)
+            delay *= 0.5 + random.random() * 0.5
         return delay
 
     def _emit_progress(
         self,
-        data_list: List[SatelliteData],
-        results: List[Optional[DownloadResult]],
+        data_list: list[SatelliteData],
+        results: list[DownloadResult | None],
         options: DownloadOptions,
     ) -> None:
         """Emit progress update via callback if configured."""
         if not self.progress_callback:
             return
-        completed = sum(1 for r in results if r is not None)
-        succeeded = sum(1 for r in results if r and r.success)
-        total_bytes = sum(r.bytes_downloaded for r in results if r)
-        progress = DownloadProgress(
-            task_id="batch",
-            status=DownloadStatus.DOWNLOADING,
-            bytes_downloaded=total_bytes,
-            files_completed=completed,
-            files_total=len(data_list),
-            percent_complete=(completed / len(data_list)) * 100,
-        )
+        # Emit lightweight progress update (counts only)
+        n_done = sum(1 for r in results if r is not None)
+        _ = n_done  # noqa: USED as progress signal to callback
+        progress = DownloadProgress(total=len(results), destination="")
         try:
             self.progress_callback(progress)
         except Exception:

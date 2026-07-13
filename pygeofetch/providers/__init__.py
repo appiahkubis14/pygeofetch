@@ -8,34 +8,34 @@ Provider registry for PyGeoFetch.
 """
 
 from __future__ import annotations
-from typing import Dict, List, Optional, Type
+
 from pygeofetch.providers.base import AbstractBaseProvider
 
 
-def _lazy_load_providers() -> Dict[str, Type[AbstractBaseProvider]]:
-    from pygeofetch.providers.usgs import USGSProvider
-    from pygeofetch.providers.copernicus import CopernicusProvider
-    from pygeofetch.providers.aws_earth import AWSEarthProvider
-    from pygeofetch.providers.nasa_earthdata import NASAEarthdataProvider
-    from pygeofetch.providers.nasa_earthdata_cloud import NASAEarthdataCloudProvider
-    from pygeofetch.providers.planetary_computer import PlanetaryComputerProvider
-    from pygeofetch.providers.element84 import Element84Provider
-    from pygeofetch.providers.opentopography import OpentopographyProvider
-    from pygeofetch.providers.planet import PlanetProvider
-    from pygeofetch.providers.sentinel_hub import SentinelHubProvider
-    from pygeofetch.providers.maxar_gbdx import MaxarGbdxProvider
+def _lazy_load_providers() -> dict[str, type[AbstractBaseProvider]]:
     from pygeofetch.providers.airbus_oneatlas import AirbusOneatlasProvider
     from pygeofetch.providers.alaska_satellite_facility import AlaskaSatelliteFacilityProvider
-    from pygeofetch.providers.noaa_big_data import NoaaBigDataProvider
-    from pygeofetch.providers.google_earth_engine import GoogleEarthEngineProvider
-    from pygeofetch.providers.earth_explorer_additional import EarthExplorerAdditionalProvider
-    from pygeofetch.providers.jaxa_earth import JaxaEarthProvider
-    from pygeofetch.providers.isro_bhuvan import IsroBhuvanProvider
-    from pygeofetch.providers.inpe_cbers import InpeCbersProvider
-    from pygeofetch.providers.esa_scihub import EsaScihubProvider
+    from pygeofetch.providers.aws_earth import AWSEarthProvider
+    from pygeofetch.providers.copernicus import CopernicusProvider
     from pygeofetch.providers.digitalglobe import DigitalglobeProvider
-    from pygeofetch.providers.terrabotics import TerraboticsProvider
+    from pygeofetch.providers.earth_explorer_additional import EarthExplorerAdditionalProvider
+    from pygeofetch.providers.element84 import Element84Provider
+    from pygeofetch.providers.esa_scihub import EsaScihubProvider
     from pygeofetch.providers.geoserver_generic import GeoserverGenericProvider
+    from pygeofetch.providers.google_earth_engine import GoogleEarthEngineProvider
+    from pygeofetch.providers.inpe_cbers import InpeCbersProvider
+    from pygeofetch.providers.isro_bhuvan import IsroBhuvanProvider
+    from pygeofetch.providers.jaxa_earth import JaxaEarthProvider
+    from pygeofetch.providers.maxar_gbdx import MaxarGbdxProvider
+    from pygeofetch.providers.nasa_earthdata import NASAEarthdataProvider
+    from pygeofetch.providers.nasa_earthdata_cloud import NASAEarthdataCloudProvider
+    from pygeofetch.providers.noaa_big_data import NoaaBigDataProvider
+    from pygeofetch.providers.opentopography import OpentopographyProvider
+    from pygeofetch.providers.planet import PlanetProvider
+    from pygeofetch.providers.planetary_computer import PlanetaryComputerProvider
+    from pygeofetch.providers.sentinel_hub import SentinelHubProvider
+    from pygeofetch.providers.terrabotics import TerraboticsProvider
+    from pygeofetch.providers.usgs import USGSProvider
 
     return {
         "usgs": USGSProvider,
@@ -64,17 +64,17 @@ def _lazy_load_providers() -> Dict[str, Type[AbstractBaseProvider]]:
     }
 
 
-_REGISTRY: Optional[Dict[str, Type[AbstractBaseProvider]]] = None
+_REGISTRY: dict[str, type[AbstractBaseProvider]] | None = None
 
 
-def _get_registry() -> Dict[str, Type[AbstractBaseProvider]]:
+def _get_registry() -> dict[str, type[AbstractBaseProvider]]:
     global _REGISTRY
     if _REGISTRY is None:
         _REGISTRY = _lazy_load_providers()
     return _REGISTRY
 
 
-def get_provider(provider_id: str, config: Optional[dict] = None) -> AbstractBaseProvider:
+def get_provider(provider_id: str, config: dict | None = None) -> AbstractBaseProvider:
     """
     Instantiate a provider by its ID.
 
@@ -92,16 +92,17 @@ def get_provider(provider_id: str, config: Optional[dict] = None) -> AbstractBas
     pid = provider_id.lower().replace("-", "_")
     if pid not in registry:
         available = ", ".join(sorted(registry.keys()))
-        raise ValueError(f"Unknown provider {provider_id!r}. Available: {available}")
+        msg = f"Unknown provider {provider_id!r}. Available: {available}"
+        raise ValueError(msg)
     return registry[pid](config=config)
 
 
-def list_providers() -> List[str]:
+def list_providers() -> list[str]:
     """Return sorted list of all registered provider IDs."""
     return sorted(_get_registry().keys())
 
 
-def list_provider_info() -> List[dict]:
+def list_provider_info() -> list[dict]:
     """Return rich metadata for all registered providers."""
     registry = _get_registry()
     results = []
@@ -109,49 +110,60 @@ def list_provider_info() -> List[dict]:
         try:
             instance = cls()
             caps = instance.get_capabilities()
-            results.append({
-                "id": pid,
-                "name": caps.name or getattr(cls, "DISPLAY_NAME", pid),
-                "display_name": caps.name or getattr(cls, "DISPLAY_NAME", pid),
-                "description": caps.description or getattr(cls, "DESCRIPTION", ""),
-                "requires_auth": cls.REQUIRES_AUTH,
-                "auth_type": caps.auth_type,
-                "satellites": caps.satellites or getattr(cls, "SATELLITES", []),
-                "supports_sar": caps.supports_sar,
-                "supports_sub_meter": caps.supports_sub_meter,
-                "stac": caps.stac,
-                "regions": caps.regions,
-                "resolution_min_m": caps.resolution_min_m,
-                "resolution_max_m": caps.resolution_max_m,
-                "endpoint_url": caps.endpoint_url,
-                "docs_url": caps.docs_url,
-            })
+            results.append(
+                {
+                    "id": pid,
+                    "name": caps.name or getattr(cls, "DISPLAY_NAME", pid),
+                    "display_name": caps.name or getattr(cls, "DISPLAY_NAME", pid),
+                    "description": caps.description or getattr(cls, "DESCRIPTION", ""),
+                    "requires_auth": cls.REQUIRES_AUTH,
+                    "auth_type": caps.auth_type,
+                    "satellites": caps.satellites or getattr(cls, "SATELLITES", []),
+                    "supports_sar": caps.supports_sar,
+                    "supports_sub_meter": caps.supports_sub_meter,
+                    "stac": caps.stac,
+                    "regions": caps.regions,
+                    "resolution_min_m": caps.resolution_min_m,
+                    "resolution_max_m": caps.resolution_max_m,
+                    "endpoint_url": caps.endpoint_url,
+                    "docs_url": caps.docs_url,
+                }
+            )
         except Exception:
-            results.append({
-                "id": pid, "name": getattr(cls, "DISPLAY_NAME", pid),
-                "display_name": getattr(cls, "DISPLAY_NAME", pid),
-                "description": getattr(cls, "DESCRIPTION", ""),
-                "requires_auth": cls.REQUIRES_AUTH, "auth_type": "unknown",
-                "satellites": getattr(cls, "SATELLITES", []),
-                "supports_sar": False, "supports_sub_meter": False,
-                "stac": False, "regions": [], "resolution_min_m": None,
-                "resolution_max_m": None, "endpoint_url": "", "docs_url": "",
-            })
+            results.append(
+                {
+                    "id": pid,
+                    "name": getattr(cls, "DISPLAY_NAME", pid),
+                    "display_name": getattr(cls, "DISPLAY_NAME", pid),
+                    "description": getattr(cls, "DESCRIPTION", ""),
+                    "requires_auth": cls.REQUIRES_AUTH,
+                    "auth_type": "unknown",
+                    "satellites": getattr(cls, "SATELLITES", []),
+                    "supports_sar": False,
+                    "supports_sub_meter": False,
+                    "stac": False,
+                    "regions": [],
+                    "resolution_min_m": None,
+                    "resolution_max_m": None,
+                    "endpoint_url": "",
+                    "docs_url": "",
+                }
+            )
     return results
 
 
-def get_free_providers() -> List[str]:
+def get_free_providers() -> list[str]:
     """Return IDs of providers that require no authentication."""
     return [pid for pid, cls in _get_registry().items() if not cls.REQUIRES_AUTH]
 
 
 def get_providers_by_capability(
-    sar: Optional[bool] = None,
-    sub_meter: Optional[bool] = None,
-    stac: Optional[bool] = None,
-    requires_auth: Optional[bool] = None,
-    region: Optional[str] = None,
-) -> List[str]:
+    sar: bool | None = None,
+    sub_meter: bool | None = None,
+    stac: bool | None = None,
+    requires_auth: bool | None = None,
+    region: str | None = None,
+) -> list[str]:
     """
     Filter providers by capability flags.
 

@@ -1,25 +1,36 @@
 """CLI commands for spectral indices."""
+
 from __future__ import annotations
+
 import sys
-from pathlib import Path
+
 import click
 from rich.console import Console
+
 console = Console()
 
 
 def _engine():
     from pygeofetch.core.engine import PyGeoFetch
+
     return PyGeoFetch(log_level="WARNING")
 
 
 def _pr(result, name):
     if result.success:
-        size_mb = result.output_path.stat().st_size / (1024*1024) if result.output_path and result.output_path.exists() else 0
+        size_mb = (
+            result.output_path.stat().st_size / (1024 * 1024)
+            if result.output_path and result.output_path.exists()
+            else 0
+        )
         meta = result.metadata or {}
-        console.print(f"[green]✓[/] {name} → {result.output_path} ({size_mb:.1f} MB, {result.duration_seconds:.2f}s)")
+        console.print(
+            f"[green]✓[/] {name} → {result.output_path}"
+            f" ({size_mb:.1f} MB, {result.duration_seconds:.2f}s)"
+        )
         if meta:
             for k, v in meta.items():
-                if k not in ("expression",):
+                if k != "expression":
                     console.print(f"  {k}: {v}")
     else:
         console.print(f"[red]✗[/] {name} failed: {result.error}")
@@ -37,7 +48,9 @@ def index() -> None:
 @click.option("--output", "-o", default=None)
 def ndvi_cmd(red, nir, output):
     """NDVI — Normalized Difference Vegetation Index. Range: -1 to +1. Vegetation > 0.3."""
-    e = _engine(); r = e.indices.ndvi(red=red, nir=nir, output=output); _pr(r, "NDVI")
+    e = _engine()
+    r = e.indices.ndvi(red=red, nir=nir, output=output)
+    _pr(r, "NDVI")
 
 
 @index.command("evi")
@@ -47,7 +60,9 @@ def ndvi_cmd(red, nir, output):
 @click.option("--output", "-o", default=None)
 def evi_cmd(blue, red, nir, output):
     """EVI — Enhanced Vegetation Index. Better than NDVI in high-biomass areas."""
-    e = _engine(); r = e.indices.evi(blue=blue, red=red, nir=nir, output=output); _pr(r, "EVI")
+    e = _engine()
+    r = e.indices.evi(blue=blue, red=red, nir=nir, output=output)
+    _pr(r, "EVI")
 
 
 @index.command("savi")
@@ -57,7 +72,9 @@ def evi_cmd(blue, red, nir, output):
 @click.option("--output", "-o", default=None)
 def savi_cmd(red, nir, soil_l, output):
     """SAVI — Soil Adjusted Vegetation Index. Reduces soil brightness influence."""
-    e = _engine(); r = e.indices.savi(red=red, nir=nir, L=soil_l, output=output); _pr(r, "SAVI")
+    e = _engine()
+    r = e.indices.savi(red=red, nir=nir, L=soil_l, output=output)
+    _pr(r, "SAVI")
 
 
 @index.command("ndwi")
@@ -66,7 +83,9 @@ def savi_cmd(red, nir, soil_l, output):
 @click.option("--output", "-o", default=None)
 def ndwi_cmd(green, nir, output):
     """NDWI — Normalized Difference Water Index. Water > 0."""
-    e = _engine(); r = e.indices.ndwi(green=green, nir=nir, output=output); _pr(r, "NDWI")
+    e = _engine()
+    r = e.indices.ndwi(green=green, nir=nir, output=output)
+    _pr(r, "NDWI")
 
 
 @index.command("mndwi")
@@ -75,7 +94,9 @@ def ndwi_cmd(green, nir, output):
 @click.option("--output", "-o", default=None)
 def mndwi_cmd(green, swir1, output):
     """MNDWI — Modified NDWI. Better separation of water from built-up areas."""
-    e = _engine(); r = e.indices.mndwi(green=green, swir1=swir1, output=output); _pr(r, "MNDWI")
+    e = _engine()
+    r = e.indices.mndwi(green=green, swir1=swir1, output=output)
+    _pr(r, "MNDWI")
 
 
 @index.command("ndbi")
@@ -84,7 +105,9 @@ def mndwi_cmd(green, swir1, output):
 @click.option("--output", "-o", default=None)
 def ndbi_cmd(nir, swir1, output):
     """NDBI — Normalized Difference Built-up Index. Urban > 0."""
-    e = _engine(); r = e.indices.ndbi(nir=nir, swir1=swir1, output=output); _pr(r, "NDBI")
+    e = _engine()
+    r = e.indices.ndbi(nir=nir, swir1=swir1, output=output)
+    _pr(r, "NDBI")
 
 
 @index.command("ndsi")
@@ -93,7 +116,9 @@ def ndbi_cmd(nir, swir1, output):
 @click.option("--output", "-o", default=None)
 def ndsi_cmd(green, swir1, output):
     """NDSI — Snow Index. Snow > 0.4."""
-    e = _engine(); r = e.indices.ndsi(green=green, swir1=swir1, output=output); _pr(r, "NDSI")
+    e = _engine()
+    r = e.indices.ndsi(green=green, swir1=swir1, output=output)
+    _pr(r, "NDSI")
 
 
 @index.command("ndmi")
@@ -102,7 +127,9 @@ def ndsi_cmd(green, swir1, output):
 @click.option("--output", "-o", default=None)
 def ndmi_cmd(nir, swir1, output):
     """NDMI — Moisture Index. Sensitive to canopy water content."""
-    e = _engine(); r = e.indices.ndmi(nir=nir, swir1=swir1, output=output); _pr(r, "NDMI")
+    e = _engine()
+    r = e.indices.ndmi(nir=nir, swir1=swir1, output=output)
+    _pr(r, "NDMI")
 
 
 @index.command("nbr")
@@ -111,7 +138,9 @@ def ndmi_cmd(nir, swir1, output):
 @click.option("--output", "-o", default=None)
 def nbr_cmd(nir, swir2, output):
     """NBR — Normalized Burn Ratio. Use dNBR for burn severity."""
-    e = _engine(); r = e.indices.nbr(nir=nir, swir2=swir2, output=output); _pr(r, "NBR")
+    e = _engine()
+    r = e.indices.nbr(nir=nir, swir2=swir2, output=output)
+    _pr(r, "NBR")
 
 
 @index.command("dnbr")
@@ -123,25 +152,38 @@ def nbr_cmd(nir, swir2, output):
 def dnbr_cmd(pre_nir, pre_swir2, post_nir, post_swir2, output):
     """dNBR — Differenced Burn Ratio. Range: >0.66 high severity, <-0.25 regrowth."""
     e = _engine()
-    r = e.indices.dnbr(pre_nir=pre_nir, pre_swir2=pre_swir2,
-                       post_nir=post_nir, post_swir2=post_swir2, output=output)
+    r = e.indices.dnbr(
+        pre_nir=pre_nir,
+        pre_swir2=pre_swir2,
+        post_nir=post_nir,
+        post_swir2=post_swir2,
+        output=output,
+    )
     _pr(r, "dNBR")
 
 
 @index.command("tct")
-@click.option("--blue",  required=True, type=click.Path(exists=True))
+@click.option("--blue", required=True, type=click.Path(exists=True))
 @click.option("--green", required=True, type=click.Path(exists=True))
-@click.option("--red",   required=True, type=click.Path(exists=True))
-@click.option("--nir",   required=True, type=click.Path(exists=True))
+@click.option("--red", required=True, type=click.Path(exists=True))
+@click.option("--nir", required=True, type=click.Path(exists=True))
 @click.option("--swir1", required=True, type=click.Path(exists=True))
 @click.option("--swir2", required=True, type=click.Path(exists=True))
-@click.option("--sensor", default="sentinel2", type=click.Choice(["sentinel2","landsat8"]))
+@click.option("--sensor", default="sentinel2", type=click.Choice(["sentinel2", "landsat8"]))
 @click.option("--output", "-o", default=None)
 def tct_cmd(blue, green, red, nir, swir1, swir2, sensor, output):
     """Tasseled Cap Transformation — Brightness, Greenness, Wetness (3-band output)."""
     e = _engine()
-    r = e.indices.tct(blue=blue, green=green, red=red, nir=nir,
-                      swir1=swir1, swir2=swir2, sensor=sensor, output=output)
+    r = e.indices.tct(
+        blue=blue,
+        green=green,
+        red=red,
+        nir=nir,
+        swir1=swir1,
+        swir2=swir2,
+        sensor=sensor,
+        output=output,
+    )
     _pr(r, "TCT")
 
 
@@ -152,7 +194,8 @@ def tct_cmd(blue, green, red, nir, swir1, swir2, sensor, output):
 def pca_cmd(inputs, components, output):
     """PCA — Principal Component Analysis. Reduces dimensionality of multi-band data."""
     if not inputs:
-        console.print("[red]Provide at least 2 input band rasters[/]"); sys.exit(1)
+        console.print("[red]Provide at least 2 input band rasters[/]")
+        sys.exit(1)
     e = _engine()
     r = e.indices.pca(inputs=list(inputs), n_components=components, output=output)
     _pr(r, f"PCA ({components} components)")
@@ -161,8 +204,11 @@ def pca_cmd(inputs, components, output):
 @index.command("texture")
 @click.argument("input", type=click.Path(exists=True))
 @click.option("--window", "-w", default=5, show_default=True, type=int)
-@click.option("--features", default="contrast,homogeneity,energy,correlation",
-              help="Comma-separated GLCM features.")
+@click.option(
+    "--features",
+    default="contrast,homogeneity,energy,correlation",
+    help="Comma-separated GLCM features.",
+)
 @click.option("--output", "-o", default=None)
 def texture_cmd(input, window, features, output):
     """GLCM Texture — contrast, homogeneity, energy, correlation, dissimilarity, ASM."""
@@ -175,8 +221,7 @@ def texture_cmd(input, window, features, output):
 @index.command("lst")
 @click.argument("thermal", type=click.Path(exists=True))
 @click.option("--emissivity", "-e", default=0.97, show_default=True, type=float)
-@click.option("--sensor", default="landsat8",
-              type=click.Choice(["landsat8","landsat9","modis"]))
+@click.option("--sensor", default="landsat8", type=click.Choice(["landsat8", "landsat9", "modis"]))
 @click.option("--output", "-o", default=None)
 def lst_cmd(thermal, emissivity, sensor, output):
     """Land Surface Temperature from thermal band. Output: Band1=Kelvin, Band2=Celsius."""
@@ -187,12 +232,13 @@ def lst_cmd(thermal, emissivity, sensor, output):
 
 @index.command("albedo")
 @click.argument("inputs", nargs=-1, type=click.Path(exists=True))
-@click.option("--sensor", default="sentinel2", type=click.Choice(["sentinel2","landsat8"]))
+@click.option("--sensor", default="sentinel2", type=click.Choice(["sentinel2", "landsat8"]))
 @click.option("--output", "-o", default=None)
 def albedo_cmd(inputs, sensor, output):
     """Surface albedo from narrowband to broadband conversion (Liang 2001)."""
     if len(inputs) < 4:
-        console.print("[red]Provide at least 4 band rasters[/]"); sys.exit(1)
+        console.print("[red]Provide at least 4 band rasters[/]")
+        sys.exit(1)
     e = _engine()
     r = e.indices.albedo(inputs=list(inputs), sensor=sensor, output=output)
     _pr(r, f"Albedo ({sensor})")

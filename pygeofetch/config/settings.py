@@ -19,10 +19,9 @@ Example::
 
 from __future__ import annotations
 
-import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import yaml
 from pydantic import BaseModel, Field
@@ -63,26 +62,26 @@ class CacheSettings(BaseModel):
     directory: Path = Path("~/.pygeofetch/cache").expanduser()
     max_size_gb: float = 5.0
     ttl_seconds: int = 86400
-    provider_ttl: Dict[str, int] = Field(default_factory=dict)
+    provider_ttl: dict[str, int] = Field(default_factory=dict)
 
 
 class ProviderConfig(BaseModel):
     """Per-provider configuration."""
 
     base_url: str = ""
-    auth_url: Optional[str] = None
+    auth_url: str | None = None
     timeout: int = 60
-    rate_limit_per_minute: Optional[int] = None
-    region: Optional[str] = None
-    extra: Dict[str, Any] = Field(default_factory=dict)
+    rate_limit_per_minute: int | None = None
+    region: str | None = None
+    extra: dict[str, Any] = Field(default_factory=dict)
 
 
 class ProxySettings(BaseModel):
     """HTTP proxy configuration."""
 
-    http: Optional[str] = None
-    https: Optional[str] = None
-    no_proxy: List[str] = Field(default_factory=list)
+    http: str | None = None
+    https: str | None = None
+    no_proxy: list[str] = Field(default_factory=list)
 
 
 class SecuritySettings(BaseModel):
@@ -96,18 +95,18 @@ class SecuritySettings(BaseModel):
 class NotificationSettings(BaseModel):
     """Notification configuration."""
 
-    webhook: Optional[str] = None
-    email: Optional[str] = None
-    slack: Optional[str] = None
+    webhook: str | None = None
+    email: str | None = None
+    slack: str | None = None
 
 
 class GeneralSettings(BaseModel):
     """General application settings."""
 
     output_dir: Path = Path("./satellite_data")
-    temp_dir: Optional[Path] = None
+    temp_dir: Path | None = None
     log_level: str = "INFO"
-    log_file: Optional[Path] = None
+    log_file: Path | None = None
 
 
 class Settings(BaseSettings):
@@ -137,24 +136,24 @@ class Settings(BaseSettings):
     security: SecuritySettings = Field(default_factory=SecuritySettings)
     proxy: ProxySettings = Field(default_factory=ProxySettings)
     notifications: NotificationSettings = Field(default_factory=NotificationSettings)
-    providers: Dict[str, ProviderConfig] = Field(default_factory=dict)
+    providers: dict[str, ProviderConfig] = Field(default_factory=dict)
 
     @classmethod
-    def from_yaml(cls, path: Path) -> "Settings":
+    def from_yaml(cls, path: Path) -> Settings:
         """Load settings from a YAML file."""
         with open(path) as f:
             data = yaml.safe_load(f) or {}
         return cls(**data)
 
 
-def _load_defaults() -> Dict[str, Any]:
+def _load_defaults() -> dict[str, Any]:
     """Load the bundled defaults.yaml."""
     defaults_path = Path(__file__).parent / "defaults.yaml"
     with open(defaults_path) as f:
         return yaml.safe_load(f) or {}
 
 
-def _load_user_config() -> Dict[str, Any]:
+def _load_user_config() -> dict[str, Any]:
     """Load user config from ~/.pygeofetch/config.yaml if it exists."""
     config_path = Path.home() / ".pygeofetch" / "config.yaml"
     if config_path.exists():
@@ -163,7 +162,7 @@ def _load_user_config() -> Dict[str, Any]:
     return {}
 
 
-def _load_project_config() -> Dict[str, Any]:
+def _load_project_config() -> dict[str, Any]:
     """Load project config from .pygeofetch.yaml in CWD if it exists."""
     project_path = Path.cwd() / ".pygeofetch.yaml"
     if project_path.exists():
@@ -172,7 +171,7 @@ def _load_project_config() -> Dict[str, Any]:
     return {}
 
 
-def _deep_merge(base: Dict, override: Dict) -> Dict:
+def _deep_merge(base: dict, override: dict) -> dict:
     """Recursively merge override into base, returning a new dict."""
     result = dict(base)
     for key, value in override.items():
@@ -212,7 +211,7 @@ def get_config_dir() -> Path:
     return config_dir
 
 
-def save_user_config(updates: Dict[str, Any]) -> Path:
+def save_user_config(updates: dict[str, Any]) -> Path:
     """
     Merge updates into the user config file and save.
 
@@ -224,7 +223,7 @@ def save_user_config(updates: Dict[str, Any]) -> Path:
     """
     config_dir = get_config_dir()
     config_path = config_dir / "config.yaml"
-    existing: Dict[str, Any] = {}
+    existing: dict[str, Any] = {}
     if config_path.exists():
         with open(config_path) as f:
             existing = yaml.safe_load(f) or {}

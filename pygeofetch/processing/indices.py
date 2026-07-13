@@ -2,17 +2,20 @@
 SpectralIndices — 17 spectral indices and band transformations.
 All methods return a ProcessingResult with the computed raster path.
 """
+
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import List, Optional, Union
 
 from pygeofetch.processing.base import (
     ProcessingResult,
-    _require_rasterio, _require_numpy, _require_scipy,
-    _resolve_output, _timed,
-    _safe_read_band, _safe_write_band,
+    _require_numpy,
+    _require_scipy,
+    _resolve_output,
+    _safe_read_band,
+    _safe_write_band,
+    _timed,
 )
 
 logger = logging.getLogger(__name__)
@@ -39,7 +42,7 @@ class SpectralIndices:
     # ── internal helpers ──────────────────────────────────────────────────
 
     @staticmethod
-    def _read(path: Union[str, Path], ref_shape=None):
+    def _read(path: str | Path, ref_shape=None):
         """
         Read band 1 of a raster robustly.
         Uses block-by-block fallback for tiled/COG/compressed GeoTIFFs.
@@ -64,9 +67,9 @@ class SpectralIndices:
     @_timed
     def ndvi(
         self,
-        red: Union[str, Path],
-        nir: Union[str, Path],
-        output: Optional[str] = None,
+        red: str | Path,
+        nir: str | Path,
+        output: str | None = None,
     ) -> ProcessingResult:
         """
         NDVI — Normalized Difference Vegetation Index.
@@ -74,24 +77,28 @@ class SpectralIndices:
         Values > 0.3 indicate healthy vegetation.
         """
         red_d, profile, _ = self._read(red)
-        nir_d, _, _       = self._read(nir, ref_shape=red_d.shape)
-        result   = self._norm_diff(nir_d, red_d)
+        nir_d, _, _ = self._read(nir, ref_shape=red_d.shape)
+        result = self._norm_diff(nir_d, red_d)
         out_path = _resolve_output(Path(red), output, "ndvi")
         self._save(result, profile, out_path)
         logger.info("NDVI → %s", out_path.name)
-        return ProcessingResult(success=True, operation="ndvi",
-                                output_path=out_path, input_path=Path(red))
+        return ProcessingResult(
+            success=True, operation="ndvi", output_path=out_path, input_path=Path(red)
+        )
 
     # ── E2: EVI ──────────────────────────────────────────────────────────
 
     @_timed
     def evi(
         self,
-        blue: Union[str, Path],
-        red:  Union[str, Path],
-        nir:  Union[str, Path],
-        G: float = 2.5, C1: float = 6.0, C2: float = 7.5, L: float = 1.0,
-        output: Optional[str] = None,
+        blue: str | Path,
+        red: str | Path,
+        nir: str | Path,
+        G: float = 2.5,
+        C1: float = 6.0,
+        C2: float = 7.5,
+        L: float = 1.0,
+        output: str | None = None,
     ) -> ProcessingResult:
         """
         EVI — Enhanced Vegetation Index.
@@ -100,26 +107,27 @@ class SpectralIndices:
         """
         np = _require_numpy()
         blue_d, profile, _ = self._read(blue)
-        red_d,  _, _       = self._read(red,  ref_shape=blue_d.shape)
-        nir_d,  _, _       = self._read(nir,  ref_shape=blue_d.shape)
+        red_d, _, _ = self._read(red, ref_shape=blue_d.shape)
+        nir_d, _, _ = self._read(nir, ref_shape=blue_d.shape)
         denom = nir_d + C1 * red_d - C2 * blue_d + L
         with np.errstate(divide="ignore", invalid="ignore"):
             result = np.where(denom != 0, G * (nir_d - red_d) / denom, float("nan"))
         out_path = _resolve_output(Path(red), output, "evi")
         self._save(result, profile, out_path)
         logger.info("EVI → %s", out_path.name)
-        return ProcessingResult(success=True, operation="evi",
-                                output_path=out_path, input_path=Path(red))
+        return ProcessingResult(
+            success=True, operation="evi", output_path=out_path, input_path=Path(red)
+        )
 
     # ── E3: SAVI ─────────────────────────────────────────────────────────
 
     @_timed
     def savi(
         self,
-        red: Union[str, Path],
-        nir: Union[str, Path],
+        red: str | Path,
+        nir: str | Path,
         L: float = 0.5,
-        output: Optional[str] = None,
+        output: str | None = None,
     ) -> ProcessingResult:
         """
         SAVI — Soil Adjusted Vegetation Index.
@@ -128,44 +136,46 @@ class SpectralIndices:
         """
         np = _require_numpy()
         red_d, profile, _ = self._read(red)
-        nir_d, _, _       = self._read(nir, ref_shape=red_d.shape)
+        nir_d, _, _ = self._read(nir, ref_shape=red_d.shape)
         denom = nir_d + red_d + L
         with np.errstate(divide="ignore", invalid="ignore"):
             result = np.where(denom != 0, (nir_d - red_d) / denom * (1 + L), float("nan"))
         out_path = _resolve_output(Path(red), output, "savi")
         self._save(result, profile, out_path)
-        return ProcessingResult(success=True, operation="savi",
-                                output_path=out_path, input_path=Path(red))
+        return ProcessingResult(
+            success=True, operation="savi", output_path=out_path, input_path=Path(red)
+        )
 
     # ── E4: NDWI ─────────────────────────────────────────────────────────
 
     @_timed
     def ndwi(
         self,
-        green: Union[str, Path],
-        nir:   Union[str, Path],
-        output: Optional[str] = None,
+        green: str | Path,
+        nir: str | Path,
+        output: str | None = None,
     ) -> ProcessingResult:
         """
         NDWI — Normalized Difference Water Index (McFeeters 1996).
         Formula: (Green - NIR) / (Green + NIR).  Water > 0, land < 0.
         """
         green_d, profile, _ = self._read(green)
-        nir_d,   _, _       = self._read(nir, ref_shape=green_d.shape)
-        result   = self._norm_diff(green_d, nir_d)
+        nir_d, _, _ = self._read(nir, ref_shape=green_d.shape)
+        result = self._norm_diff(green_d, nir_d)
         out_path = _resolve_output(Path(green), output, "ndwi")
         self._save(result, profile, out_path)
-        return ProcessingResult(success=True, operation="ndwi",
-                                output_path=out_path, input_path=Path(green))
+        return ProcessingResult(
+            success=True, operation="ndwi", output_path=out_path, input_path=Path(green)
+        )
 
     # ── E5: MNDWI ────────────────────────────────────────────────────────
 
     @_timed
     def mndwi(
         self,
-        green: Union[str, Path],
-        swir1: Union[str, Path],
-        output: Optional[str] = None,
+        green: str | Path,
+        swir1: str | Path,
+        output: str | None = None,
     ) -> ProcessingResult:
         """
         MNDWI — Modified NDWI (Xu 2006).
@@ -173,139 +183,145 @@ class SpectralIndices:
         Better separation of water from built-up areas than NDWI.
         """
         green_d, profile, _ = self._read(green)
-        swir_d,  _, _       = self._read(swir1, ref_shape=green_d.shape)
-        result   = self._norm_diff(green_d, swir_d)
+        swir_d, _, _ = self._read(swir1, ref_shape=green_d.shape)
+        result = self._norm_diff(green_d, swir_d)
         out_path = _resolve_output(Path(green), output, "mndwi")
         self._save(result, profile, out_path)
-        return ProcessingResult(success=True, operation="mndwi",
-                                output_path=out_path, input_path=Path(green))
+        return ProcessingResult(
+            success=True, operation="mndwi", output_path=out_path, input_path=Path(green)
+        )
 
     # ── E6: NDBI ─────────────────────────────────────────────────────────
 
     @_timed
     def ndbi(
         self,
-        nir:   Union[str, Path],
-        swir1: Union[str, Path],
-        output: Optional[str] = None,
+        nir: str | Path,
+        swir1: str | Path,
+        output: str | None = None,
     ) -> ProcessingResult:
         """
         NDBI — Normalized Difference Built-up Index (Zha 2003).
         Formula: (SWIR1 - NIR) / (SWIR1 + NIR).  Urban > 0, vegetation < 0.
         """
         swir_d, profile, _ = self._read(swir1)
-        nir_d,  _, _       = self._read(nir, ref_shape=swir_d.shape)
-        result   = self._norm_diff(swir_d, nir_d)
+        nir_d, _, _ = self._read(nir, ref_shape=swir_d.shape)
+        result = self._norm_diff(swir_d, nir_d)
         out_path = _resolve_output(Path(nir), output, "ndbi")
         self._save(result, profile, out_path)
-        return ProcessingResult(success=True, operation="ndbi",
-                                output_path=out_path, input_path=Path(nir))
+        return ProcessingResult(
+            success=True, operation="ndbi", output_path=out_path, input_path=Path(nir)
+        )
 
     # ── E7: NDSI ─────────────────────────────────────────────────────────
 
     @_timed
     def ndsi(
         self,
-        green: Union[str, Path],
-        swir1: Union[str, Path],
-        output: Optional[str] = None,
+        green: str | Path,
+        swir1: str | Path,
+        output: str | None = None,
     ) -> ProcessingResult:
         """
         NDSI — Normalized Difference Snow Index (Hall 1995).
         Formula: (Green - SWIR1) / (Green + SWIR1).  Snow > 0.4.
         """
         green_d, profile, _ = self._read(green)
-        swir_d,  _, _       = self._read(swir1, ref_shape=green_d.shape)
-        result   = self._norm_diff(green_d, swir_d)
+        swir_d, _, _ = self._read(swir1, ref_shape=green_d.shape)
+        result = self._norm_diff(green_d, swir_d)
         out_path = _resolve_output(Path(green), output, "ndsi")
         self._save(result, profile, out_path)
-        return ProcessingResult(success=True, operation="ndsi",
-                                output_path=out_path, input_path=Path(green))
+        return ProcessingResult(
+            success=True, operation="ndsi", output_path=out_path, input_path=Path(green)
+        )
 
     # ── E8: NDMI ─────────────────────────────────────────────────────────
 
     @_timed
     def ndmi(
         self,
-        nir:   Union[str, Path],
-        swir1: Union[str, Path],
-        output: Optional[str] = None,
+        nir: str | Path,
+        swir1: str | Path,
+        output: str | None = None,
     ) -> ProcessingResult:
         """
         NDMI — Normalized Difference Moisture Index (Wilson & Sader 2002).
         Formula: (NIR - SWIR1) / (NIR + SWIR1).
         Sensitive to canopy water content; positive = moist vegetation.
         """
-        nir_d,  profile, _ = self._read(nir)
-        swir_d, _, _       = self._read(swir1, ref_shape=nir_d.shape)
-        result   = self._norm_diff(nir_d, swir_d)
+        nir_d, profile, _ = self._read(nir)
+        swir_d, _, _ = self._read(swir1, ref_shape=nir_d.shape)
+        result = self._norm_diff(nir_d, swir_d)
         out_path = _resolve_output(Path(nir), output, "ndmi")
         self._save(result, profile, out_path)
-        return ProcessingResult(success=True, operation="ndmi",
-                                output_path=out_path, input_path=Path(nir))
+        return ProcessingResult(
+            success=True, operation="ndmi", output_path=out_path, input_path=Path(nir)
+        )
 
     # ── E9: NBR ──────────────────────────────────────────────────────────
 
     @_timed
     def nbr(
         self,
-        nir:   Union[str, Path],
-        swir2: Union[str, Path],
-        output: Optional[str] = None,
+        nir: str | Path,
+        swir2: str | Path,
+        output: str | None = None,
     ) -> ProcessingResult:
         """
         NBR — Normalized Burn Ratio.
         Formula: (NIR - SWIR2) / (NIR + SWIR2).
         Use dNBR = pre_NBR - post_NBR for burn severity mapping.
         """
-        nir_d,   profile, _ = self._read(nir)
-        swir2_d, _, _       = self._read(swir2, ref_shape=nir_d.shape)
-        result   = self._norm_diff(nir_d, swir2_d)
+        nir_d, profile, _ = self._read(nir)
+        swir2_d, _, _ = self._read(swir2, ref_shape=nir_d.shape)
+        result = self._norm_diff(nir_d, swir2_d)
         out_path = _resolve_output(Path(nir), output, "nbr")
         self._save(result, profile, out_path)
-        return ProcessingResult(success=True, operation="nbr",
-                                output_path=out_path, input_path=Path(nir))
+        return ProcessingResult(
+            success=True, operation="nbr", output_path=out_path, input_path=Path(nir)
+        )
 
     # ── E10: dNBR ────────────────────────────────────────────────────────
 
     @_timed
     def dnbr(
         self,
-        pre_nir:    Union[str, Path],
-        pre_swir2:  Union[str, Path],
-        post_nir:   Union[str, Path],
-        post_swir2: Union[str, Path],
-        output: Optional[str] = None,
+        pre_nir: str | Path,
+        pre_swir2: str | Path,
+        post_nir: str | Path,
+        post_swir2: str | Path,
+        output: str | None = None,
     ) -> ProcessingResult:
         """
         dNBR — differenced Normalized Burn Ratio (burn severity).
         Formula: NBR_pre - NBR_post.
         Range: < -0.25 = regrowth; > 0.66 = high severity fire.
         """
-        pre_nir_d,   profile, _ = self._read(pre_nir)
-        pre_swir_d,  _, _       = self._read(pre_swir2,  ref_shape=pre_nir_d.shape)
-        post_nir_d,  _, _       = self._read(post_nir,   ref_shape=pre_nir_d.shape)
-        post_swir_d, _, _       = self._read(post_swir2, ref_shape=pre_nir_d.shape)
-        nbr_pre  = self._norm_diff(pre_nir_d,  pre_swir_d)
+        pre_nir_d, profile, _ = self._read(pre_nir)
+        pre_swir_d, _, _ = self._read(pre_swir2, ref_shape=pre_nir_d.shape)
+        post_nir_d, _, _ = self._read(post_nir, ref_shape=pre_nir_d.shape)
+        post_swir_d, _, _ = self._read(post_swir2, ref_shape=pre_nir_d.shape)
+        nbr_pre = self._norm_diff(pre_nir_d, pre_swir_d)
         nbr_post = self._norm_diff(post_nir_d, post_swir_d)
-        result   = nbr_pre - nbr_post
+        result = nbr_pre - nbr_post
         out_path = _resolve_output(Path(pre_nir), output, "dnbr")
         self._save(result, profile, out_path)
-        return ProcessingResult(success=True, operation="dnbr",
-                                output_path=out_path, input_path=Path(pre_nir))
+        return ProcessingResult(
+            success=True, operation="dnbr", output_path=out_path, input_path=Path(pre_nir)
+        )
 
     # ── E11: TCT — Tasseled Cap Transformation ────────────────────────────
 
     @_timed
     def tct(
         self,
-        blue:  Union[str, Path],
-        green: Union[str, Path],
-        red:   Union[str, Path],
-        nir:   Union[str, Path],
-        swir1: Union[str, Path],
-        swir2: Union[str, Path],
-        output: Optional[str] = None,
+        blue: str | Path,
+        green: str | Path,
+        red: str | Path,
+        nir: str | Path,
+        swir1: str | Path,
+        swir2: str | Path,
+        output: str | None = None,
         sensor: str = "sentinel2",
     ) -> ProcessingResult:
         """
@@ -326,30 +342,35 @@ class SpectralIndices:
             d, _, _ = self._read(bp, ref_shape=ref_shape)
             bands.append(d)
 
-        B = np.stack(bands, axis=0)   # (6, H, W)
+        B = np.stack(bands, axis=0)  # (6, H, W)
 
         if sensor == "sentinel2":
             # Nedkov (2017)
-            coefs = np.array([
-                [ 0.3510,  0.3813,  0.3437,  0.7196,  0.2396,  0.1949],
-                [-0.3599, -0.3533, -0.4734,  0.6633,  0.0087, -0.2856],
-                [ 0.2578,  0.2305,  0.0883,  0.1071, -0.7611, -0.5308],
-            ])
+            coefs = np.array(
+                [
+                    [0.3510, 0.3813, 0.3437, 0.7196, 0.2396, 0.1949],
+                    [-0.3599, -0.3533, -0.4734, 0.6633, 0.0087, -0.2856],
+                    [0.2578, 0.2305, 0.0883, 0.1071, -0.7611, -0.5308],
+                ]
+            )
         else:  # landsat8 — Baig et al. (2014)
-            coefs = np.array([
-                [ 0.3029,  0.2786,  0.4733,  0.5599,  0.5080,  0.1872],
-                [-0.2941, -0.2430, -0.5424,  0.7276,  0.0713, -0.1608],
-                [ 0.1511,  0.1973,  0.3283,  0.3407, -0.7117, -0.4559],
-            ])
+            coefs = np.array(
+                [
+                    [0.3029, 0.2786, 0.4733, 0.5599, 0.5080, 0.1872],
+                    [-0.2941, -0.2430, -0.5424, 0.7276, 0.0713, -0.1608],
+                    [0.1511, 0.1973, 0.3283, 0.3407, -0.7117, -0.4559],
+                ]
+            )
 
-        tct_data = np.tensordot(coefs, B, axes=([1], [0]))   # (3, H, W)
+        tct_data = np.tensordot(coefs, B, axes=([1], [0]))  # (3, H, W)
         out_path = _resolve_output(Path(red), output, "tct")
         _safe_write_band(tct_data, profile, out_path)
         logger.info("TCT (Brightness, Greenness, Wetness) → %s", out_path.name)
         return ProcessingResult(
-            success=True, operation="tct", output_path=out_path,
-            metadata={"sensor": sensor,
-                      "bands": ["Brightness", "Greenness", "Wetness"]},
+            success=True,
+            operation="tct",
+            output_path=out_path,
+            metadata={"sensor": sensor, "bands": ["Brightness", "Greenness", "Wetness"]},
         )
 
     # ── E12: PCA ─────────────────────────────────────────────────────────
@@ -357,9 +378,9 @@ class SpectralIndices:
     @_timed
     def pca(
         self,
-        inputs: List[Union[str, Path]],
+        inputs: list[str | Path],
         n_components: int = 3,
-        output: Optional[str] = None,
+        output: str | None = None,
     ) -> ProcessingResult:
         """
         Principal Component Analysis — dimensionality reduction.
@@ -383,12 +404,12 @@ class SpectralIndices:
                 ref_shape = d.shape
             bands.append(d.ravel())
 
-        X = np.stack(bands, axis=0).T        # (pixels, n_bands)
+        X = np.stack(bands, axis=0).T  # (pixels, n_bands)
         valid = np.all(np.isfinite(X), axis=1)
-        X_v   = X[valid]
+        X_v = X[valid]
 
-        mean  = X_v.mean(axis=0)
-        std   = X_v.std(axis=0) + 1e-10
+        mean = X_v.mean(axis=0)
+        std = X_v.std(axis=0) + 1e-10
         X_std = (X_v - mean) / std
 
         cov = np.cov(X_std.T)
@@ -405,11 +426,18 @@ class SpectralIndices:
         pcs[:, valid] = (X_std @ W).T
         pcs = pcs.reshape(n_components, h, w)
 
+        if profile is None:
+            msg = "No valid input bands provided to pca()"
+            raise ValueError(msg)
+        if profile is None:
+            raise ValueError("No valid input bands provided")
         out_path = _resolve_output(Path(inputs[0]), output, f"pca_{n_components}comp")
         _safe_write_band(pcs, profile, out_path)
         logger.info("PCA %d components → %s", n_components, out_path.name)
         return ProcessingResult(
-            success=True, operation="pca", output_path=out_path,
+            success=True,
+            operation="pca",
+            output_path=out_path,
             metadata={
                 "n_components": n_components,
                 "explained_variance_pct": [round(float(e), 2) for e in explained],
@@ -421,10 +449,10 @@ class SpectralIndices:
     @_timed
     def texture(
         self,
-        input: Union[str, Path],
+        input: str | Path,
         window: int = 5,
-        features: Optional[List[str]] = None,
-        output: Optional[str] = None,
+        features: list[str] | None = None,
+        output: str | None = None,
     ) -> ProcessingResult:
         """
         GLCM Texture Features — contrast, homogeneity, energy, correlation.
@@ -438,25 +466,31 @@ class SpectralIndices:
                       "energy","correlation","ASM"]``. Default: all 6.
             output:   Output multi-band path (one band per feature).
         """
-        np     = _require_numpy()
+        np = _require_numpy()
         ndimage = _require_scipy()
 
-        features = features or ["contrast", "dissimilarity", "homogeneity",
-                                "energy", "correlation", "ASM"]
+        features = features or [
+            "contrast",
+            "dissimilarity",
+            "homogeneity",
+            "energy",
+            "correlation",
+            "ASM",
+        ]
 
         inp = Path(input)
         data, profile, _ = self._read(inp)
 
         # Quantise to 64 grey levels for tractable GLCM size
         valid = np.isfinite(data)
-        q     = np.zeros_like(data, dtype=np.int32)
+        q = np.zeros_like(data, dtype=np.int32)
         if valid.any():
             d_min, d_max = data[valid].min(), data[valid].max()
             q[valid] = ((data[valid] - d_min) / (d_max - d_min + 1e-10) * 63).astype(np.int32)
 
-        n_feats   = len(features)
-        h, w      = data.shape
-        out_maps  = np.zeros((n_feats, h, w), dtype=np.float32)
+        n_feats = len(features)
+        h, w = data.shape
+        out_maps = np.zeros((n_feats, h, w), dtype=np.float32)
 
         # Compute GLCM-derived features efficiently with scipy uniform filters
         # This avoids the O(H*W*window²) pure-Python loop
@@ -466,48 +500,52 @@ class SpectralIndices:
             if feat == "contrast":
                 # Var of difference: E[(i-j)²] ≈ var of pixel - pixel+shift
                 shifted = np.roll(qf, 1, axis=1)
-                diff    = (qf - shifted) ** 2
-                out_maps[fi] = ndimage.uniform_filter(diff.astype(np.float64),
-                                                       size=window).astype(np.float32)
+                diff = (qf - shifted) ** 2
+                out_maps[fi] = ndimage.uniform_filter(diff.astype(np.float64), size=window).astype(
+                    np.float32
+                )
 
             elif feat == "dissimilarity":
                 shifted = np.roll(qf, 1, axis=1)
-                diff    = np.abs(qf - shifted)
-                out_maps[fi] = ndimage.uniform_filter(diff.astype(np.float64),
-                                                       size=window).astype(np.float32)
+                diff = np.abs(qf - shifted)
+                out_maps[fi] = ndimage.uniform_filter(diff.astype(np.float64), size=window).astype(
+                    np.float32
+                )
 
             elif feat == "homogeneity":
-                shifted  = np.roll(qf, 1, axis=1)
-                diff_sq  = (qf - shifted) ** 2
-                homo     = 1.0 / (1.0 + diff_sq)
-                out_maps[fi] = ndimage.uniform_filter(homo.astype(np.float64),
-                                                       size=window).astype(np.float32)
+                shifted = np.roll(qf, 1, axis=1)
+                diff_sq = (qf - shifted) ** 2
+                homo = 1.0 / (1.0 + diff_sq)
+                out_maps[fi] = ndimage.uniform_filter(homo.astype(np.float64), size=window).astype(
+                    np.float32
+                )
 
             elif feat in ("energy", "ASM"):
                 # Local ASM ≈ 1/std² of local patch
-                local_mean  = ndimage.uniform_filter(qf.astype(np.float64), size=window)
-                local_mean2 = ndimage.uniform_filter((qf ** 2).astype(np.float64), size=window)
-                local_var   = np.maximum(local_mean2 - local_mean ** 2, 0)
-                asm         = 1.0 / (1.0 + local_var)
+                local_mean = ndimage.uniform_filter(qf.astype(np.float64), size=window)
+                local_mean2 = ndimage.uniform_filter((qf**2).astype(np.float64), size=window)
+                local_var = np.maximum(local_mean2 - local_mean**2, 0)
+                asm = 1.0 / (1.0 + local_var)
                 out_maps[fi] = (np.sqrt(asm) if feat == "energy" else asm).astype(np.float32)
 
             elif feat == "correlation":
-                local_mean  = ndimage.uniform_filter(qf.astype(np.float64), size=window)
-                local_mean2 = ndimage.uniform_filter((qf ** 2).astype(np.float64), size=window)
-                local_var   = np.maximum(local_mean2 - local_mean ** 2, 1e-10)
-                shifted      = np.roll(qf, 1, axis=1)
-                cross_mean   = ndimage.uniform_filter((qf * shifted).astype(np.float64),
-                                                       size=window)
-                cov_xy  = cross_mean - local_mean * local_mean
-                corr    = np.clip(cov_xy / local_var, -1, 1)
+                local_mean = ndimage.uniform_filter(qf.astype(np.float64), size=window)
+                local_mean2 = ndimage.uniform_filter((qf**2).astype(np.float64), size=window)
+                local_var = np.maximum(local_mean2 - local_mean**2, 1e-10)
+                shifted = np.roll(qf, 1, axis=1)
+                cross_mean = ndimage.uniform_filter((qf * shifted).astype(np.float64), size=window)
+                cov_xy = cross_mean - local_mean * local_mean
+                corr = np.clip(cov_xy / local_var, -1, 1)
                 out_maps[fi] = corr.astype(np.float32)
 
         out_path = _resolve_output(inp, output, "texture")
         _safe_write_band(out_maps, profile, out_path)
         logger.info("GLCM texture (%s) → %s", features, out_path.name)
         return ProcessingResult(
-            success=True, operation="texture",
-            input_path=inp, output_path=out_path,
+            success=True,
+            operation="texture",
+            input_path=inp,
+            output_path=out_path,
             metadata={"features": features, "window": window},
         )
 
@@ -516,9 +554,9 @@ class SpectralIndices:
     @_timed
     def lst(
         self,
-        thermal: Union[str, Path],
+        thermal: str | Path,
         emissivity: float = 0.97,
-        output: Optional[str] = None,
+        output: str | None = None,
         sensor: str = "landsat8",
     ) -> ProcessingResult:
         """
@@ -538,8 +576,8 @@ class SpectralIndices:
         thermal_d, profile, _ = self._read(inp)
 
         if sensor in ("landsat8", "landsat9"):
-            K1, K2 = 774.8853, 1321.0789   # Band 10 thermal constants
-            ML, AL = 3.3420e-4, 0.1         # Radiance rescaling
+            K1, K2 = 774.8853, 1321.0789  # Band 10 thermal constants
+            ML, AL = 3.3420e-4, 0.1  # Radiance rescaling
         elif sensor == "modis":
             K1, K2 = 607.76, 1260.56
             ML, AL = 1.0, 0.0
@@ -552,21 +590,26 @@ class SpectralIndices:
             T_bright = K2 / np.log(K1 / (radiance + 1e-10) + 1)
 
         # Emissivity correction
-        rho      = 1.438e-2    # m·K
-        lambda_t = 10.8e-6    # effective wavelength (m)
+        rho = 1.438e-2  # m·K
+        lambda_t = 10.8e-6  # effective wavelength (m)
         with np.errstate(divide="ignore", invalid="ignore"):
             lst_k = T_bright / (1 + (lambda_t * T_bright / rho) * np.log(emissivity))
         lst_c = lst_k - 273.15
 
-        result   = np.stack([lst_k, lst_c], axis=0)
+        result = np.stack([lst_k, lst_c], axis=0)
         out_path = _resolve_output(inp, output, "lst")
         _safe_write_band(result, profile, out_path)
         logger.info("LST (Band1=Kelvin, Band2=Celsius) → %s", out_path.name)
         return ProcessingResult(
-            success=True, operation="lst",
-            input_path=inp, output_path=out_path,
-            metadata={"emissivity": emissivity, "sensor": sensor,
-                      "bands": ["LST_Kelvin", "LST_Celsius"]},
+            success=True,
+            operation="lst",
+            input_path=inp,
+            output_path=out_path,
+            metadata={
+                "emissivity": emissivity,
+                "sensor": sensor,
+                "bands": ["LST_Kelvin", "LST_Celsius"],
+            },
         )
 
     # ── E15: Albedo ───────────────────────────────────────────────────────
@@ -574,8 +617,8 @@ class SpectralIndices:
     @_timed
     def albedo(
         self,
-        inputs: List[Union[str, Path]],
-        output: Optional[str] = None,
+        inputs: list[str | Path],
+        output: str | None = None,
         sensor: str = "sentinel2",
     ) -> ProcessingResult:
         """
@@ -591,10 +634,10 @@ class SpectralIndices:
         np = _require_numpy()
 
         if sensor == "sentinel2":
-            coefs     = [0.160, 0.291, 0.243, 0.116, 0.112, 0.081]
+            coefs = [0.160, 0.291, 0.243, 0.116, 0.112, 0.081]
             intercept = -0.0015
         else:  # landsat8
-            coefs     = [0.356, 0.130, 0.373, 0.085, 0.072, -0.0018]
+            coefs = [0.356, 0.130, 0.373, 0.085, 0.072, -0.0018]
             intercept = -0.0018
 
         albedo_sum, profile, ref_shape = None, None, None
@@ -602,17 +645,21 @@ class SpectralIndices:
             d, prof, _ = self._read(b_path, ref_shape=ref_shape)
             if albedo_sum is None:
                 albedo_sum = np.zeros_like(d)
-                profile    = prof
-                ref_shape  = d.shape
+                profile = prof
+                ref_shape = d.shape
             # Scale from reflectance (0-10000) to 0-1 if needed
-            d_scaled    = d / 10000.0 if np.nanmax(d) > 10 else d
+            d_scaled = d / 10000.0 if np.nanmax(d) > 10 else d
             albedo_sum += coef * d_scaled
 
-        albedo_sum  = np.clip(albedo_sum + intercept, 0, 1)
-        out_path    = _resolve_output(Path(inputs[0]), output, "albedo")
+        if albedo_sum is None:
+            raise ValueError("No bands in albedo()")
+        albedo_sum = np.clip(albedo_sum + intercept, 0, 1)
+        out_path = _resolve_output(Path(inputs[0]), output, "albedo")
         self._save(albedo_sum, profile, out_path)
         return ProcessingResult(
-            success=True, operation="albedo", output_path=out_path,
+            success=True,
+            operation="albedo",
+            output_path=out_path,
             metadata={"sensor": sensor},
         )
 
@@ -621,9 +668,9 @@ class SpectralIndices:
     @_timed
     def band_math(
         self,
-        inputs: List[Union[str, Path]],
+        inputs: list[str | Path],
         expression: str,
-        output: Optional[str] = None,
+        output: str | None = None,
     ) -> ProcessingResult:
         """
         Arbitrary band arithmetic via a Python expression.
@@ -638,15 +685,17 @@ class SpectralIndices:
         for p in inputs:
             d, prof, _ = self._read(p, ref_shape=ref_shape)
             if profile is None:
-                profile   = prof
+                profile = prof
                 ref_shape = d.shape
             B.append(d)
 
-        result   = eval(expression, {"B": B, "np": np})   # noqa: S307
+        result = eval(expression, {"B": B, "np": np})  # noqa: S307
         out_path = _resolve_output(Path(inputs[0]), output, "band_math")
         self._save(result, profile, out_path)
         return ProcessingResult(
-            success=True, operation="band_math", output_path=out_path,
+            success=True,
+            operation="band_math",
+            output_path=out_path,
             metadata={"expression": expression},
         )
 
@@ -655,8 +704,8 @@ class SpectralIndices:
     @_timed
     def stack(
         self,
-        inputs: List[Union[str, Path]],
-        output: Optional[str] = None,
+        inputs: list[str | Path],
+        output: str | None = None,
     ) -> ProcessingResult:
         """
         Stack multiple single-band rasters into a multi-band GeoTIFF.
@@ -671,15 +720,18 @@ class SpectralIndices:
         for p in inputs:
             d, prof, _ = self._read(p, ref_shape=ref_shape)
             if profile is None:
-                profile   = prof
+                profile = prof
                 ref_shape = d.shape
             bands.append(d)
 
-        stacked  = np.stack(bands, axis=0)
-        out_path = _resolve_output(Path(inputs[0]), output,
-                                   f"stack_{len(inputs)}bands")
+        stacked = np.stack(bands, axis=0)
+        if profile is None:
+            raise ValueError("No input bands to stack()")
+        out_path = _resolve_output(Path(inputs[0]), output, f"stack_{len(inputs)}bands")
         _safe_write_band(stacked, profile, out_path)
         return ProcessingResult(
-            success=True, operation="stack", output_path=out_path,
+            success=True,
+            operation="stack",
+            output_path=out_path,
             metadata={"n_bands": len(bands)},
         )

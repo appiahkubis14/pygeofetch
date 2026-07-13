@@ -24,15 +24,20 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 from pygeofetch.models.download_task import DownloadOptions, DownloadResult, DownloadStatus
 from pygeofetch.models.satellite_data import (
-    DataFormat, ProviderCapabilities, QuotaInfo, SatelliteData,
+    DataFormat,
+    ProviderCapabilities,
+    QuotaInfo,
+    SatelliteData,
 )
-from pygeofetch.models.search_query import SearchQuery
 from pygeofetch.models.user_auth import AuthSession, Credentials
 from pygeofetch.providers.base import AbstractBaseProvider, SearchError
+
+if TYPE_CHECKING:
+    from pygeofetch.models.search_query import SearchQuery
 
 
 class Element84Provider(AbstractBaseProvider):
@@ -59,7 +64,7 @@ class Element84Provider(AbstractBaseProvider):
     SATELLITES = ["Sentinel-2A", "Sentinel-2B", "Landsat-8", "Landsat-9", "Sentinel-1"]
     BASE_URL = "https://earth-search.aws.element84.com/v1"
 
-    COLLECTION_MAP: Dict[str, str] = {
+    COLLECTION_MAP: dict[str, str] = {
         "sentinel-2": "sentinel-2-l2a",
         "sentinel-2a": "sentinel-2-l2a",
         "sentinel-2b": "sentinel-2-l2a",
@@ -74,7 +79,9 @@ class Element84Provider(AbstractBaseProvider):
 
     def authenticate(self, credentials: Credentials) -> AuthSession:
         """No authentication required."""
-        session = AuthSession(provider=self.PROVIDER_ID)
+        session = AuthSession(provider=self.PROVIDER_ID,
+                access_token=None,
+            )
         self._session = session
         return session
 
@@ -85,7 +92,7 @@ class Element84Provider(AbstractBaseProvider):
         """Store an authenticated session for use in requests."""
         self._session = session
 
-    def search(self, query: SearchQuery) -> List[SatelliteData]:
+    def search(self, query: SearchQuery) -> list[SatelliteData]:
         """
         Search the Element 84 Earth Search STAC API.
 
@@ -122,9 +129,10 @@ class Element84Provider(AbstractBaseProvider):
             return results
 
         except Exception as exc:
-            raise SearchError(f"Element 84 search failed: {exc}") from exc
+            msg = f"Element 84 search failed: {exc}"
+            raise SearchError(msg) from exc
 
-    def _resolve_collections(self, query: SearchQuery) -> List[str]:
+    def _resolve_collections(self, query: SearchQuery) -> list[str]:
         if query.collections:
             return query.collections
         if not query.satellites:
@@ -178,12 +186,14 @@ class Element84Provider(AbstractBaseProvider):
                 continue
 
             try:
-                with httpx.stream("GET", asset.href, timeout=options.timeout_seconds,
-                                  follow_redirects=True) as resp:
+                with httpx.stream(
+                    "GET", asset.href, timeout=options.timeout_seconds, follow_redirects=True
+                ) as resp:
                     self._handle_http_error(resp)
                     with open(out_file, "wb") as f:
-                        for chunk in resp.iter_bytes(chunk_size=int(options.chunk_size_mb * 1024 * 1024)):
-                            f.write(chunk)
+                        f.writelines(
+                            resp.iter_bytes(chunk_size=int(options.chunk_size_mb * 1024 * 1024))
+                        )
                 output_paths.append(out_file)
                 total_bytes += out_file.stat().st_size
             except Exception as exc:
@@ -192,13 +202,19 @@ class Element84Provider(AbstractBaseProvider):
         duration = time.time() - start_time
         if not output_paths:
             return DownloadResult(
-                status=DownloadStatus.FAILED, data_id=data.id,
-                provider=self.PROVIDER_ID, error="No assets downloaded",
+                status=DownloadStatus.FAILED,
+                data_id=data.id,
+                provider=self.PROVIDER_ID,
+                error="No assets downloaded",
             )
         return DownloadResult(
-            status=DownloadStatus.COMPLETED, data_id=data.id, provider=self.PROVIDER_ID,
-            output_path=output_paths[0], output_paths=output_paths,
-            bytes_downloaded=total_bytes, duration_seconds=duration,
+            status=DownloadStatus.COMPLETED,
+            data_id=data.id,
+            provider=self.PROVIDER_ID,
+            output_path=output_paths[0],
+            output_paths=output_paths,
+            bytes_downloaded=total_bytes,
+            duration_seconds=duration,
         )
 
     def get_capabilities(self) -> ProviderCapabilities:
@@ -208,13 +224,19 @@ class Element84Provider(AbstractBaseProvider):
             description=self.DESCRIPTION,
             auth_type="none",
             satellites=["Sentinel-2", "Landsat-8", "Landsat-9", "Sentinel-1", "NAIP"],
-            search=True, download=True, streaming=True,
-            stac=True, supports_sar=True, supports_cql2=True,
-            supports_aoi_filter=True, supports_cloud_filter=True,
+            search=True,
+            download=True,
+            streaming=True,
+            stac=True,
+            supports_sar=True,
+            supports_cql2=True,
+            supports_aoi_filter=True,
+            supports_cloud_filter=True,
             supports_date_filter=True,
-            requires_auth=False, has_quota=False,
+            requires_auth=False,
             regions=["global"],
-            resolution_min_m=0.6, resolution_max_m=500.0,
+            resolution_min_m=0.6,
+            resolution_max_m=500.0,
             endpoint_url=self.BASE_URL,
             docs_url="https://earth-search.aws.element84.com/v1",
             supported_formats=[DataFormat.COG, DataFormat.GEOTIFF],
@@ -226,9 +248,10 @@ class Element84Provider(AbstractBaseProvider):
             extra_info={"note": "Free, no quota. All data served as COGs from AWS S3."},
         )
 
-    def list_collections(self) -> List[Dict[str, Any]]:
+    def list_collections(self) -> list[dict[str, Any]]:
         """List all available STAC collections."""
         import httpx
+
         resp = httpx.get(f"{self.BASE_URL}/collections", timeout=30)
         self._handle_http_error(resp)
         return resp.json().get("collections", [])

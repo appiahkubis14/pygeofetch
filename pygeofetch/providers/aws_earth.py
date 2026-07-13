@@ -31,21 +31,21 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 from pygeofetch.models.download_task import DownloadOptions, DownloadResult, DownloadStatus
 from pygeofetch.models.satellite_data import (
     DataFormat,
-    ProcessingLevel,
     ProviderCapabilities,
     QuotaInfo,
-    SatelliteAsset,
     SatelliteData,
     resolve_band_keys,
-    resolve_band_keys,)
-from pygeofetch.models.search_query import SearchQuery
+)
 from pygeofetch.models.user_auth import AuthSession, Credentials
 from pygeofetch.providers.base import AbstractBaseProvider, SearchError
+
+if TYPE_CHECKING:
+    from pygeofetch.models.search_query import SearchQuery
 
 
 class AWSEarthProvider(AbstractBaseProvider):
@@ -87,7 +87,9 @@ class AWSEarthProvider(AbstractBaseProvider):
 
     def authenticate(self, credentials: Credentials) -> AuthSession:
         """No authentication needed; return empty session."""
-        session = AuthSession(provider=self.PROVIDER_ID)
+        session = AuthSession(provider=self.PROVIDER_ID,
+                access_token=None,
+            )
         self._session = session
         return session
 
@@ -98,7 +100,7 @@ class AWSEarthProvider(AbstractBaseProvider):
         """Store an authenticated session for use in requests."""
         self._session = session
 
-    def search(self, query: SearchQuery) -> List[SatelliteData]:
+    def search(self, query: SearchQuery) -> list[SatelliteData]:
         """
         Search the Earth Search STAC API.
 
@@ -128,9 +130,10 @@ class AWSEarthProvider(AbstractBaseProvider):
             return [SatelliteData.from_stac_item(f, self.PROVIDER_ID) for f in features]
 
         except Exception as exc:
-            raise SearchError(f"AWS Earth search failed: {exc}") from exc
+            msg = f"AWS Earth search failed: {exc}"
+            raise SearchError(msg) from exc
 
-    def _resolve_collections(self, query: SearchQuery) -> List[str]:
+    def _resolve_collections(self, query: SearchQuery) -> list[str]:
         """Map satellite names to Earth Search collection IDs."""
         if query.collections:
             return query.collections
@@ -185,8 +188,8 @@ class AWSEarthProvider(AbstractBaseProvider):
 
         # Filter to requested bands using alias-aware resolver
         selected_bands = list(getattr(options, "bands", None) or [])
-        matched_keys   = resolve_band_keys(selected_bands, list(data_assets.keys()))
-        data_assets    = {k: v for k, v in data_assets.items() if k in matched_keys}
+        matched_keys = resolve_band_keys(selected_bands, list(data_assets.keys()))
+        data_assets = {k: v for k, v in data_assets.items() if k in matched_keys}
 
         for key, asset in data_assets.items():
             if not asset.href or not asset.href.startswith("http"):
@@ -209,10 +212,9 @@ class AWSEarthProvider(AbstractBaseProvider):
                 ) as resp:
                     self._handle_http_error(resp)
                     with open(output_file, "wb") as f:
-                        for chunk in resp.iter_bytes(
-                            chunk_size=int(options.chunk_size_mb * 1024 * 1024)
-                        ):
-                            f.write(chunk)
+                        f.writelines(
+                            resp.iter_bytes(chunk_size=int(options.chunk_size_mb * 1024 * 1024))
+                        )
                 output_paths.append(output_file)
                 total_bytes += output_file.stat().st_size
             except Exception as exc:
@@ -247,7 +249,6 @@ class AWSEarthProvider(AbstractBaseProvider):
             streaming=True,
             stac=True,
             requires_auth=False,
-            has_quota=False,
             supported_satellites=["Sentinel-2", "Landsat 8", "Landsat 9", "NAIP"],
             supported_formats=[DataFormat.COG, DataFormat.GEOTIFF],
             supports_cloud_filter=True,
@@ -264,7 +265,7 @@ class AWSEarthProvider(AbstractBaseProvider):
             },
         )
 
-    def list_collections(self) -> List[Dict[str, Any]]:
+    def list_collections(self) -> list[dict[str, Any]]:
         """
         List available STAC collections from Earth Search.
 
@@ -272,6 +273,7 @@ class AWSEarthProvider(AbstractBaseProvider):
             List of collection info dicts.
         """
         import httpx
+
         response = httpx.get(f"{self.BASE_URL}/collections", timeout=30)
         self._handle_http_error(response)
         return response.json().get("collections", [])

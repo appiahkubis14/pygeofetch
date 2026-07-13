@@ -25,8 +25,7 @@ from __future__ import annotations
 
 from datetime import datetime as DateTime
 from enum import Enum
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -85,16 +84,16 @@ class SatelliteAsset(BaseModel):
 
     key: str
     href: str
-    title: Optional[str] = None
-    media_type: Optional[str] = None
-    roles: List[str] = Field(default_factory=list)
-    size_bytes: Optional[int] = None
-    checksum_md5: Optional[str] = None
-    checksum_sha256: Optional[str] = None
-    extra_fields: Dict[str, Any] = Field(default_factory=dict)
+    title: str | None = None
+    media_type: str | None = None
+    roles: list[str] = Field(default_factory=list)
+    size_bytes: int | None = None
+    checksum_md5: str | None = None
+    checksum_sha256: str | None = None
+    extra_fields: dict[str, Any] = Field(default_factory=dict)
 
     @property
-    def size_mb(self) -> Optional[float]:
+    def size_mb(self) -> float | None:
         """Return size in megabytes."""
         return self.size_bytes / (1024 * 1024) if self.size_bytes else None
 
@@ -116,8 +115,16 @@ class SatelliteAsset(BaseModel):
             return False
 
         # Exclude by explicit non-data roles
-        NON_DATA_ROLES = {"thumbnail", "overview", "metadata", "tiles", "tilejson",
-                          "visual", "rendered_preview", "index"}
+        NON_DATA_ROLES = {
+            "thumbnail",
+            "overview",
+            "metadata",
+            "tiles",
+            "tilejson",
+            "visual",
+            "rendered_preview",
+            "index",
+        }
         if self.roles and NON_DATA_ROLES.issuperset(set(self.roles)):
             # All roles are non-data — skip
             return False
@@ -137,8 +144,15 @@ class SatelliteAsset(BaseModel):
             return False
 
         # Exclude by key name patterns that are never rasters
-        NON_DATA_KEY_PATTERNS = ("thumbnail", "preview", "tilejson", "rendered",
-                                 "visual", ".json", "readme")
+        NON_DATA_KEY_PATTERNS = (
+            "thumbnail",
+            "preview",
+            "tilejson",
+            "rendered",
+            "visual",
+            ".json",
+            "readme",
+        )
         key_lower = (self.key or "").lower()
         if any(p in key_lower for p in NON_DATA_KEY_PATTERNS):
             return False
@@ -149,8 +163,13 @@ class SatelliteAsset(BaseModel):
             return False
 
         # Accept: has "data" role, or has raster media type, or empty/unknown roles
-        RASTER_TYPES = ("image/tiff", "image/geotiff", "image/vnd.stac.geotiff",
-                        "application/x-tiff", "application/x-geotiff")
+        RASTER_TYPES = (
+            "image/tiff",
+            "image/geotiff",
+            "image/vnd.stac.geotiff",
+            "application/x-tiff",
+            "application/x-geotiff",
+        )
         if self.media_type and any(self.media_type.startswith(t) for t in RASTER_TYPES):
             return True
 
@@ -214,56 +233,61 @@ class SatelliteData(BaseModel):
 
     id: str
     provider: str
-    collection: Optional[str] = None
-    satellite: Optional[str] = None
-    sensor: Optional[str] = None
-    datetime: Optional[DateTime] = None
-    start_datetime: Optional[DateTime] = None
-    end_datetime: Optional[DateTime] = None
-    bbox: Optional[Tuple[float, float, float, float]] = None
-    geometry: Optional[Dict[str, Any]] = None
-    cloud_cover: Optional[float] = Field(None, ge=0, le=100)
+    collection: str | None = None
+    satellite: str | None = None
+    sensor: str | None = None
+    datetime: DateTime | None = None
+    start_datetime: DateTime | None = None
+    end_datetime: DateTime | None = None
+    bbox: tuple[float, float, float, float] | None = None
+    geometry: dict[str, Any] | None = None
+    cloud_cover: float | None = Field(None, ge=0, le=100)
     processing_level: ProcessingLevel = ProcessingLevel.UNKNOWN
     data_format: DataFormat = DataFormat.UNKNOWN
-    assets: Dict[str, SatelliteAsset] = Field(default_factory=dict)
-    stac_extensions: List[str] = Field(default_factory=list)
-    properties: Dict[str, Any] = Field(default_factory=dict)
-    links: List[Dict[str, str]] = Field(default_factory=list)
+    assets: dict[str, SatelliteAsset] = Field(default_factory=dict)
+    stac_extensions: list[str] = Field(default_factory=list)
+    properties: dict[str, Any] = Field(default_factory=dict)
+    links: list[dict[str, str]] = Field(default_factory=list)
     score: float = Field(default=0.0, ge=0.0, le=1.0)
     # SAR-specific fields
-    product_type: Optional[str] = None          # e.g. "GRD", "SLC", "RTC"
-    polarisation: Optional[str] = None          # e.g. "VV", "VH", "VV+VH", "HH"
-    pass_direction: Optional[str] = None        # "ascending" | "descending"
-    relative_orbit: Optional[int] = None        # Relative orbit number
-    orbit_number: Optional[int] = None          # Absolute orbit number
-    incidence_angle: Optional[float] = None     # Centre incidence angle (degrees)
-    resolution_m: Optional[float] = None        # Best resolution in metres
-    gsd_m: Optional[float] = None              # Ground sample distance in metres
-    off_nadir_angle: Optional[float] = None     # Off-nadir angle for VHR
+    product_type: str | None = None  # e.g. "GRD", "SLC", "RTC"
+    polarisation: str | None = None  # e.g. "VV", "VH", "VV+VH", "HH"
+    pass_direction: str | None = None  # "ascending" | "descending"
+    relative_orbit: int | None = None  # Relative orbit number
+    orbit_number: int | None = None  # Absolute orbit number
+    incidence_angle: float | None = None  # Centre incidence angle (degrees)
+    resolution_m: float | None = None  # Best resolution in metres
+    gsd_m: float | None = None  # Ground sample distance in metres
+    off_nadir_angle: float | None = None  # Off-nadir angle for VHR
 
     @field_validator("bbox")
     @classmethod
-    def validate_bbox(cls, v: Optional[Tuple]) -> Optional[Tuple]:
+    def validate_bbox(cls, v: tuple | None) -> tuple | None:
         """Validate bounding box coordinates."""
         if v is None:
             return v
         min_lon, min_lat, max_lon, max_lat = v
         if not (-180 <= min_lon <= 180 and -180 <= max_lon <= 180):
-            raise ValueError(f"Longitude values must be between -180 and 180, got {min_lon}, {max_lon}")
+            msg = f"Longitude values must be between -180 and 180, got {min_lon}, {max_lon}"
+            raise ValueError(msg)
         if not (-90 <= min_lat <= 90 and -90 <= max_lat <= 90):
-            raise ValueError(f"Latitude values must be between -90 and 90, got {min_lat}, {max_lat}")
+            msg = f"Latitude values must be between -90 and 90, got {min_lat}, {max_lat}"
+            raise ValueError(msg)
         if min_lon >= max_lon:
-            raise ValueError(f"min_lon ({min_lon}) must be less than max_lon ({max_lon})")
+            msg = f"min_lon ({min_lon}) must be less than max_lon ({max_lon})"
+            raise ValueError(msg)
         if min_lat >= max_lat:
-            raise ValueError(f"min_lat ({min_lat}) must be less than max_lat ({max_lat})")
+            msg = f"min_lat ({min_lat}) must be less than max_lat ({max_lat})"
+            raise ValueError(msg)
         return v
 
     @model_validator(mode="after")
-    def validate_datetime_range(self) -> "SatelliteData":
+    def validate_datetime_range(self) -> SatelliteData:
         """Validate that start_datetime is before end_datetime."""
         if self.start_datetime and self.end_datetime:
             if self.start_datetime >= self.end_datetime:
-                raise ValueError("start_datetime must be before end_datetime")
+                msg = "start_datetime must be before end_datetime"
+                raise ValueError(msg)
         return self
 
     @property
@@ -277,20 +301,20 @@ class SatelliteData(BaseModel):
         return self.total_size_bytes / (1024 * 1024)
 
     @property
-    def data_assets(self) -> Dict[str, SatelliteAsset]:
+    def data_assets(self) -> dict[str, SatelliteAsset]:
         """Return only primary data assets (not thumbnails/metadata)."""
         return {k: v for k, v in self.assets.items() if v.is_data_asset()}
 
-    def to_stac_item(self) -> Dict[str, Any]:
+    def to_stac_item(self) -> dict[str, Any]:
         """
         Export as a STAC 1.0 Item dictionary.
 
         Returns:
             STAC-compliant dictionary ready for serialization.
         """
-        item: Dict[str, Any] = {
+        item: dict[str, Any] = {
             "type": "Feature",
-            "stac_version": "1.0.0",
+            "stac_version": "1.1.0",
             "stac_extensions": self.stac_extensions,
             "id": self.id,
             "geometry": self.geometry or self._bbox_to_geometry(),
@@ -320,22 +344,26 @@ class SatelliteData(BaseModel):
             item["collection"] = self.collection
         return item
 
-    def _bbox_to_geometry(self) -> Optional[Dict[str, Any]]:
+    def _bbox_to_geometry(self) -> dict[str, Any] | None:
         """Convert bbox to GeoJSON Polygon geometry."""
         if not self.bbox:
             return None
         min_lon, min_lat, max_lon, max_lat = self.bbox
         return {
             "type": "Polygon",
-            "coordinates": [[
-                [min_lon, min_lat], [max_lon, min_lat],
-                [max_lon, max_lat], [min_lon, max_lat],
-                [min_lon, min_lat],
-            ]],
+            "coordinates": [
+                [
+                    [min_lon, min_lat],
+                    [max_lon, min_lat],
+                    [max_lon, max_lat],
+                    [min_lon, max_lat],
+                    [min_lon, min_lat],
+                ]
+            ],
         }
 
     @classmethod
-    def from_stac_item(cls, item: Dict[str, Any], provider: str) -> "SatelliteData":
+    def from_stac_item(cls, item: dict[str, Any], provider: str) -> SatelliteData:
         """
         Create a SatelliteData instance from a STAC Item dictionary.
 
@@ -355,8 +383,9 @@ class SatelliteData(BaseModel):
                 href=asset_data.get("href", ""),
                 title=asset_data.get("title"),
                 media_type=asset_data.get("type"),
-                roles=[asset_data["roles"]] if isinstance(asset_data.get("roles"), str)
-                      else list(asset_data.get("roles") or []),
+                roles=[asset_data["roles"]]
+                if isinstance(asset_data.get("roles"), str)
+                else list(asset_data.get("roles") or []),
                 size_bytes=asset_data.get("size"),
             )
 
@@ -367,12 +396,15 @@ class SatelliteData(BaseModel):
         dt = None
         if dt_str and dt_str != "null":
             from dateutil.parser import parse
+
             dt = parse(dt_str)
 
         # Extract SAR / resolution / geometry fields from properties
-        polarisation_raw = (props.get("sar:polarizations") or
-                            props.get("polarisation") or
-                            props.get("polarisationMode"))
+        polarisation_raw = (
+            props.get("sar:polarizations")
+            or props.get("polarisation")
+            or props.get("polarisationMode")
+        )
         polarisation_str = None
         if isinstance(polarisation_raw, list):
             polarisation_str = "+".join(polarisation_raw)
@@ -407,9 +439,12 @@ class SatelliteData(BaseModel):
             links=item.get("links", []),
             product_type=props.get("sar:product_type") or props.get("productType"),
             polarisation=polarisation_str,
-            pass_direction=(props.get("sat:orbit_state") or
-                            props.get("orbitDirection") or
-                            props.get("flightDirection", "")).lower() or None,
+            pass_direction=(
+                props.get("sat:orbit_state")
+                or props.get("orbitDirection")
+                or props.get("flightDirection", "")
+            ).lower()
+            or None,
             relative_orbit=props.get("sat:relative_orbit") or props.get("relativeOrbitNumber"),
             orbit_number=props.get("sat:absolute_orbit") or props.get("orbitNumber"),
             incidence_angle=incidence,
@@ -442,7 +477,7 @@ class ProviderCapabilities(BaseModel):
     name: str = ""
     description: str = ""
     auth_type: str = "username_password"
-    satellites: List[str] = Field(default_factory=list)
+    satellites: list[str] = Field(default_factory=list)
     # Capability flags
     search: bool = True
     download: bool = True
@@ -450,9 +485,9 @@ class ProviderCapabilities(BaseModel):
     stac: bool = False
     supports_sar: bool = False
     supports_sub_meter: bool = False  # <1m resolution imagery
-    supports_tasking: bool = False    # New satellite tasking orders
+    supports_tasking: bool = False  # New satellite tasking orders
     supports_direct_s3: bool = False  # Direct cloud storage access
-    supports_cql2: bool = False       # CQL2 filter expressions
+    supports_cql2: bool = False  # CQL2 filter expressions
     # Filters
     supports_aoi_filter: bool = True
     supports_cloud_filter: bool = False
@@ -460,17 +495,17 @@ class ProviderCapabilities(BaseModel):
     supports_resolution_filter: bool = False
     supports_processing_level_filter: bool = False
     # Metadata
-    max_results: Optional[int] = None
-    supported_satellites: List[str] = Field(default_factory=list)
-    supported_formats: List[DataFormat] = Field(default_factory=list)
+    max_results: int | None = None
+    supported_satellites: list[str] = Field(default_factory=list)
+    supported_formats: list[DataFormat] = Field(default_factory=list)
     requires_auth: bool = True
     has_quota: bool = False
-    regions: List[str] = Field(default_factory=list)  # e.g. ["global", "europe"]
-    resolution_min_m: Optional[float] = None   # Best resolution in metres
-    resolution_max_m: Optional[float] = None   # Coarsest resolution in metres
+    regions: list[str] = Field(default_factory=list)  # e.g. ["global", "europe"]
+    resolution_min_m: float | None = None  # Best resolution in metres
+    resolution_max_m: float | None = None  # Coarsest resolution in metres
     endpoint_url: str = ""
     docs_url: str = ""
-    extra_info: Dict[str, Any] = Field(default_factory=dict)
+    extra_info: dict[str, Any] = Field(default_factory=dict)
 
 
 class QuotaInfo(BaseModel):
@@ -489,20 +524,21 @@ class QuotaInfo(BaseModel):
     """
 
     provider: str
-    total_bytes: Optional[int] = None
-    used_bytes: Optional[int] = None
-    remaining_bytes: Optional[int] = None
-    reset_datetime: Optional[DateTime] = None
-    requests_per_minute: Optional[int] = None
-    requests_used_today: Optional[int] = None
-    extra_info: Dict[str, Any] = Field(default_factory=dict)
+    total_bytes: int | None = None
+    used_bytes: int | None = None
+    remaining_bytes: int | None = None
+    reset_datetime: DateTime | None = None
+    requests_per_minute: int | None = None
+    requests_used_today: int | None = None
+    extra_info: dict[str, Any] = Field(default_factory=dict)
 
     @property
-    def usage_percent(self) -> Optional[float]:
+    def usage_percent(self) -> float | None:
         """Return percentage of quota used (0-100)."""
         if self.total_bytes and self.used_bytes:
             return (self.used_bytes / self.total_bytes) * 100
         return None
+
 
 # ── Band name alias table ─────────────────────────────────────────────────────
 # Maps user-facing Sentinel-2 / Landsat band names to provider asset key variants
@@ -523,9 +559,9 @@ _BAND_ALIASES: dict = {
     "SCL": {"scl", "scene_classification", "scene_classification_map"},
     "TCI": {"tci", "true_color_image", "visual"},
     # ── Landsat-specific (non-conflicting) ──────────────────────────────────
-    "B1":  {"coastal_l8", "b1"},              # Landsat Coastal/Aerosol
-    "B8":  {"pan", "panchromatic", "b8"},     # Landsat Panchromatic
-    "B9":  {"cirrus_l8", "b9"},               # Landsat Cirrus
+    "B1": {"coastal_l8", "b1"},  # Landsat Coastal/Aerosol
+    "B8": {"pan", "panchromatic", "b8"},  # Landsat Panchromatic
+    "B9": {"cirrus_l8", "b9"},  # Landsat Cirrus
     "B10": {"tirs1", "thermal", "b10", "swir16", "cirrus"},  # Landsat TIRS-1
     # ── Common aliases without numeric prefix ─────────────────────────────
     # These work for both Landsat and Sentinel via the alias lookup
@@ -542,7 +578,8 @@ for _canonical, _aliases in _BAND_ALIASES.items():
 def _zero_pad_band(band: str) -> str:
     """B4 -> B04, B8 -> B08 (Sentinel-2 style zero-padding)."""
     import re
-    m = re.match(r'^([A-Za-z]+)(\d)([A-Za-z]*)$', band)
+
+    m = re.match(r"^([A-Za-z]+)(\d)([A-Za-z]*)$", band)
     if m:
         return f"{m.group(1)}0{m.group(2)}{m.group(3)}"
     return band
@@ -551,7 +588,8 @@ def _zero_pad_band(band: str) -> str:
 def _strip_band_zero(band: str) -> str:
     """B04 -> B4, B08 -> B8 (Landsat style single digit)."""
     import re
-    m = re.match(r'^([A-Za-z]+)0(\d)([A-Za-z]*)$', band)
+
+    m = re.match(r"^([A-Za-z]+)0(\d)([A-Za-z]*)$", band)
     if m:
         return f"{m.group(1)}{m.group(2)}{m.group(3)}"
     return band
@@ -628,10 +666,16 @@ def resolve_band_keys(requested_bands: list, available_keys: list) -> list:
 
     if not result:
         import logging
+
         logging.getLogger("pygeofetch.satellite_data").warning(
             "Requested bands %s not found in available keys %s — downloading all assets",
-            requested_bands, available_keys
+            requested_bands,
+            available_keys,
         )
         return available_keys
 
     return result
+
+
+# Resolve forward references for pydantic v2
+SatelliteData.model_rebuild()

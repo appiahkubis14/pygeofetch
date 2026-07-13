@@ -1,12 +1,21 @@
 """Download CLI commands for PyGeoFetch — full flag set."""
+
 from __future__ import annotations
+
 import json
 import sys
 from pathlib import Path
 
 import click
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn, TextColumn
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TaskProgressColumn,
+    TextColumn,
+    TimeRemainingColumn,
+)
 
 console = Console()
 
@@ -17,43 +26,93 @@ def download() -> None:
 
 
 @download.command(name="run")
-@click.option("--from-search", "-f", default=None, type=click.Path(exists=True),
-              help="GeoJSON results file from `search run --output`.")
+@click.option(
+    "--from-search",
+    "-f",
+    default=None,
+    type=click.Path(exists=True),
+    help="GeoJSON results file from `search run --output`.",
+)
 @click.option("--scene-ids", default=None, help="Comma-separated scene IDs to download.")
-@click.option("--output", "-o", default="./pygeofetch_data", show_default=True,
-              help="Output directory.")
+@click.option(
+    "--output", "-o", default="./pygeofetch_data", show_default=True, help="Output directory."
+)
 @click.option("--parallel", "-p", default=2, show_default=True, help="Parallel download workers.")
 @click.option("--retry", "-r", default=3, show_default=True, help="Retry attempts per file.")
-@click.option("--retry-delay", default=5.0, show_default=True,
-              help="Base retry delay seconds (exponential backoff).")
-@click.option("--verify-checksum", is_flag=True, default=False,
-              help="SHA256 checksum verification after download.")
-@click.option("--resume", is_flag=True, default=True,
-              help="Resume interrupted downloads (default on).")
-@click.option("--bandwidth-limit", "bandwidth_limit", default=None,
-              help="Max bandwidth e.g. 10MB, 5MB (0=unlimited).")
-@click.option("--priority", default="normal",
-              type=click.Choice(["high", "normal", "low"]), show_default=True,
-              help="Download priority.")
-@click.option("--notify", default=None, multiple=True,
-              help="Notifications: webhook:URL or email:ADDRESS (repeatable).")
-@click.option("--post-process", default=None,
-              help='Post-process chain e.g. "unzip,reproject:EPSG:4326,compress:lzw".')
-@click.option("--on-failure", default="skip",
-              type=click.Choice(["skip", "abort", "retry"]), show_default=True,
-              help="How to handle individual file failures.")
-@click.option("--max-items", "-n", default=None, type=int,
-              help="Limit number of items to download.")
+@click.option(
+    "--retry-delay",
+    default=5.0,
+    show_default=True,
+    help="Base retry delay seconds (exponential backoff).",
+)
+@click.option(
+    "--verify-checksum",
+    is_flag=True,
+    default=False,
+    help="SHA256 checksum verification after download.",
+)
+@click.option(
+    "--resume", is_flag=True, default=True, help="Resume interrupted downloads (default on)."
+)
+@click.option(
+    "--bandwidth-limit",
+    "bandwidth_limit",
+    default=None,
+    help="Max bandwidth e.g. 10MB, 5MB (0=unlimited).",
+)
+@click.option(
+    "--priority",
+    default="normal",
+    type=click.Choice(["high", "normal", "low"]),
+    show_default=True,
+    help="Download priority.",
+)
+@click.option(
+    "--notify",
+    default=None,
+    multiple=True,
+    help="Notifications: webhook:URL or email:ADDRESS (repeatable).",
+)
+@click.option(
+    "--post-process",
+    default=None,
+    help='Post-process chain e.g. "unzip,reproject:EPSG:4326,compress:lzw".',
+)
+@click.option(
+    "--on-failure",
+    default="skip",
+    type=click.Choice(["skip", "abort", "retry"]),
+    show_default=True,
+    help="How to handle individual file failures.",
+)
+@click.option(
+    "--max-items", "-n", default=None, type=int, help="Limit number of items to download."
+)
 @click.option("--overwrite", is_flag=True, default=False, help="Overwrite existing files.")
 @click.option(
-    "--bands", default=None,
-    help='Comma-separated band names to download e.g. "B02,B03,B04" (default: all data assets).'
+    "--bands",
+    default=None,
+    help='Comma-separated band names to download e.g. "B02,B03,B04" (default: all data assets).',
 )
 @click.option("--json", "as_json", is_flag=True, help="Output results summary as JSON.")
 def download_run(
-    from_search, scene_ids, output, parallel, retry, retry_delay, verify_checksum,
-    resume, bandwidth_limit, priority, notify, post_process, on_failure,
-    max_items, overwrite, bands, as_json,
+    from_search,
+    scene_ids,
+    output,
+    parallel,
+    retry,
+    retry_delay,
+    verify_checksum,
+    resume,
+    bandwidth_limit,
+    priority,
+    notify,
+    post_process,
+    on_failure,
+    max_items,
+    overwrite,
+    bands,
+    as_json,
 ) -> None:
     """
     Download satellite data products from a search results file or scene IDs.
@@ -89,19 +148,22 @@ def download_run(
             token = token.strip()
             if ":" in token:
                 action_name, _, param_val = token.partition(":")
-                pp_actions.append(PostProcessAction(action=action_name.strip(),
-                                                    params={"value": param_val.strip()}))
+                pp_actions.append(
+                    PostProcessAction(
+                        action=action_name.strip(), params={"value": param_val.strip()}
+                    )
+                )
             else:
                 pp_actions.append(PostProcessAction(action=token))
 
     # Parse bandwidth limit
     bw_mbps = 0.0
     if bandwidth_limit:
-        multipliers = {"MB": 1.0, "GB": 1024.0, "KB": 1/1024}
+        multipliers = {"MB": 1.0, "GB": 1024.0, "KB": 1 / 1024}
         for unit, mult in multipliers.items():
             if bandwidth_limit.upper().endswith(unit):
                 try:
-                    bw_mbps = float(bandwidth_limit[:-len(unit)]) * mult
+                    bw_mbps = float(bandwidth_limit[: -len(unit)]) * mult
                     break
                 except ValueError:
                     pass
@@ -191,21 +253,30 @@ def download_run(
 
     succeeded = [r for r in results if r.success]
     failed = [r for r in results if not r.success]
-    total_mb = sum(r.bytes_downloaded / (1024 * 1024) for r in results if r.success and r.bytes_downloaded)
+    total_mb = sum(
+        r.bytes_downloaded / (1024 * 1024) for r in results if r.success and r.bytes_downloaded
+    )
 
     # Fire notifications
     if notify_webhook and succeeded:
         _notify_webhook(notify_webhook, len(succeeded), len(failed), total_mb)
 
     if as_json:
-        click.echo(json.dumps({
-            "total": len(results), "succeeded": len(succeeded),
-            "failed": len(failed), "total_mb": round(total_mb, 2),
-            "failures": [{"id": r.data_id, "error": r.error} for r in failed],
-        }, indent=2))
+        click.echo(
+            json.dumps(
+                {
+                    "total": len(results),
+                    "succeeded": len(succeeded),
+                    "failed": len(failed),
+                    "total_mb": round(total_mb, 2),
+                    "failures": [{"id": r.data_id, "error": r.error} for r in failed],
+                },
+                indent=2,
+            )
+        )
         return
 
-    console.print(f"\n[bold]Download Summary[/]")
+    console.print("\n[bold]Download Summary[/]")
     console.print(f"  [green]Succeeded:[/] {len(succeeded)}")
     console.print(f"  [red]Failed:[/]    {len(failed)}")
     console.print(f"  [cyan]Total size:[/] {total_mb:.1f} MB")
@@ -233,6 +304,7 @@ def download_status_cmd(output_dir: str, as_json: bool) -> None:
         return
 
     from rich.table import Table
+
     table = Table(title=f"Files in {output_dir}", header_style="bold blue")
     table.add_column("File", style="cyan")
     table.add_column("Size", justify="right")
@@ -240,39 +312,45 @@ def download_status_cmd(output_dir: str, as_json: bool) -> None:
         mb = f.stat().st_size / (1024 * 1024)
         table.add_row(str(f.relative_to(dest)), f"{mb:.2f} MB")
     console.print(table)
-    console.print(f"\n  Total: {len(files)} files, {total / (1024*1024):.1f} MB")
+    console.print(f"\n  Total: {len(files)} files, {total / (1024 * 1024):.1f} MB")
 
 
 @download.command(name="history")
 @click.option("--limit", default=20, show_default=True)
-@click.option("--status", "filter_status", default=None,
-              type=click.Choice(["success", "failed", "active"]))
+@click.option(
+    "--status", "filter_status", default=None, type=click.Choice(["success", "failed", "active"])
+)
 @click.option("--json", "as_json", is_flag=True)
 def download_history(limit: int, filter_status: str, as_json: bool) -> None:
     """Show download history."""
-    from pygeofetch.config.settings import get_config_dir
     import json as _json
+
+    from pygeofetch.config.settings import get_config_dir
+
     history_file = get_config_dir() / "download_history.jsonl"
     if not history_file.exists():
         console.print("[dim]No download history recorded.[/]")
         return
     lines = history_file.read_text().strip().splitlines()[-limit:]
-    runs = [_json.loads(l) for l in lines if l.strip()]
+    runs = [_json.loads(ln) for ln in lines if ln.strip()]
     if filter_status:
         runs = [r for r in runs if r.get("status") == filter_status]
     if as_json:
         click.echo(_json.dumps(runs, indent=2, default=str))
         return
     for r in runs:
-        console.print(f"  {r.get('id', '?')} | {r.get('status','?')} | {r.get('bytes_downloaded', 0)//1024} KB")
+        console.print(
+            f"  {r.get('id', '?')} | {r.get('status', '?')} | {r.get('bytes_downloaded', 0) // 1024} KB"  # noqa: E501
+        )
 
 
 def _notify_webhook(url: str, succeeded: int, failed: int, total_mb: float) -> None:
     """Send a completion notification to a webhook URL."""
     try:
         import httpx
+
         payload = {
-            "text": f"PyGeoFetch download complete: {succeeded} succeeded, {failed} failed, {total_mb:.1f} MB"
+            "text": f"PyGeoFetch download complete: {succeeded} succeeded, {failed} failed, {total_mb:.1f} MB"  # noqa: E501
         }
         httpx.post(url, json=payload, timeout=10)
     except Exception as exc:

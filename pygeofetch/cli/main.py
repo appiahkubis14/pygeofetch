@@ -25,38 +25,46 @@ from pygeofetch import __version__
 from pygeofetch.cli.auth_commands import auth
 from pygeofetch.cli.config_commands import config
 from pygeofetch.cli.download_commands import download
-from pygeofetch.cli.preprocess_commands import preprocess
 from pygeofetch.cli.index_commands import index
-from pygeofetch.cli.postprocess_commands import post
-from pygeofetch.cli.sar_commands import sar
 from pygeofetch.cli.pipeline_process_commands import proc_pipeline
+from pygeofetch.cli.postprocess_commands import post
+from pygeofetch.cli.preprocess_commands import preprocess
+from pygeofetch.cli.sar_commands import sar
 from pygeofetch.cli.search_commands import search
 from pygeofetch.utils.logging_setup import setup_logging
 
 console = Console()
 
 
-@click.group(
-    context_settings={"help_option_names": ["-h", "--help"], "max_content_width": 100}
-)
+@click.group(context_settings={"help_option_names": ["-h", "--help"], "max_content_width": 100})
 @click.version_option(__version__, prog_name="pygeofetch")
 @click.option(
-    "--log-level", default="INFO",
+    "--log-level",
+    default="INFO",
     type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"], case_sensitive=False),
-    envvar="PYGEOFETCH_LOG_LEVEL", show_default=True,
+    envvar="PYGEOFETCH_LOG_LEVEL",
+    show_default=True,
     help="Logging verbosity.",
 )
 @click.option("--log-file", default=None, type=click.Path(), help="Write logs to this file.")
 @click.option(
-    "--log-format", default="console",
-    type=click.Choice(["console", "json"]), show_default=True,
+    "--log-format",
+    default="console",
+    type=click.Choice(["console", "json"]),
+    show_default=True,
     help="Log output format.",
 )
-@click.option("--config", "config_file", default=None, type=click.Path(exists=True),
-              help="Path to custom config YAML file.")
+@click.option(
+    "--config",
+    "config_file",
+    default=None,
+    type=click.Path(exists=True),
+    help="Path to custom config YAML file.",
+)
 @click.pass_context
-def cli(ctx: click.Context, log_level: str, log_file: str, log_format: str,
-        config_file: str) -> None:
+def cli(
+    ctx: click.Context, log_level: str, log_file: str, log_format: str, config_file: str
+) -> None:
     """
     \b
     PyGeoFetch v1.1.0 — Universal Satellite Data Pipeline
@@ -72,6 +80,7 @@ def cli(ctx: click.Context, log_level: str, log_file: str, log_format: str,
     Run any command with --help for details.
     """
     from pathlib import Path
+
     setup_logging(
         level=log_level,
         log_file=str(Path(log_file)) if log_file else None,
@@ -96,6 +105,7 @@ cli.add_command(proc_pipeline)
 # STATUS
 # ---------------------------------------------------------------------------
 
+
 @cli.command()
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON.")
 def status(as_json: bool) -> None:
@@ -107,9 +117,11 @@ def status(as_json: bool) -> None:
     """
     import json as _json
     import platform
+
     from rich.table import Table
-    from pygeofetch.core.engine import PyGeoFetch
+
     from pygeofetch.core.cache_manager import CacheManager
+    from pygeofetch.core.engine import PyGeoFetch
 
     sb = PyGeoFetch()
     info = sb.status()
@@ -132,6 +144,7 @@ def status(as_json: bool) -> None:
 
     # Provider table
     from pygeofetch.providers import list_provider_info
+
     all_info = {p["id"]: p for p in list_provider_info()}
     authed = set(info["providers_authenticated"])
     free = set(info["providers_free"])
@@ -152,7 +165,9 @@ def status(as_json: bool) -> None:
         else:
             status_str = "[dim]✗ not configured[/]"
         table.add_row(
-            pid, pinfo.get("display_name", pid), status_str,
+            pid,
+            pinfo.get("display_name", pid),
+            status_str,
             "[green]✓[/]" if pinfo.get("supports_sar") else "—",
             "[green]✓[/]" if pinfo.get("supports_sub_meter") else "—",
             "[green]✓[/]" if pinfo.get("stac") else "—",
@@ -160,10 +175,12 @@ def status(as_json: bool) -> None:
     console.print(table)
 
     # Cache stats
-    console.print(f"\n[bold]Cache[/]  {cache_stats['valid']} valid entries "
-                  f"/ {cache_stats['expired']} expired "
-                  f"/ {cache_stats['size_bytes'] // 1024} KB "
-                  f"at {cache_stats['cache_dir']}")
+    console.print(
+        f"\n[bold]Cache[/]  {cache_stats['valid']} valid entries "
+        f"/ {cache_stats['expired']} expired "
+        f"/ {cache_stats['size_bytes'] // 1024} KB "
+        f"at {cache_stats['cache_dir']}"
+    )
 
 
 @cli.command()
@@ -172,6 +189,7 @@ def version(as_json: bool) -> None:
     """Show version information."""
     import json as _json
     import platform
+
     data = {
         "version": __version__,
         "python": platform.python_version(),
@@ -180,13 +198,16 @@ def version(as_json: bool) -> None:
     if as_json:
         click.echo(_json.dumps(data))
     else:
-        console.print(f"[bold cyan]PyGeoFetch[/] v{data['version']} | "
-                      f"Python {data['python']} | {data['platform']}")
+        console.print(
+            f"[bold cyan]PyGeoFetch[/] v{data['version']} | "
+            f"Python {data['python']} | {data['platform']}"
+        )
 
 
 # ---------------------------------------------------------------------------
 # DOCTOR
 # ---------------------------------------------------------------------------
+
 
 @cli.command()
 def doctor() -> None:
@@ -208,8 +229,10 @@ def doctor() -> None:
     # Python version
     vi = sys.version_info
     py_ok = vi >= (3, 9)
-    console.print(f"  {ok if py_ok else fail} Python {vi.major}.{vi.minor}.{vi.micro}"
-                  + ("" if py_ok else " — requires 3.9+"))
+    console.print(
+        f"  {ok if py_ok else fail} Python {vi.major}.{vi.minor}.{vi.micro}"
+        + ("" if py_ok else " — requires 3.9+")
+    )
 
     # Required packages
     required = ["httpx", "pydantic", "click", "rich", "yaml", "cryptography", "keyring"]
@@ -222,8 +245,12 @@ def doctor() -> None:
             console.print(f"  {fail} {pkg} — not installed")
 
     # Optional packages
-    optional = [("boto3", "AWS S3 direct access"), ("rasterio", "raster post-processing"),
-                ("geopandas", "GeoParquet output"), ("croniter", "cron scheduling")]
+    optional = [
+        ("boto3", "AWS S3 direct access"),
+        ("rasterio", "raster post-processing"),
+        ("geopandas", "GeoParquet output"),
+        ("croniter", "cron scheduling"),
+    ]
     for pkg, purpose in optional:
         try:
             importlib.import_module(pkg)
@@ -233,6 +260,7 @@ def doctor() -> None:
 
     # Config dir
     from pygeofetch.config.settings import get_config_dir
+
     cfg_dir = get_config_dir()
     if cfg_dir.exists():
         console.print(f"  {ok} Config directory: {cfg_dir}")
@@ -242,6 +270,7 @@ def doctor() -> None:
     # Keyring
     try:
         import keyring
+
         kr = keyring.get_keyring()
         console.print(f"  {ok} Keyring backend: {type(kr).__name__}")
     except Exception as exc:
@@ -250,6 +279,7 @@ def doctor() -> None:
     # Network connectivity
     console.print("\n  [dim]Checking provider connectivity...[/]")
     import httpx
+
     endpoints = [
         ("AWS Earth Search", "https://earth-search.aws.element84.com/v1/collections"),
         ("Planetary Computer", "https://planetarycomputer.microsoft.com/api/stac/v1/"),
@@ -272,6 +302,7 @@ def doctor() -> None:
 # PROVIDERS
 # ---------------------------------------------------------------------------
 
+
 @cli.group()
 def providers() -> None:
     """List, filter, and inspect available satellite data providers."""
@@ -279,8 +310,11 @@ def providers() -> None:
 
 @providers.command(name="list")
 @click.option("--auth/--no-auth", default=None, help="Filter by auth requirement.")
-@click.option("--capabilities", default=None,
-              help="Comma-separated capabilities: sar,optical,sub-meter,stac,direct-s3")
+@click.option(
+    "--capabilities",
+    default=None,
+    help="Comma-separated capabilities: sar,optical,sub-meter,stac,direct-s3",
+)
 @click.option("--region", default=None, help="Filter by region (e.g. 'global', 'europe').")
 @click.option("--satellite", default=None, help="Filter by satellite name substring.")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON.")
@@ -296,7 +330,9 @@ def providers_list(auth, capabilities, region, satellite, as_json) -> None:
       pygeofetch providers list --satellite Sentinel
     """
     import json as _json
+
     from rich.table import Table
+
     from pygeofetch.providers import list_provider_info
 
     items = list_provider_info()
@@ -306,20 +342,29 @@ def providers_list(auth, capabilities, region, satellite, as_json) -> None:
         items = [i for i in items if i["requires_auth"] == auth]
     if capabilities:
         cap_set = {c.strip().lower() for c in capabilities.split(",")}
+
         def matches_caps(item):
             item_caps = set()
-            if item.get("supports_sar"): item_caps.add("sar")
-            if not item.get("supports_sar"): item_caps.add("optical")
-            if item.get("supports_sub_meter"): item_caps.add("sub-meter")
-            if item.get("stac"): item_caps.add("stac")
-            if item.get("supports_direct_s3"): item_caps.add("direct-s3")
+            if item.get("supports_sar"):
+                item_caps.add("sar")
+            if not item.get("supports_sar"):
+                item_caps.add("optical")
+            if item.get("supports_sub_meter"):
+                item_caps.add("sub-meter")
+            if item.get("stac"):
+                item_caps.add("stac")
+            if item.get("supports_direct_s3"):
+                item_caps.add("direct-s3")
             return cap_set.issubset(item_caps)
+
         items = [i for i in items if matches_caps(i)]
     if region:
         items = [i for i in items if region in (i.get("regions") or [])]
     if satellite:
         sat_lower = satellite.lower()
-        items = [i for i in items if any(sat_lower in s.lower() for s in (i.get("satellites") or []))]
+        items = [
+            i for i in items if any(sat_lower in s.lower() for s in (i.get("satellites") or []))
+        ]
 
     if as_json:
         click.echo(_json.dumps(items, indent=2, default=str))
@@ -338,9 +383,10 @@ def providers_list(auth, capabilities, region, satellite, as_json) -> None:
         auth_str = ("🔐 " + item.get("auth_type", "?")) if item["requires_auth"] else "🌐 open"
         sats = ", ".join((item.get("satellites") or [])[:3])
         if len(item.get("satellites") or []) > 3:
-            sats += f" +{len(item['satellites'])-3}"
+            sats += f" +{len(item['satellites']) - 3}"
         table.add_row(
-            item["id"], item.get("display_name", item["id"]),
+            item["id"],
+            item.get("display_name", item["id"]),
             auth_str,
             "[green]✓[/]" if item.get("supports_sar") else "—",
             "[green]✓[/]" if item.get("supports_sub_meter") else "—",
@@ -363,9 +409,11 @@ def providers_info(provider_id: str, as_json: bool) -> None:
       pygeofetch providers info planetary_computer --json
     """
     import json as _json
+
     from rich.table import Table
-    from pygeofetch.providers import get_provider
+
     from pygeofetch.core.authenticator import AuthManager
+    from pygeofetch.providers import get_provider
 
     try:
         p = get_provider(provider_id)
@@ -420,21 +468,33 @@ def providers_info(provider_id: str, as_json: bool) -> None:
     table.add_column("Value")
 
     table.add_row("Auth type", caps.auth_type)
-    table.add_row("Auth status", f"[green]{auth_status}[/]" if "✓" in auth_status or "🌐" in auth_status else f"[red]{auth_status}[/]")
+    table.add_row(
+        "Auth status",
+        f"[green]{auth_status}[/]"
+        if "✓" in auth_status or "🌐" in auth_status
+        else f"[red]{auth_status}[/]",
+    )
     table.add_row("Satellites", ", ".join(caps.satellites) if caps.satellites else "—")
     table.add_row("SAR support", "[green]Yes[/]" if caps.supports_sar else "No")
     table.add_row("Sub-meter", "[green]Yes[/]" if caps.supports_sub_meter else "No")
     table.add_row("STAC API", "[green]Yes[/]" if caps.stac else "No")
     table.add_row("CQL2 filter", "[green]Yes[/]" if caps.supports_cql2 else "No")
-    table.add_row("Resolution", f"{caps.resolution_min_m}m – {caps.resolution_max_m}m"
-                  if caps.resolution_min_m else "Varies")
+    table.add_row(
+        "Resolution",
+        f"{caps.resolution_min_m}m – {caps.resolution_max_m}m"
+        if caps.resolution_min_m
+        else "Varies",
+    )
     table.add_row("Regions", ", ".join(caps.regions) if caps.regions else "global")
     table.add_row("Endpoint", caps.endpoint_url or "—")
     table.add_row("Docs", caps.docs_url or "—")
 
     if quota.total_bytes:
         used_pct = quota.usage_percent or 0
-        table.add_row("Quota used", f"{quota.used_bytes or 0:,} / {quota.total_bytes:,} bytes ({used_pct:.1f}%)")
+        table.add_row(
+            "Quota used",
+            f"{quota.used_bytes or 0:,} / {quota.total_bytes:,} bytes ({used_pct:.1f}%)",
+        )
     if quota.requests_per_minute:
         table.add_row("Rate limit", f"{quota.requests_per_minute} req/min")
 
@@ -447,24 +507,32 @@ def providers_info(provider_id: str, as_json: bool) -> None:
 def providers_search(term: str, as_json: bool) -> None:
     """Search providers by name, satellite, or description."""
     import json as _json
+
     from pygeofetch.providers import list_provider_info
+
     term_lower = term.lower()
     items = [
-        i for i in list_provider_info()
-        if (term_lower in i.get("display_name", "").lower() or
-            term_lower in i.get("description", "").lower() or
-            any(term_lower in s.lower() for s in (i.get("satellites") or [])))
+        i
+        for i in list_provider_info()
+        if (
+            term_lower in i.get("display_name", "").lower()
+            or term_lower in i.get("description", "").lower()
+            or any(term_lower in s.lower() for s in (i.get("satellites") or []))
+        )
     ]
     if as_json:
         click.echo(_json.dumps(items, indent=2, default=str))
         return
     for item in items:
-        console.print(f"  [cyan]{item['id']}[/]: {item['display_name']} — {item['description'][:80]}")
+        console.print(
+            f"  [cyan]{item['id']}[/]: {item['display_name']} — {item['description'][:80]}"
+        )
 
 
 # ---------------------------------------------------------------------------
 # CACHE
 # ---------------------------------------------------------------------------
+
 
 @cli.group()
 def cache() -> None:
@@ -476,20 +544,24 @@ def cache() -> None:
 def cache_stats(as_json: bool) -> None:
     """Show cache statistics: size, entry count, location, TTL."""
     import json as _json
+
     from pygeofetch.core.cache_manager import CacheManager
+
     mgr = CacheManager()
     stats = mgr.stats()
     if as_json:
         click.echo(_json.dumps(stats, indent=2))
         return
-    console.print(f"[bold]Cache Statistics[/]")
+    console.print("[bold]Cache Statistics[/]")
     for k, v in stats.items():
         console.print(f"  {k}: {v}")
 
 
 @cache.command(name="clear")
 @click.option("--provider", default=None, help="Clear only entries for this provider.")
-@click.option("--older-than", "older_than", default=None, help="Clear entries older than (e.g. 7d, 24h).")
+@click.option(
+    "--older-than", "older_than", default=None, help="Clear entries older than (e.g. 7d, 24h)."
+)
 @click.option("--dry-run", is_flag=True, help="Show what would be removed without deleting.")
 @click.confirmation_option(prompt="Clear cache entries?")
 def cache_clear(provider: str, older_than: str, dry_run: bool) -> None:
@@ -503,6 +575,7 @@ def cache_clear(provider: str, older_than: str, dry_run: bool) -> None:
       pygeofetch cache clear --older-than 7d --dry-run
     """
     from pygeofetch.core.cache_manager import CacheManager
+
     mgr = CacheManager()
 
     max_age_seconds = None
@@ -517,7 +590,7 @@ def cache_clear(provider: str, older_than: str, dry_run: bool) -> None:
         console.print(f"Would delete up to {stats['total']} entries.")
         return
 
-    count = mgr.clear(provider_filter=provider, max_age_seconds=max_age_seconds)
+    count = mgr.clear_filtered(provider_filter=provider, max_age_seconds=max_age_seconds)
     console.print(f"[green]Cleared {count} cache entries.[/]")
 
 
@@ -527,6 +600,7 @@ def cache_clear(provider: str, older_than: str, dry_run: bool) -> None:
 def cache_ttl(action: str, seconds: int) -> None:
     """Show or set cache TTL. Usage: ttl show | ttl set SECONDS"""
     from pygeofetch.config.settings import get_settings, save_user_config
+
     if action == "show":
         settings = get_settings()
         ttl = getattr(settings, "cache_ttl_seconds", 3600)
@@ -543,23 +617,30 @@ def cache_ttl(action: str, seconds: int) -> None:
 def cache_location() -> None:
     """Show the cache directory path."""
     from pygeofetch.core.cache_manager import CacheManager
+
     mgr = CacheManager()
     console.print(f"Cache directory: [cyan]{mgr.cache_dir}[/]")
 
 
 @cache.command(name="prune")
-@click.option("--max-size", "max_size", default="1GB", show_default=True,
-              help="Prune oldest entries until cache is below this size (e.g. 500MB, 2GB).")
+@click.option(
+    "--max-size",
+    "max_size",
+    default="1GB",
+    show_default=True,
+    help="Prune oldest entries until cache is below this size (e.g. 500MB, 2GB).",
+)
 def cache_prune(max_size: str) -> None:
     """Remove oldest cache entries to stay under max-size."""
     from pygeofetch.core.cache_manager import CacheManager
+
     # Parse max_size string
     multipliers = {"KB": 1024, "MB": 1024**2, "GB": 1024**3, "TB": 1024**4}
     size_bytes = 1024**3  # default 1GB
     for unit, mult in multipliers.items():
         if max_size.upper().endswith(unit):
             try:
-                size_bytes = int(float(max_size[:-len(unit)]) * mult)
+                size_bytes = int(float(max_size[: -len(unit)]) * mult)
                 break
             except ValueError:
                 pass
@@ -569,12 +650,15 @@ def cache_prune(max_size: str) -> None:
     if stats["size_bytes"] > size_bytes:
         extra = mgr.prune_to_size(size_bytes)
         n += extra
-    console.print(f"[green]Pruned {n} entries. Cache now: {mgr.stats()['size_bytes'] // 1024} KB[/]")
+    console.print(
+        f"[green]Pruned {n} entries. Cache now: {mgr.stats()['size_bytes'] // 1024} KB[/]"
+    )
 
 
 # ---------------------------------------------------------------------------
 # PIPELINE
 # ---------------------------------------------------------------------------
+
 
 @cli.group()
 def pipeline() -> None:
@@ -588,10 +672,13 @@ def pipeline_run(pipeline_file: str, step: str) -> None:
     """Run a pipeline from a YAML definition file."""
     from pygeofetch.core.engine import PyGeoFetch
     from pygeofetch.core.scheduler import PipelineScheduler
+
     sb = PyGeoFetch()
     scheduler = PipelineScheduler(engine=sb)
     pipeline_obj = scheduler.load_pipeline(pipeline_file)
-    console.print(f"Running pipeline [bold]{pipeline_obj.name!r}[/] ({len(pipeline_obj.steps)} steps)...")
+    console.print(
+        f"Running pipeline [bold]{pipeline_obj.name!r}[/] ({len(pipeline_obj.steps)} steps)..."
+    )
     result = scheduler.run_once(pipeline_obj.name)
     if result["success"]:
         console.print(f"[green]✓ Completed in {result['duration_seconds']:.1f}s[/]")
@@ -604,14 +691,18 @@ def pipeline_run(pipeline_file: str, step: str) -> None:
 @click.argument("pipeline_file", type=click.Path(exists=True))
 def pipeline_validate(pipeline_file: str) -> None:
     """Validate a pipeline YAML file without executing it."""
-    from pygeofetch.core.scheduler import Pipeline
     import yaml
+
+    from pygeofetch.core.scheduler import Pipeline
+
     with open(pipeline_file) as f:
         data = yaml.safe_load(f)
     try:
         p = Pipeline.from_dict(data)
-        console.print(f"[green]Valid[/]: {p.name!r} — {len(p.steps)} steps"
-                      + (f", cron={p.schedule!r}" if p.schedule else ""))
+        console.print(
+            f"[green]Valid[/]: {p.name!r} — {len(p.steps)} steps"
+            + (f", cron={p.schedule!r}" if p.schedule else "")
+        )
     except Exception as exc:
         console.print(f"[red]Invalid: {exc}[/]")
         sys.exit(1)
@@ -623,9 +714,13 @@ def pipeline_validate(pipeline_file: str) -> None:
 @click.option("--cron", default=None, help="Override cron schedule expression.")
 def pipeline_schedule(pipeline_file: str, name: str, cron: str) -> None:
     """Schedule a pipeline for recurring execution (saves to config)."""
-    from pygeofetch.core.scheduler import Pipeline
+    import json
+
+    import yaml
+
     from pygeofetch.config.settings import get_config_dir
-    import yaml, json
+    from pygeofetch.core.scheduler import Pipeline
+
     with open(pipeline_file) as f:
         data = yaml.safe_load(f)
     if name:
@@ -639,8 +734,10 @@ def pipeline_schedule(pipeline_file: str, name: str, cron: str) -> None:
         existing = json.loads(scheduled_file.read_text())
     existing[p.name] = {"file": str(pipeline_file), "schedule": p.schedule, "name": p.name}
     scheduled_file.write_text(json.dumps(existing, indent=2))
-    console.print(f"[green]Scheduled {p.name!r}[/]"
-                  + (f" at cron={p.schedule!r}" if p.schedule else " (no cron — run manually)"))
+    console.print(
+        f"[green]Scheduled {p.name!r}[/]"
+        + (f" at cron={p.schedule!r}" if p.schedule else " (no cron — run manually)")
+    )
 
 
 @pipeline.command(name="list-scheduled")
@@ -648,7 +745,9 @@ def pipeline_schedule(pipeline_file: str, name: str, cron: str) -> None:
 def pipeline_list_scheduled(as_json: bool) -> None:
     """List all scheduled pipelines."""
     import json as _json
+
     from pygeofetch.config.settings import get_config_dir
+
     scheduled_file = get_config_dir() / "scheduled_pipelines.json"
     if not scheduled_file.exists():
         console.print("[dim]No scheduled pipelines.[/]")
@@ -658,7 +757,9 @@ def pipeline_list_scheduled(as_json: bool) -> None:
         click.echo(_json.dumps(data, indent=2))
         return
     for name, info in data.items():
-        console.print(f"  [cyan]{name}[/]: {info.get('schedule','(manual)')} — {info.get('file','')}")
+        console.print(
+            f"  [cyan]{name}[/]: {info.get('schedule', '(manual)')} — {info.get('file', '')}"
+        )
 
 
 @pipeline.command(name="unschedule")
@@ -666,7 +767,9 @@ def pipeline_list_scheduled(as_json: bool) -> None:
 def pipeline_unschedule(name: str) -> None:
     """Remove a pipeline from the schedule."""
     import json as _json
+
     from pygeofetch.config.settings import get_config_dir
+
     scheduled_file = get_config_dir() / "scheduled_pipelines.json"
     if not scheduled_file.exists():
         console.print("[yellow]No scheduled pipelines found.[/]")
@@ -687,7 +790,9 @@ def pipeline_unschedule(name: str) -> None:
 def pipeline_logs(name: str, tail: int, follow: bool) -> None:
     """Show execution logs for a pipeline."""
     import json as _json
+
     from pygeofetch.config.settings import get_config_dir
+
     log_file = get_config_dir() / "pipeline_logs" / f"{name}.jsonl"
     if not log_file.exists():
         console.print(f"[dim]No logs found for pipeline {name!r}.[/]")
@@ -711,17 +816,20 @@ def pipeline_logs(name: str, tail: int, follow: bool) -> None:
 def pipeline_history(limit: int, as_json: bool) -> None:
     """Show pipeline execution history."""
     import json as _json
+
     from pygeofetch.config.settings import get_config_dir
+
     history_file = get_config_dir() / "pipeline_history.jsonl"
     if not history_file.exists():
         console.print("[dim]No pipeline history recorded.[/]")
         return
     lines = history_file.read_text().strip().splitlines()[-limit:]
-    runs = [_json.loads(l) for l in lines if l.strip()]
+    runs = [_json.loads(ln) for ln in lines if ln.strip()]
     if as_json:
         click.echo(_json.dumps(runs, indent=2, default=str))
         return
     from rich.table import Table
+
     table = Table(header_style="bold blue")
     table.add_column("Pipeline")
     table.add_column("Started")
@@ -750,11 +858,13 @@ def pipeline_retry(run_id: str) -> None:
 # SHELL COMPLETION
 # ---------------------------------------------------------------------------
 
+
 @cli.command(name="--install-completion", hidden=False)
 @click.argument("shell", type=click.Choice(["bash", "zsh", "fish"]))
 def install_completion(shell: str) -> None:
     """Install shell tab completion. Usage: --install-completion bash|zsh|fish"""
     import os
+
     prog = "pygeofetch"
     if shell == "bash":
         line = f'eval "$(_PYGEOFETCH_COMPLETE=bash_source {prog})"'

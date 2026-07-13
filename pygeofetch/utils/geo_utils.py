@@ -15,12 +15,12 @@ Example::
 from __future__ import annotations
 
 import math
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
-BBoxTuple = Tuple[float, float, float, float]
+BBoxTuple = tuple[float, float, float, float]
 
 
-def parse_bbox(value: Union[str, List, Tuple, Dict]) -> BBoxTuple:
+def parse_bbox(value: str | list | tuple | dict) -> BBoxTuple:
     """
     Parse a bounding box from various input formats.
 
@@ -36,23 +36,27 @@ def parse_bbox(value: Union[str, List, Tuple, Dict]) -> BBoxTuple:
     """
     if isinstance(value, (list, tuple)):
         if len(value) != 4:
-            raise ValueError(f"Expected 4 coordinate values, got {len(value)}")
+            msg = f"Expected 4 coordinate values, got {len(value)}"
+            raise ValueError(msg)
         return tuple(float(v) for v in value)  # type: ignore
     if isinstance(value, str):
         parts = [float(p.strip()) for p in value.split(",")]
         if len(parts) != 4:
-            raise ValueError(f"Expected 4 comma-separated values, got {len(parts)}")
+            msg = f"Expected 4 comma-separated values, got {len(parts)}"
+            raise ValueError(msg)
         return tuple(parts)  # type: ignore
     if isinstance(value, dict):
         if "min_lon" in value:
             return (value["min_lon"], value["min_lat"], value["max_lon"], value["max_lat"])
         if "west" in value:
             return (value["west"], value["south"], value["east"], value["north"])
-        raise ValueError(f"Dict must have min_lon/max_lon/min_lat/max_lat or west/south/east/north keys")
-    raise TypeError(f"Cannot parse bbox from {type(value)}")
+        msg = "Dict must have min_lon/max_lon/min_lat/max_lat or west/south/east/north keys"
+        raise ValueError(msg)
+    msg = f"Cannot parse bbox from {type(value)}"
+    raise TypeError(msg)
 
 
-def bbox_to_geojson(bbox: BBoxTuple) -> Dict[str, Any]:
+def bbox_to_geojson(bbox: BBoxTuple) -> dict[str, Any]:
     """
     Convert a bounding box to a GeoJSON Polygon feature.
 
@@ -65,13 +69,15 @@ def bbox_to_geojson(bbox: BBoxTuple) -> Dict[str, Any]:
     min_lon, min_lat, max_lon, max_lat = bbox
     return {
         "type": "Polygon",
-        "coordinates": [[
-            [min_lon, min_lat],
-            [max_lon, min_lat],
-            [max_lon, max_lat],
-            [min_lon, max_lat],
-            [min_lon, min_lat],
-        ]],
+        "coordinates": [
+            [
+                [min_lon, min_lat],
+                [max_lon, min_lat],
+                [max_lon, max_lat],
+                [min_lon, max_lat],
+                [min_lon, min_lat],
+            ]
+        ],
     }
 
 
@@ -129,9 +135,7 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     d_lon = math.radians(lon2 - lon1)
     a = (
         math.sin(d_lat / 2) ** 2
-        + math.cos(math.radians(lat1))
-        * math.cos(math.radians(lat2))
-        * math.sin(d_lon / 2) ** 2
+        + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(d_lon / 2) ** 2
     )
     return R * 2 * math.asin(math.sqrt(a))
 
@@ -149,14 +153,11 @@ def bbox_intersects(bbox1: BBoxTuple, bbox2: BBoxTuple) -> bool:
     min_lon1, min_lat1, max_lon1, max_lat1 = bbox1
     min_lon2, min_lat2, max_lon2, max_lat2 = bbox2
     return not (
-        max_lon1 < min_lon2
-        or max_lon2 < min_lon1
-        or max_lat1 < min_lat2
-        or max_lat2 < min_lat1
+        max_lon1 < min_lon2 or max_lon2 < min_lon1 or max_lat1 < min_lat2 or max_lat2 < min_lat1
     )
 
 
-def bbox_union(bboxes: List[BBoxTuple]) -> BBoxTuple:
+def bbox_union(bboxes: list[BBoxTuple]) -> BBoxTuple:
     """
     Compute the union bounding box of a list of bounding boxes.
 
@@ -167,7 +168,8 @@ def bbox_union(bboxes: List[BBoxTuple]) -> BBoxTuple:
         Bounding box covering all inputs.
     """
     if not bboxes:
-        raise ValueError("Cannot compute union of empty list")
+        msg = "Cannot compute union of empty list"
+        raise ValueError(msg)
     min_lon = min(b[0] for b in bboxes)
     min_lat = min(b[1] for b in bboxes)
     max_lon = max(b[2] for b in bboxes)
@@ -191,7 +193,7 @@ def point_in_bbox(lon: float, lat: float, bbox: BBoxTuple) -> bool:
     return min_lon <= lon <= max_lon and min_lat <= lat <= max_lat
 
 
-def geojson_to_bbox(geometry: Dict[str, Any]) -> Optional[BBoxTuple]:
+def geojson_to_bbox(geometry: dict[str, Any]) -> BBoxTuple | None:
     """
     Extract the bounding box of a GeoJSON geometry.
 
@@ -201,7 +203,8 @@ def geojson_to_bbox(geometry: Dict[str, Any]) -> Optional[BBoxTuple]:
     Returns:
         (min_lon, min_lat, max_lon, max_lat) or None if extraction fails.
     """
-    def extract_coords(geom: Dict) -> List[Tuple[float, float]]:
+
+    def extract_coords(geom: dict) -> list[tuple[float, float]]:
         gtype = geom.get("type", "")
         coords = geom.get("coordinates", [])
         if gtype == "Point":
@@ -260,8 +263,7 @@ def _normalise_satellite_name(platform: str) -> str:
         "SENTINEL-2A": "S2A",
         "SENTINEL-2B": "S2B",
         "SENTINEL-2C": "S2C",
-        "LANDSAT-8":   "L8",
-        "LANDSAT-9":   "L9",
+        "LANDSAT-8": "L8",
+        "LANDSAT-9": "L9",
     }
     return mapping.get(platform, platform)
-

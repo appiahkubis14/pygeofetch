@@ -8,18 +8,21 @@ version = "1.1.0"
 description = "Universal satellite data pipeline — unified access to 22+ providers"
 readme = "README.md"
 license = { file = "LICENSE" }
-authors = [{ name = "PyGeoFetch Contributors" }]
-keywords = ["satellite", "remote-sensing", "GIS", "earth-observation", "geospatial"]
+authors = [{ name = "PyGeoFetch Contributors", email = "pygeofetch@example.com" }]
+keywords = ["satellite", "remote-sensing", "GIS", "earth-observation", "geospatial", "SAR", "Sentinel", "Landsat"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: GIS",
+    "Topic :: Scientific/Engineering :: Image Processing",
 ]
 requires-python = ">=3.9"
 dependencies = [
@@ -27,18 +30,13 @@ dependencies = [
     "click>=8.1",
     "pydantic>=2.5",
     "pydantic-settings>=2.1",
-    "rich>=13.7",
     "PyYAML>=6.0",
     "cryptography>=42.0",
     "keyring>=24.3",
-    "aiofiles>=23.2",
     "tenacity>=8.2",
     "python-dateutil>=2.9",
-    "tqdm>=4.66",
     "requests>=2.31",
     "anyio>=4.2",
-    "boto3>=1.34",
-    "click-completion>=0.5",
 ]
 
 [project.optional-dependencies]
@@ -52,6 +50,12 @@ geo = [
 cloud = [
     "boto3>=1.34",
     "pystac>=1.9",
+    "planetary-computer>=1.0",
+]
+notebook = [
+    "ipython>=8.0",
+    "ipywidgets>=8.0",
+    "jupyter>=1.0",
 ]
 schedule = [
     "croniter>=2.0",
@@ -60,42 +64,44 @@ dev = [
     "pytest>=8.0",
     "pytest-cov>=4.1",
     "pytest-mock>=3.12",
-    "pytest-asyncio>=0.23",
-    "vcrpy>=6.0",
     "black>=24.0",
     "ruff>=0.3",
     "mypy>=1.8",
-    "bump2version>=1.0",
+    "build>=1.0",
+    "twine>=5.0",
 ]
-all = ["pygeofetch[geo,cloud,schedule,dev]"]
+all = ["pygeofetch[geo,cloud,notebook,schedule]"]
 
 [project.scripts]
 pygeofetch = "pygeofetch.cli.main:cli"
 
-    [project.urls]
-    Homepage = "https://github.com/appiahkubis14/pygeofetch"
+[project.urls]
+Homepage      = "https://github.com/pygeofetch/PyGeoFetch"
 Documentation = "https://pygeofetch.readthedocs.io"
-Repository = "https://github.com/appiahkubis14/pygeofetch"
-"Bug Tracker" = "https://github.com/appiahkubis14/pygeofetch/issues"
+Repository    = "https://github.com/pygeofetch/PyGeoFetch"
+"Bug Tracker" = "https://github.com/pygeofetch/PyGeoFetch/issues"
+Changelog     = "https://github.com/pygeofetch/PyGeoFetch/blob/main/CHANGELOG.md"
 
 [tool.setuptools.packages.find]
-where = ["."]
+where   = ["."]
 include = ["pygeofetch*"]
 
 [tool.setuptools.package-data]
-pygeofetch = ["config/*.yaml"]
+pygeofetch = ["config/*.yaml", "py.typed"]
 
 [tool.black]
-line-length = 100
+line-length    = 100
 target-version = ["py39"]
 
-[tool.ruff]
+[tool.ruff.lint]
 line-length = 100
+select      = ["E", "F", "W", "I"]
 
 [tool.mypy]
-python_version = "3.9"
+python_version        = "3.11"
 ignore_missing_imports = true
+strict                = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-v --tb=short"
+addopts   = "-v --tb=short"

@@ -33,10 +33,9 @@ Example - implementing a new provider::
             ...
 """
 
-from __future__ import annotations
-
 import abc
-from typing import Any, Dict, List, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional  # noqa: F401
 
 from pygeofetch.models.download_task import DownloadOptions, DownloadResult
 from pygeofetch.models.satellite_data import ProviderCapabilities, QuotaInfo, SatelliteData
@@ -48,32 +47,26 @@ from pygeofetch.utils.retry_handler import CircuitBreaker
 
 class ProviderError(Exception):
     """Base exception for all provider errors."""
-    pass
 
 
 class AuthenticationError(ProviderError):
     """Raised when authentication fails."""
-    pass
 
 
 class SearchError(ProviderError):
     """Raised when a search operation fails."""
-    pass
 
 
 class DownloadError(ProviderError):
     """Raised when a download operation fails."""
-    pass
 
 
 class QuotaExceededError(ProviderError):
     """Raised when provider quota is exceeded."""
-    pass
 
 
 class ProviderUnavailableError(ProviderError):
     """Raised when a provider is temporarily unavailable."""
-    pass
 
 
 class AbstractBaseProvider(abc.ABC):
@@ -96,10 +89,10 @@ class AbstractBaseProvider(abc.ABC):
     DISPLAY_NAME: str = ""
     REQUIRES_AUTH: bool = True
     DESCRIPTION: str = ""
-    DATA_TYPES: List[str] = []
+    DATA_TYPES: list[str] = []
     BASE_URL: str = ""
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, config: dict[str, Any] | None = None) -> None:
         """
         Initialize the provider.
 
@@ -107,7 +100,7 @@ class AbstractBaseProvider(abc.ABC):
             config: Provider-specific configuration dict overriding defaults.
         """
         self.config = config or {}
-        self._session: Optional[AuthSession] = None
+        self._session: AuthSession | None = None
         self._logger = get_logger(f"provider.{self.PROVIDER_ID}")
         self._circuit_breaker = CircuitBreaker(
             failure_threshold=5,
@@ -135,7 +128,7 @@ class AbstractBaseProvider(abc.ABC):
         """
 
     @abc.abstractmethod
-    def search(self, query: SearchQuery) -> List[SatelliteData]:
+    def search(self, query: SearchQuery) -> list[SatelliteData]:
         """
         Search for satellite data matching the query.
 
@@ -155,7 +148,7 @@ class AbstractBaseProvider(abc.ABC):
     def download(
         self,
         data: SatelliteData,
-        destination: "Path",  # noqa: F821
+        destination: Path,  # noqa: F821
         options: DownloadOptions,
     ) -> DownloadResult:
         """
@@ -217,7 +210,7 @@ class AbstractBaseProvider(abc.ABC):
         return self._session is not None and self._session.is_valid
 
     @property
-    def session(self) -> Optional[AuthSession]:
+    def session(self) -> AuthSession | None:
         """Return the current auth session, or None."""
         return self._session
 
@@ -234,12 +227,13 @@ class AbstractBaseProvider(abc.ABC):
             AuthenticationError: When not authenticated.
         """
         if self.REQUIRES_AUTH and not self.is_authenticated:
-            raise AuthenticationError(
+            msg = (
                 f"Provider '{self.PROVIDER_ID}' requires authentication. "
                 f"Run: pygeofetch auth add {self.PROVIDER_ID}"
             )
+            raise AuthenticationError(msg)
 
-    def _make_http_client(self, **kwargs: Any) -> "httpx.Client":
+    def _make_http_client(self, **kwargs: Any) -> Any:
         """
         Create a configured httpx Client for this provider.
 
@@ -249,7 +243,7 @@ class AbstractBaseProvider(abc.ABC):
         Returns:
             Configured httpx.Client.
         """
-        import httpx
+        import httpx  # lazy import — httpx is a required dep but not imported at module level
 
         timeout = self.config.get("timeout", 60)
         headers = {"User-Agent": "PyGeoFetch/0.1.0"}
@@ -277,30 +271,41 @@ class AbstractBaseProvider(abc.ABC):
             ProviderError: On other 4xx/5xx errors.
         """
         if response.status_code == 401:
-            raise AuthenticationError(
+            msg = (
                 f"Authentication failed for {self.PROVIDER_ID}. "
                 "Please re-authenticate with: pygeofetch auth login"
             )
+            raise AuthenticationError(msg)
         if response.status_code == 403:
-            raise AuthenticationError(
-                f"Access denied for {self.PROVIDER_ID}. "
-                "Check your subscription/permissions."
-            )
+            msg = f"Access denied for {self.PROVIDER_ID}. Check your subscription/permissions."
+            raise AuthenticationError(msg)
         if response.status_code == 429:
-            raise QuotaExceededError(
+            msg = (
                 f"Rate limit exceeded for {self.PROVIDER_ID}. "
                 "Please wait before making more requests."
             )
+            raise QuotaExceededError(msg)
         if response.status_code >= 500:
-            raise ProviderUnavailableError(
-                f"{self.PROVIDER_ID} server error: {response.status_code}"
-            )
+            msg = f"{self.PROVIDER_ID} server error: {response.status_code}"
+            raise ProviderUnavailableError(msg)
         if response.status_code >= 400:
-            raise ProviderError(
+            msg = (
                 f"{self.PROVIDER_ID} request failed: HTTP {response.status_code} - "
                 f"{response.text[:200]}"
             )
+            raise ProviderError(msg)
 
     def __repr__(self) -> str:
         auth_status = "authenticated" if self.is_authenticated else "unauthenticated"
         return f"<{self.__class__.__name__} provider_id={self.PROVIDER_ID!r} {auth_status}>"
+
+
+def _bbox4(v) -> tuple[float, float, float, float] | None:
+    """Normalise any bbox to a 4-float tuple or None."""
+    if v is None:
+        return None
+    try:
+        t = tuple(float(x) for x in list(v)[:4])
+        return t if len(t) == 4 else None
+    except Exception:
+        return None

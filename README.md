@@ -51,7 +51,7 @@ Existing tools address parts of this problem: EODAG supports several providers b
 
 ---
 
-
+## 🚀 Key Features
 
 ### 🛰️ 22+ Satellite Providers
 
@@ -216,11 +216,11 @@ pygeofetch download run \
 
 ```python
 from pathlib import Path
-from pygeofetch import PyGeoFetch
+from pygeofetch import pygeofetch
 from pygeofetch.models.search_query import SearchQuery, BoundingBox
 from pygeofetch.models.download_task import DownloadOptions
 
-client = PyGeoFetch()
+client = pygeofetch()
 
 # Credentials
 client.add_credentials("usgs",       username="user", password="pass")
@@ -451,7 +451,7 @@ COMPLETION
 
 ---
 
-## 🗂️ Project Structure
+<!-- ## 🗂️ Project Structure
 
 ```
 pygeofetch/
@@ -477,7 +477,7 @@ pygeofetch/
 └── .github/workflows/tests.yml
 ```
 
----
+--- -->
 
 ## 📚 Notebooks
 
@@ -527,4 +527,4 @@ pytest tests/unit/ -v
 
 pygeofetch is free and open source software, licensed under the [MIT License](LICENSE).
 
-© 2026 pygeofetch Contributors. Part of the **pygeovision** platform — [pygeofetch](https://github.com/appiahkubis14/pygeofetch) (data + processing) + [pygeovision](https://appiahkubis14.github.io/pygeovision-docs/) (AI) = complete Earth observation pipeline.
+© 2025 pygeofetch Contributors. Part of the **PyGeoVision** platform — [pygeofetch](https://github.com/appiahkubis14/pygeofetch) (data + processing) + [GeoAI](https://opengeoai.org) (AI) = complete Earth observation pipeline.

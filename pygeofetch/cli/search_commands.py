@@ -1,9 +1,10 @@
 """Search CLI commands for PyGeoFetch — full flag set."""
+
 from __future__ import annotations
+
 import json
 import sys
 from pathlib import Path
-from typing import Optional
 
 import click
 from rich.console import Console
@@ -19,41 +20,80 @@ def search() -> None:
 
 @search.command(name="run")
 @click.option("--bbox", "-b", default=None, help='Bounding box "minx,miny,maxx,maxy".')
-@click.option("--geometry-file", "-g", default=None, type=click.Path(exists=True),
-              help="GeoJSON file with search AOI (alternative to --bbox).")
+@click.option(
+    "--geometry-file",
+    "-g",
+    default=None,
+    type=click.Path(exists=True),
+    help="GeoJSON file with search AOI (alternative to --bbox).",
+)
 @click.option("--start-date", "-s", default=None, help="Start date YYYY-MM-DD.")
 @click.option("--end-date", "-e", default=None, help="End date YYYY-MM-DD.")
-@click.option("--cloud-cover", "-c", default="0-100", show_default=True,
-              help='Cloud cover range "min-max" e.g. 0-20.')
-@click.option("--resolution", default=None,
-              help='Resolution range in metres "min-max" e.g. 10-30.')
+@click.option(
+    "--cloud-cover",
+    "-c",
+    default="0-100",
+    show_default=True,
+    help='Cloud cover range "min-max" e.g. 0-20.',
+)
+@click.option("--resolution", default=None, help='Resolution range in metres "min-max" e.g. 10-30.')
 @click.option("--processing-level", default=None, help="Processing level e.g. L2A.")
-@click.option("--providers", "-p", default=None,
-              help="Comma-separated provider IDs e.g. usgs,copernicus,planetary_computer.")
-@click.option("--satellites", default=None,
-              help="Comma-separated satellite names e.g. Sentinel-2,Landsat-8.")
+@click.option(
+    "--providers",
+    "-p",
+    default=None,
+    help="Comma-separated provider IDs e.g. usgs,copernicus,planetary_computer.",
+)
+@click.option(
+    "--satellites", default=None, help="Comma-separated satellite names e.g. Sentinel-2,Landsat-8."
+)
 @click.option("--max-results", "-n", default=100, show_default=True)
-@click.option("--sort-by", default="datetime",
-              type=click.Choice(["datetime", "cloud_cover", "score", "satellite"]),
-              show_default=True, help="Sort field.")
-@click.option("--sort-order", default="desc",
-              type=click.Choice(["asc", "desc"]), show_default=True)
+@click.option(
+    "--sort-by",
+    default="datetime",
+    type=click.Choice(["datetime", "cloud_cover", "score", "satellite"]),
+    show_default=True,
+    help="Sort field.",
+)
+@click.option("--sort-order", default="desc", type=click.Choice(["asc", "desc"]), show_default=True)
 @click.option("--cql2", default=None, help="CQL2 filter expression.")
 @click.option("--output", "-o", default=None, help="Save results to this file.")
-@click.option("--format", "fmt",
-              default="table",
-              type=click.Choice(["table", "json", "stac", "geojson", "geoparquet", "csv", "ids"]),
-              show_default=True, help="Output format.")
-@click.option("--on-provider-failure", default="skip",
-              type=click.Choice(["skip", "abort", "retry"]),
-              show_default=True, help="How to handle provider failures.")
-@click.option("--timeout", default=60, show_default=True,
-              help="Per-provider timeout in seconds.")
+@click.option(
+    "--format",
+    "fmt",
+    default="table",
+    type=click.Choice(["table", "json", "stac", "geojson", "geoparquet", "csv", "ids"]),
+    show_default=True,
+    help="Output format.",
+)
+@click.option(
+    "--on-provider-failure",
+    default="skip",
+    type=click.Choice(["skip", "abort", "retry"]),
+    show_default=True,
+    help="How to handle provider failures.",
+)
+@click.option("--timeout", default=60, show_default=True, help="Per-provider timeout in seconds.")
 @click.option("--no-cache", is_flag=True, default=False, help="Bypass result cache.")
 def search_run(
-    bbox, geometry_file, start_date, end_date, cloud_cover, resolution,
-    processing_level, providers, satellites, max_results, sort_by, sort_order,
-    cql2, output, fmt, on_provider_failure, timeout, no_cache,
+    bbox,
+    geometry_file,
+    start_date,
+    end_date,
+    cloud_cover,
+    resolution,
+    processing_level,
+    providers,
+    satellites,
+    max_results,
+    sort_by,
+    sort_order,
+    cql2,
+    output,
+    fmt,
+    on_provider_failure,
+    timeout,
+    no_cache,
 ) -> None:
     """
     Search for satellite imagery across one or more providers.
@@ -105,7 +145,11 @@ def search_run(
     if geometry_file:
         with open(geometry_file) as f:
             gj = json.load(f)
-        geom = gj if gj.get("type") in ("Polygon", "MultiPolygon") else gj.get("geometry") or (gj.get("features") or [{}])[0].get("geometry")
+        geom = (
+            gj
+            if gj.get("type") in ("Polygon", "MultiPolygon")
+            else gj.get("geometry") or (gj.get("features") or [{}])[0].get("geometry")
+        )
         geometry_geojson = geom
         # Derive bbox from geometry
         coords = []
@@ -116,7 +160,9 @@ def search_run(
         if coords:
             lons = [c[0] for c in coords]
             lats = [c[1] for c in coords]
-            bbox_obj = BoundingBox(min_lon=min(lons), min_lat=min(lats), max_lon=max(lons), max_lat=max(lats))
+            bbox_obj = BoundingBox(
+                min_lon=min(lons), min_lat=min(lats), max_lon=max(lons), max_lat=max(lats)
+            )
     elif bbox:
         try:
             bbox_obj = BoundingBox.from_string(bbox)
@@ -181,9 +227,22 @@ def search_run(
             console.print("[yellow]--output required for geoparquet format[/]")
     elif fmt == "csv":
         if not output:
-            import io, csv as csv_mod
+            import csv as csv_mod
+            import io
+
             buf = io.StringIO()
-            writer = csv_mod.DictWriter(buf, fieldnames=["id","provider","satellite","datetime","cloud_cover","score","bbox"])
+            writer = csv_mod.DictWriter(
+                buf,
+                fieldnames=[
+                    "id",
+                    "provider",
+                    "satellite",
+                    "datetime",
+                    "cloud_cover",
+                    "score",
+                    "bbox",
+                ],
+            )
             writer.writeheader()
             for r in results:
                 writer.writerow(_item_to_dict(r))
@@ -207,15 +266,18 @@ def _display_table(results) -> None:
         score = f"{r.score:.2f}" if r.score else "—"
         table.add_row(r.id[:30], r.provider, date_str, cloud, score, r.satellite or "—")
     if len(results) > 50:
-        table.add_row("...", "...", "...", "...", "...", f"(+{len(results)-50} more)")
+        table.add_row("...", "...", "...", "...", "...", f"(+{len(results) - 50} more)")
     console.print(table)
 
 
 def _item_to_dict(r) -> dict:
     return {
-        "id": r.id, "provider": r.provider, "satellite": r.satellite,
+        "id": r.id,
+        "provider": r.provider,
+        "satellite": r.satellite,
         "datetime": str(r.properties.get("datetime", "") if r.properties else ""),
-        "cloud_cover": r.cloud_cover, "score": r.score,
+        "cloud_cover": r.cloud_cover,
+        "score": r.score,
         "bbox": list(r.bbox) if r.bbox else None,
     }
 
@@ -225,6 +287,7 @@ def _save_geoparquet(results, path: Path) -> None:
         import geopandas as gpd
         import pandas as pd
         from shapely.geometry import box as shapely_box
+
         records = [_item_to_dict(r) for r in results]
         df = pd.DataFrame(records)
         geoms = [shapely_box(*r["bbox"]) if r["bbox"] else None for r in records]
@@ -234,16 +297,24 @@ def _save_geoparquet(results, path: Path) -> None:
     except ImportError:
         console.print("[yellow]geopandas not installed — saving as GeoJSON instead.[/]")
         import json as _json
-        path.with_suffix(".geojson").write_text(_json.dumps(
-            {"type": "FeatureCollection", "features": [_item_to_dict(r) for r in results]},
-            indent=2, default=str
-        ))
+
+        path.with_suffix(".geojson").write_text(
+            _json.dumps(
+                {"type": "FeatureCollection", "features": [_item_to_dict(r) for r in results]},
+                indent=2,
+                default=str,
+            )
+        )
 
 
 def _save_csv(results, path: Path) -> None:
     import csv as csv_mod
+
     with open(path, "w", newline="") as f:
-        writer = csv_mod.DictWriter(f, fieldnames=["id","provider","satellite","datetime","cloud_cover","score","bbox"])
+        writer = csv_mod.DictWriter(
+            f,
+            fieldnames=["id", "provider", "satellite", "datetime", "cloud_cover", "score", "bbox"],
+        )
         writer.writeheader()
         for r in results:
             writer.writerow(_item_to_dict(r))

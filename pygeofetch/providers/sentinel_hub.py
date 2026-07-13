@@ -15,17 +15,30 @@ Example::
 from __future__ import annotations
 
 import time
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 from pygeofetch.models.download_task import DownloadOptions, DownloadResult, DownloadStatus
 from pygeofetch.models.satellite_data import (
-    DataFormat, ProviderCapabilities, QuotaInfo, SatelliteData, SatelliteAsset,
+    DataFormat,
+    ProviderCapabilities,
+    QuotaInfo,
+    SatelliteData,
 )
-from pygeofetch.models.search_query import SearchQuery
 from pygeofetch.models.user_auth import AuthSession, Credentials
 from pygeofetch.providers.base import AbstractBaseProvider, AuthenticationError, SearchError
+
+if TYPE_CHECKING:
+    from pygeofetch.models.search_query import SearchQuery
+
+
+def _plain(v) -> str:
+    if v is None:
+        return ""
+    if hasattr(v, "get_secret_value"):
+        return v.get_secret_value()
+    return str(v)
 
 
 class SentinelHubProvider(AbstractBaseProvider):
@@ -34,7 +47,14 @@ class SentinelHubProvider(AbstractBaseProvider):
     REQUIRES_AUTH = True
     DESCRIPTION = "Cloud API for Sentinel-1/2/3, Landsat, MODIS. Requires subscription."
     DATA_TYPES = ["Sentinel-1", "Sentinel-2", "Sentinel-3", "Landsat", "MODIS", "DEM"]
-    SATELLITES = ["Sentinel-1", "Sentinel-2A", "Sentinel-2B", "Sentinel-3", "Landsat-8", "Landsat-9"]
+    SATELLITES = [
+        "Sentinel-1",
+        "Sentinel-2A",
+        "Sentinel-2B",
+        "Sentinel-3",
+        "Landsat-8",
+        "Landsat-9",
+    ]
     BASE_URL = "https://services.sentinel-hub.com"
     AUTH_URL = "https://services.sentinel-hub.com/auth/realms/main/protocol/openid-connect/token"
 
@@ -50,21 +70,27 @@ class SentinelHubProvider(AbstractBaseProvider):
 
     def authenticate(self, credentials: Credentials) -> AuthSession:
         import httpx
+
         client_id = credentials.client_id or credentials.username
         client_secret = credentials.client_secret or credentials.password
         if not client_id or not client_secret:
-            raise AuthenticationError(
+            msg = (
                 "Sentinel Hub requires client_id and client_secret. "
                 "Register at: https://apps.sentinel-hub.com/"
             )
+            raise AuthenticationError(msg)
         resp = httpx.post(
             self.AUTH_URL,
-            data={"grant_type": "client_credentials",
-                  "client_id": client_id, "client_secret": client_secret},
+            data={
+                "grant_type": "client_credentials",
+                "client_id": client_id,
+                "client_secret": client_secret,
+            },
             timeout=30,
         )
         if resp.status_code == 401:
-            raise AuthenticationError("Invalid Sentinel Hub credentials.")
+            msg = "Invalid Sentinel Hub credentials."
+            raise AuthenticationError(msg)
         resp.raise_for_status()
         data = resp.json()
         token = data["access_token"]
@@ -80,18 +106,21 @@ class SentinelHubProvider(AbstractBaseProvider):
         return session
 
     def validate_credentials(self, credentials: Credentials) -> bool:
-        return bool((credentials.client_id or credentials.username) and
-                    (credentials.client_secret or credentials.password))
+        return bool(
+            (credentials.client_id or credentials.username)
+            and (credentials.client_secret or credentials.password)
+        )
 
     def set_session(self, session: Any) -> None:
         """Store an authenticated session for use in requests."""
         self._session = session
 
-    def search(self, query: SearchQuery) -> List[SatelliteData]:
+    def search(self, query: SearchQuery) -> list[SatelliteData]:
         self.require_auth()
         import httpx
+
         data_source = self._resolve_datasource(query)
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "collections": {"input": [{"type": data_source}]},
             "limit": min(query.max_results, 100),
         }
@@ -100,15 +129,22 @@ class SentinelHubProvider(AbstractBaseProvider):
             payload["spatial"] = {"bbox": [bb.min_lon, bb.min_lat, bb.max_lon, bb.max_lat]}
         if query.start_date or query.end_date:
             payload["timeRange"] = {
-                "from": f"{query.start_date}T00:00:00Z" if query.start_date else "2015-01-01T00:00:00Z",
-                "to": f"{query.end_date}T23:59:59Z" if query.end_date else datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "from": f"{query.start_date}T00:00:00Z"
+                if query.start_date
+                else "2015-01-01T00:00:00Z",
+                "to": f"{query.end_date}T23:59:59Z"
+                if query.end_date
+                else datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
             }
         if query.cloud_cover_max is not None:
             payload["filter"] = {"maxCloudCoverage": query.cloud_cover_max}
         try:
             resp = httpx.post(
-                f"{self.BASE_URL}/api/v1/catalog/1.0.6/search",
-                json=payload, headers={"Authorization": f"Bearer {self._session.access_token}"},
+                f"{self.BASE_URL}/api/v1/catalog/1.1.0/search",
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {self._session.access_token if self._session else ''}"  # noqa: E501
+                },
                 timeout=self.config.get("timeout", 60),
             )
             if resp.status_code != 200:
@@ -116,7 +152,8 @@ class SentinelHubProvider(AbstractBaseProvider):
             features = resp.json().get("features", [])
             return [SatelliteData.from_stac_item(f, self.PROVIDER_ID) for f in features]
         except Exception as exc:
-            raise SearchError(f"Sentinel Hub search failed: {exc}") from exc
+            msg = f"Sentinel Hub search failed: {exc}"
+            raise SearchError(msg) from exc
 
     def _resolve_datasource(self, query: SearchQuery) -> str:
         if not query.satellites:
@@ -127,11 +164,14 @@ class SentinelHubProvider(AbstractBaseProvider):
                 return ds
         return "S2L2A"
 
-    def download(self, data: SatelliteData, destination: Path, options: DownloadOptions) -> DownloadResult:
+    def download(
+        self, data: SatelliteData, destination: Path, options: DownloadOptions
+    ) -> DownloadResult:
         self.require_auth()
         destination = Path(destination)
         destination.mkdir(parents=True, exist_ok=True)
         import httpx
+
         start = time.time()
         output_paths, total_bytes = [], 0
         for key, asset in (data.data_assets or data.assets).items():
@@ -139,39 +179,74 @@ class SentinelHubProvider(AbstractBaseProvider):
                 continue
             out_file = destination / (asset.href.split("/")[-1] or f"{data.id}_{key}.tif")
             try:
-                with httpx.stream("GET", asset.href,
-                                  headers={"Authorization": f"Bearer {self._session.access_token}"},
-                                  timeout=options.timeout_seconds) as resp:
+                with httpx.stream(
+                    "GET",
+                    asset.href,
+                    headers={
+                        "Authorization": f"Bearer {self._session.access_token if self._session else ''}"  # noqa: E501
+                    },
+                    timeout=options.timeout_seconds,
+                ) as resp:
                     self._handle_http_error(resp)
                     with open(out_file, "wb") as f:
-                        for chunk in resp.iter_bytes(chunk_size=int(options.chunk_size_mb * 1024 * 1024)):
-                            f.write(chunk)
+                        f.writelines(
+                            resp.iter_bytes(chunk_size=int(options.chunk_size_mb * 1024 * 1024))
+                        )
                 output_paths.append(out_file)
                 total_bytes += out_file.stat().st_size
             except Exception as exc:
                 self._logger.warning(f"Asset {key} failed: {exc}")
         if not output_paths:
-            return DownloadResult(status=DownloadStatus.FAILED, data_id=data.id,
-                                  provider=self.PROVIDER_ID, error="No assets downloaded")
-        return DownloadResult(status=DownloadStatus.COMPLETED, data_id=data.id,
-                              provider=self.PROVIDER_ID, output_path=output_paths[0],
-                              output_paths=output_paths, bytes_downloaded=total_bytes,
-                              duration_seconds=time.time() - start)
+            return DownloadResult(
+                status=DownloadStatus.FAILED,
+                data_id=data.id,
+                provider=self.PROVIDER_ID,
+                error="No assets downloaded",
+            )
+        return DownloadResult(
+            status=DownloadStatus.COMPLETED,
+            data_id=data.id,
+            provider=self.PROVIDER_ID,
+            output_path=output_paths[0],
+            output_paths=output_paths,
+            bytes_downloaded=total_bytes,
+            duration_seconds=time.time() - start,
+        )
 
     def get_capabilities(self) -> ProviderCapabilities:
         return ProviderCapabilities(
-            provider_id=self.PROVIDER_ID, name=self.DISPLAY_NAME, description=self.DESCRIPTION,
+            provider_id=self.PROVIDER_ID,
+            name=self.DISPLAY_NAME,
+            description=self.DESCRIPTION,
             auth_type="oauth2_client",
-            satellites=["Sentinel-1", "Sentinel-2", "Sentinel-3", "Landsat-8", "Landsat-9", "MODIS"],
-            search=True, download=True, streaming=True, stac=True,
-            supports_sar=True, supports_cql2=True,
-            supports_aoi_filter=True, supports_cloud_filter=True, supports_date_filter=True,
-            requires_auth=True, has_quota=True, regions=["global"],
-            resolution_min_m=3.0, resolution_max_m=1000.0,
-            endpoint_url=self.BASE_URL, docs_url="https://docs.sentinel-hub.com/",
+            satellites=[
+                "Sentinel-1",
+                "Sentinel-2",
+                "Sentinel-3",
+                "Landsat-8",
+                "Landsat-9",
+                "MODIS",
+            ],
+            search=True,
+            download=True,
+            streaming=True,
+            stac=True,
+            supports_sar=True,
+            supports_cql2=True,
+            supports_aoi_filter=True,
+            supports_cloud_filter=True,
+            supports_date_filter=True,
+            requires_auth=True,
+            regions=["global"],
+            resolution_min_m=3.0,
+            resolution_max_m=1000.0,
+            endpoint_url=self.BASE_URL,
+            docs_url="https://docs.sentinel-hub.com/",
             supported_formats=[DataFormat.GEOTIFF, DataFormat.COG],
         )
 
     def get_quota_info(self) -> QuotaInfo:
-        return QuotaInfo(provider=self.PROVIDER_ID, has_quota=True,
-                         extra_info={"note": "Quota depends on Sentinel Hub subscription."})
+        return QuotaInfo(
+            provider=self.PROVIDER_ID,
+            extra_info={"note": "Quota depends on Sentinel Hub subscription."},
+        )

@@ -30,6 +30,7 @@ def config() -> None:
 def config_show(as_json: bool) -> None:
     """Show the effective configuration (all layers merged)."""
     import json
+
     from pygeofetch.config.settings import get_settings
 
     settings = get_settings()
@@ -40,6 +41,7 @@ def config_show(as_json: bool) -> None:
         return
 
     import yaml
+
     rendered = yaml.dump(data, default_flow_style=False, sort_keys=True)
     console.print(Syntax(rendered, "yaml", theme="monokai"))
 
@@ -85,7 +87,7 @@ def config_set(key: str, value: str) -> None:
       pygeofetch config set download.parallel 4
       pygeofetch config set cache.ttl_seconds 7200
     """
-    from pygeofetch.config.settings import get_settings, save_user_config
+    from pygeofetch.config.settings import save_user_config
 
     # Try to coerce to typed value
     typed_value: object = value

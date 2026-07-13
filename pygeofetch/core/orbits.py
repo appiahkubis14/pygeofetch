@@ -23,10 +23,10 @@ from __future__ import annotations
 
 import logging
 import re
-import requests
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from typing import Optional
+
+import requests
 
 logger = logging.getLogger("pygeofetch.orbits")
 
@@ -47,7 +47,7 @@ def fetch_orbit_file(
     output_dir: str = "./orbits/",
     orbit_type: str = "precise",
     timeout: int = 60,
-) -> Optional[str]:
+) -> str | None:
     """
     Download the orbit file for a Sentinel-1 SLC product.
 
@@ -94,7 +94,8 @@ def fetch_orbit_file(
                 "Precise orbit (POEORB) for %s typically published 21 days after "
                 "acquisition. Only %d day(s) have passed — orbit may not be available yet. "
                 "Consider orbit_type='restituted' for near-real-time processing.",
-                sat, days_since
+                sat,
+                days_since,
             )
 
     # Check cache first
@@ -103,7 +104,7 @@ def fetch_orbit_file(
         logger.info("Using cached orbit file: %s", cached.name)
         return str(cached)
 
-    base_url   = POEORB_BASE_URL if orbit_type == "precise" else RESORB_BASE_URL
+    base_url = POEORB_BASE_URL if orbit_type == "precise" else RESORB_BASE_URL
     year_month = acq_dt.strftime("%Y/%m")
     listing_url = f"{base_url}/{_SAT_DIR.get(sat, sat)}/{year_month}/"
 
@@ -118,17 +119,20 @@ def fetch_orbit_file(
                 "No %s orbit file found for %s on %s. "
                 "If acquisition is < 21 days ago, precise orbit may not be published yet. "
                 "Try orbit_type='restituted' instead.",
-                orbit_type, sat, acq_dt.date()
+                orbit_type,
+                sat,
+                acq_dt.date(),
             )
             return None
 
         download_url = f"{listing_url}{orbit_filename}"
-        output_path  = out_dir / orbit_filename
+        output_path = out_dir / orbit_filename
 
         logger.info("Downloading orbit file: %s", orbit_filename)
         _download_file(download_url, output_path, timeout=timeout)
-        logger.info("Orbit file saved: %s (%.1f KB)", output_path,
-                    output_path.stat().st_size / 1024)
+        logger.info(
+            "Orbit file saved: %s (%.1f KB)", output_path, output_path.stat().st_size / 1024
+        )
         return str(output_path)
 
     except requests.exceptions.ConnectionError as exc:
@@ -148,7 +152,7 @@ def fetch_orbit_file(
         return None
 
 
-def _parse_acquisition_datetime(product_name: str) -> Optional[datetime]:
+def _parse_acquisition_datetime(product_name: str) -> datetime | None:
     """Extract acquisition start time from Sentinel-1 product name.
 
     Handles both:
@@ -180,8 +184,10 @@ def _parse_satellite(product_name: str) -> str:
         if sat in name:
             return sat
     for full, short in [
-        ("SENTINEL-1D", "S1D"), ("SENTINEL-1C", "S1C"),
-        ("SENTINEL-1B", "S1B"), ("SENTINEL-1A", "S1A"),
+        ("SENTINEL-1D", "S1D"),
+        ("SENTINEL-1C", "S1C"),
+        ("SENTINEL-1B", "S1B"),
+        ("SENTINEL-1A", "S1A"),
     ]:
         if full in name:
             return short
@@ -194,9 +200,9 @@ def _find_cached_orbit(
     satellite: str,
     acq_dt: datetime,
     orbit_type: str,
-) -> Optional[Path]:
+) -> Path | None:
     """Return a cached orbit file if one covering acq_dt exists."""
-    ext    = "POEORB" if orbit_type == "precise" else "RESORB"
+    ext = "POEORB" if orbit_type == "precise" else "RESORB"
     prefix = f"{satellite}_OPER_AUX_{ext}"
     for f in directory.glob(f"{prefix}*.EOF"):
         if _orbit_covers_datetime(f.name, acq_dt):
@@ -210,18 +216,18 @@ def _orbit_covers_datetime(filename: str, acq_dt: datetime) -> bool:
     m = re.search(r"_V(\d{8}T\d{6})_(\d{8}T\d{6})\.EOF$", filename)
     if not m:
         return False
-    fmt   = "%Y%m%dT%H%M%S"
+    fmt = "%Y%m%dT%H%M%S"
     try:
         start = datetime.strptime(m.group(1), fmt)
-        stop  = datetime.strptime(m.group(2), fmt)
+        stop = datetime.strptime(m.group(2), fmt)
         return start <= acq_dt <= stop
     except ValueError:
         return False
 
 
-def _find_matching_orbit_file(listing_html: str, acq_dt: datetime) -> Optional[str]:
+def _find_matching_orbit_file(listing_html: str, acq_dt: datetime) -> str | None:
     """Parse an HTML directory listing and find the orbit file covering acq_dt."""
-    pattern = r'href="(S1[ABCD]_OPER_AUX_(?:POEORB|RESORB)_[^"]+[.]EOF)"' 
+    pattern = r'href="(S1[ABCD]_OPER_AUX_(?:POEORB|RESORB)_[^"]+[.]EOF)"'
     filenames = re.findall(pattern, listing_html)
     for fname in filenames:
         if _orbit_covers_datetime(fname, acq_dt):

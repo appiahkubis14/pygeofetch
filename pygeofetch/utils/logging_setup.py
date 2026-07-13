@@ -6,21 +6,21 @@ New code should import from pygeofetch.core.logging directly.
 """
 
 from pygeofetch.core.logging import (  # noqa: F401 — re-exported for compat
-    configure_logging,
-    get_logger,
-    _render_progress_bar,
     _PGFFormatter,
     _redact,
+    _render_progress_bar,
+    configure_logging,
+    get_logger,
 )
 
 
 def setup_logging(
     level: str = "INFO",
     log_file=None,
-    use_rich: bool = True,      # accepted but ignored — we use _PGFFormatter
+    use_rich: bool = True,  # accepted but ignored — we use _PGFFormatter
     use_colour: bool = True,
     show_module: bool = True,
-    **kwargs,                   # absorb any future/unknown keyword arguments
+    **kwargs,  # absorb any future/unknown keyword arguments
 ) -> None:
     """
     Configure PyGeoFetch logging.

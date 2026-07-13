@@ -39,11 +39,11 @@ import threading
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 import yaml
 
-from pygeofetch.utils.logging_setup import get_logger
+from pygeofetch.core.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -51,7 +51,7 @@ logger = get_logger(__name__)
 class PipelineStep:
     """Single step in a pipeline definition."""
 
-    def __init__(self, step_type: str, config: Dict[str, Any]) -> None:
+    def __init__(self, step_type: str, config: dict[str, Any]) -> None:
         self.step_type = step_type
         self.config = config
 
@@ -73,19 +73,19 @@ class Pipeline:
     def __init__(
         self,
         name: str,
-        steps: List[PipelineStep],
-        schedule: Optional[str] = None,
+        steps: list[PipelineStep],
+        schedule: str | None = None,
         description: str = "",
     ) -> None:
         self.name = name
         self.steps = steps
         self.schedule = schedule
         self.description = description
-        self.last_run: Optional[datetime] = None
+        self.last_run: datetime | None = None
         self.run_count: int = 0
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Pipeline":
+    def from_dict(cls, data: dict[str, Any]) -> Pipeline:
         """
         Parse a pipeline from a dictionary (e.g. loaded from YAML).
 
@@ -100,13 +100,15 @@ class Pipeline:
         """
         name = data.get("name")
         if not name:
-            raise ValueError("Pipeline definition missing 'name'")
+            msg = "Pipeline definition missing 'name'"
+            raise ValueError(msg)
 
         raw_steps = data.get("steps", [])
-        steps: List[PipelineStep] = []
+        steps: list[PipelineStep] = []
         for raw in raw_steps:
             if not isinstance(raw, dict) or len(raw) != 1:
-                raise ValueError(f"Invalid step definition: {raw!r}")
+                msg = f"Invalid step definition: {raw!r}"
+                raise ValueError(msg)
             step_type, cfg = next(iter(raw.items()))
             steps.append(PipelineStep(step_type=step_type, config=cfg or {}))
 
@@ -132,7 +134,7 @@ class PipelineRunner:
     def __init__(self, engine: Any) -> None:
         self.engine = engine
 
-    def run(self, pipeline: Pipeline) -> Dict[str, Any]:
+    def run(self, pipeline: Pipeline) -> dict[str, Any]:
         """
         Execute all steps in a pipeline sequentially.
 
@@ -144,11 +146,11 @@ class PipelineRunner:
         """
         logger.info(f"Starting pipeline: {pipeline.name!r} ({len(pipeline.steps)} steps)")
         start_time = datetime.utcnow()
-        step_results: List[Dict[str, Any]] = []
-        context: Dict[str, Any] = {}  # shared state passed between steps
+        step_results: list[dict[str, Any]] = []
+        context: dict[str, Any] = {}  # shared state passed between steps
 
         for i, step in enumerate(pipeline.steps):
-            logger.info(f"  Step {i+1}/{len(pipeline.steps)}: {step.step_type}")
+            logger.info(f"  Step {i + 1}/{len(pipeline.steps)}: {step.step_type}")
             try:
                 result = self._run_step(step, context)
                 step_results.append({"step": step.step_type, "status": "ok", "result": result})
@@ -175,21 +177,21 @@ class PipelineRunner:
         )
         return summary
 
-    def _run_step(self, step: PipelineStep, context: Dict[str, Any]) -> Any:
+    def _run_step(self, step: PipelineStep, context: dict[str, Any]) -> Any:
         """Dispatch a single step to the appropriate handler."""
         handler = getattr(self, f"_step_{step.step_type}", None)
         if handler is None:
-            raise NotImplementedError(f"Unknown step type: {step.step_type!r}")
+            msg = f"Unknown step type: {step.step_type!r}"
+            raise NotImplementedError(msg)
         return handler(step.config, context)
 
     # ------------------------------------------------------------------
     # Step handlers
     # ------------------------------------------------------------------
 
-    def _step_search(self, config: Dict[str, Any], context: Dict[str, Any]) -> Any:
+    def _step_search(self, config: dict[str, Any], context: dict[str, Any]) -> Any:
         """Execute a search step."""
-        from pygeofetch.models.search_query import SearchQuery, BoundingBox
-        from datetime import date
+        from pygeofetch.models.search_query import BoundingBox, SearchQuery
 
         providers = config.get("providers")
         cloud_str = config.get("cloud_cover", "0-100")
@@ -214,7 +216,7 @@ class PipelineRunner:
         logger.info(f"    search → {len(results)} results")
         return results
 
-    def _step_filter(self, config: Dict[str, Any], context: Dict[str, Any]) -> Any:
+    def _step_filter(self, config: dict[str, Any], context: dict[str, Any]) -> Any:
         """Filter search results by an expression."""
         results = context.get("search", [])
         expression = config.get("expression", "")
@@ -232,7 +234,7 @@ class PipelineRunner:
         logger.info(f"    filter: {len(results)} → {len(filtered)} items")
         return filtered
 
-    def _step_download(self, config: Dict[str, Any], context: Dict[str, Any]) -> Any:
+    def _step_download(self, config: dict[str, Any], context: dict[str, Any]) -> Any:
         """Download items from a previous search step."""
         from pygeofetch.models.download_task import DownloadOptions
 
@@ -252,13 +254,13 @@ class PipelineRunner:
         logger.info(f"    download: {succeeded}/{len(results)} succeeded")
         return results
 
-    def _step_process(self, config: Dict[str, Any], context: Dict[str, Any]) -> Any:
+    def _step_process(self, config: dict[str, Any], context: dict[str, Any]) -> Any:
         """Placeholder for processing actions (atmospheric correction, NDVI, etc.)."""
         actions = config if isinstance(config, list) else config.get("actions", [])
         logger.info(f"    process: {len(actions)} actions (stub — integrate custom processors)")
         return {"actions": actions, "status": "stub"}
 
-    def _step_export(self, config: Dict[str, Any], context: Dict[str, Any]) -> Any:
+    def _step_export(self, config: dict[str, Any], context: dict[str, Any]) -> Any:
         """Placeholder for export step."""
         destination = config.get("destination", "./export")
         fmt = config.get("format", "geotiff")
@@ -279,9 +281,9 @@ class PipelineRunner:
             return 0.0, 100.0
 
     @staticmethod
-    def _parse_date_range(date_range: str, config: Dict[str, Any]):
+    def _parse_date_range(date_range: str, config: dict[str, Any]):
         """Resolve date_range keywords or explicit start/end."""
-        from datetime import date, timedelta
+        from datetime import date
 
         today = date.today()
         if date_range == "last_7_days":
@@ -308,20 +310,20 @@ class PipelineScheduler:
         scheduler.start()   # blocking loop
     """
 
-    def __init__(self, engine: Optional[Any] = None) -> None:
-        self._pipelines: Dict[str, Pipeline] = {}
+    def __init__(self, engine: Any | None = None) -> None:
+        self._pipelines: dict[str, Pipeline] = {}
         self._engine = engine
-        self._runner: Optional[PipelineRunner] = None
+        self._runner: PipelineRunner | None = None
         self._scheduler = sched.scheduler(time.monotonic, time.sleep)
         self._running = False
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
 
     def set_engine(self, engine: Any) -> None:
         """Attach a PyGeoFetch engine instance."""
         self._engine = engine
         self._runner = PipelineRunner(engine)
 
-    def load_pipeline(self, path: Union[str, Path]) -> Pipeline:
+    def load_pipeline(self, path: str | Path) -> Pipeline:
         """
         Load a pipeline from a YAML file and register it.
 
@@ -343,7 +345,7 @@ class PipelineScheduler:
         """Register a Pipeline object directly."""
         self._pipelines[pipeline.name] = pipeline
 
-    def list_pipelines(self) -> List[Dict[str, Any]]:
+    def list_pipelines(self) -> list[dict[str, Any]]:
         """Return a summary of all registered pipelines."""
         return [
             {
@@ -356,7 +358,7 @@ class PipelineScheduler:
             for p in self._pipelines.values()
         ]
 
-    def run_once(self, name: str) -> Dict[str, Any]:
+    def run_once(self, name: str) -> dict[str, Any]:
         """
         Execute a pipeline immediately, once.
 
@@ -367,7 +369,8 @@ class PipelineScheduler:
             Execution summary dict from PipelineRunner.run().
         """
         if name not in self._pipelines:
-            raise KeyError(f"Unknown pipeline: {name!r}")
+            msg = f"Unknown pipeline: {name!r}"
+            raise KeyError(msg)
         runner = self._get_runner()
         return runner.run(self._pipelines[name])
 
@@ -401,7 +404,8 @@ class PipelineScheduler:
     def _get_runner(self) -> PipelineRunner:
         if self._runner is None:
             if self._engine is None:
-                raise RuntimeError("No engine attached — call set_engine() first")
+                msg = "No engine attached — call set_engine() first"
+                raise RuntimeError(msg)
             self._runner = PipelineRunner(self._engine)
         return self._runner
 
@@ -427,9 +431,7 @@ class PipelineScheduler:
         finally:
             if self._running and pipeline.schedule:
                 delay = self._next_run_delay(pipeline.schedule)
-                self._scheduler.enter(
-                    delay, 1, self._run_pipeline_and_reschedule, (pipeline,)
-                )
+                self._scheduler.enter(delay, 1, self._run_pipeline_and_reschedule, (pipeline,))
 
     def _run_loop(self) -> None:
         """Blocking scheduler event loop."""
@@ -456,6 +458,7 @@ class PipelineScheduler:
         """
         try:
             import croniter  # type: ignore
+
             itr = croniter.croniter(cron_expr, datetime.utcnow())
             next_dt = itr.get_next(datetime)
             delay = (next_dt - datetime.utcnow()).total_seconds()
@@ -470,4 +473,3 @@ class PipelineScheduler:
 
 
 # Type alias to avoid circular import confusion
-from typing import Union

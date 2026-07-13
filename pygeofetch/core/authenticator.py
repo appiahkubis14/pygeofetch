@@ -21,13 +21,14 @@ from __future__ import annotations
 
 import base64
 import json
-import os
-from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
-from pygeofetch.models.user_auth import AuthSession, AuthType, Credentials
 from pygeofetch.core.logging import get_logger
+from pygeofetch.models.user_auth import AuthSession, AuthType, Credentials
+
+if TYPE_CHECKING:
+    import builtins
 
 logger = get_logger(__name__)
 
@@ -45,9 +46,9 @@ class CredentialStore:
         self.storage_backend = storage_backend
         self._config_dir = Path.home() / ".pygeofetch"
         self._cred_file = self._config_dir / "credentials.json"
-        self._in_memory: Dict[str, Dict[str, Any]] = {}
+        self._in_memory: dict[str, dict[str, Any]] = {}
 
-    def save(self, provider: str, credentials: Dict[str, Any]) -> None:
+    def save(self, provider: str, credentials: dict[str, Any]) -> None:
         """Persist credentials for a provider."""
         if self.storage_backend == "keyring":
             self._save_keyring(provider, credentials)
@@ -55,7 +56,7 @@ class CredentialStore:
             self._save_file(provider, credentials)
         self._in_memory[provider] = credentials
 
-    def load(self, provider: str) -> Optional[Dict[str, Any]]:
+    def load(self, provider: str) -> dict[str, Any] | None:
         """Load credentials for a provider — keyring first, then file fallback."""
         if provider in self._in_memory:
             return self._in_memory[provider]
@@ -77,7 +78,7 @@ class CredentialStore:
             return self._delete_keyring(provider)
         return self._delete_file(provider)
 
-    def list_providers(self) -> List[str]:
+    def list_providers(self) -> list[str]:
         """Return list of providers with stored credentials."""
         providers = set(self._in_memory.keys())
         if self._cred_file.exists():
@@ -88,12 +89,11 @@ class CredentialStore:
                 pass
         return sorted(providers)
 
-    def _save_keyring(self, provider: str, credentials: Dict[str, Any]) -> None:
+    def _save_keyring(self, provider: str, credentials: dict[str, Any]) -> None:
         try:
             import keyring
-            keyring.set_password(
-                self.SERVICE_NAME, provider, json.dumps(credentials)
-            )
+
+            keyring.set_password(self.SERVICE_NAME, provider, json.dumps(credentials))
             logger.debug(f"Credentials for {provider!r} saved to system keyring")
         except ImportError:
             logger.warning("keyring package not available; falling back to file storage")
@@ -102,9 +102,10 @@ class CredentialStore:
             logger.warning(f"Keyring save failed: {exc}; falling back to file storage")
             self._save_file(provider, credentials)
 
-    def _load_keyring(self, provider: str) -> Optional[Dict[str, Any]]:
+    def _load_keyring(self, provider: str) -> dict[str, Any] | None:
         try:
             import keyring
+
             data = keyring.get_password(self.SERVICE_NAME, provider)
             if data:
                 return json.loads(data)
@@ -117,14 +118,15 @@ class CredentialStore:
     def _delete_keyring(self, provider: str) -> bool:
         try:
             import keyring
+
             keyring.delete_password(self.SERVICE_NAME, provider)
             return True
         except Exception:
             return self._delete_file(provider)
 
-    def _save_file(self, provider: str, credentials: Dict[str, Any]) -> None:
+    def _save_file(self, provider: str, credentials: dict[str, Any]) -> None:
         self._config_dir.mkdir(parents=True, exist_ok=True)
-        existing: Dict[str, Any] = {}
+        existing: dict[str, Any] = {}
         if self._cred_file.exists():
             try:
                 existing = json.loads(self._cred_file.read_text())
@@ -142,7 +144,7 @@ class CredentialStore:
         self._cred_file.chmod(0o600)
         logger.debug(f"Credentials for {provider!r} saved to {self._cred_file}")
 
-    def _load_file(self, provider: str) -> Optional[Dict[str, Any]]:
+    def _load_file(self, provider: str) -> dict[str, Any] | None:
         if not self._cred_file.exists():
             return None
         try:
@@ -213,21 +215,21 @@ class AuthManager:
 
     def __init__(self, storage_backend: str = "file") -> None:
         self.store = CredentialStore(storage_backend=storage_backend)
-        self._sessions: Dict[str, AuthSession] = {}
+        self._sessions: dict[str, AuthSession] = {}
 
     def add(
         self,
         provider: str,
         *,
-        username: Optional[str] = None,
-        password: Optional[str] = None,
-        api_key: Optional[str] = None,
-        token: Optional[str] = None,
-        client_id: Optional[str] = None,
-        client_secret: Optional[str] = None,
-        access_key: Optional[str] = None,
-        secret_key: Optional[str] = None,
-        auth_type: Optional[str] = None,
+        username: str | None = None,
+        password: str | None = None,
+        api_key: str | None = None,
+        token: str | None = None,
+        client_id: str | None = None,
+        client_secret: str | None = None,
+        access_key: str | None = None,
+        secret_key: str | None = None,
+        auth_type: str | None = None,
         **extra: Any,
     ) -> None:
         """
@@ -255,7 +257,7 @@ class AuthManager:
             auth.add("planet", api_key="pk.abc123")
             auth.add("copernicus", username="user@example.com", password="pass")
         """
-        cred_data: Dict[str, Any] = {"provider": provider}
+        cred_data: dict[str, Any] = {"provider": provider}
         if username:
             cred_data["username"] = username
         if password:
@@ -277,7 +279,8 @@ class AuthManager:
         cred_data.update(extra)
 
         if len(cred_data) <= 1:  # Only 'provider' key
-            raise ValueError(f"No credentials provided for {provider!r}")
+            msg = f"No credentials provided for {provider!r}"
+            raise ValueError(msg)
 
         # Infer auth type if not set
         if "auth_type" not in cred_data:
@@ -295,11 +298,10 @@ class AuthManager:
         self._sessions.pop(provider, None)
         logger.info(f"Credentials saved for provider {provider!r}")
 
-
     def add_credentials(
         self,
         provider: str,
-        creds: Dict[str, Any],
+        creds: dict[str, Any],
     ) -> None:
         """
         Store credentials for the given provider.
@@ -315,8 +317,7 @@ class AuthManager:
                       Only non-None values are stored.
         """
         # Filter out None values and the redundant "provider" key
-        clean_creds = {k: v for k, v in creds.items()
-                       if k != "provider" and v is not None}
+        clean_creds = {k: v for k, v in creds.items() if k != "provider" and v is not None}
         if not clean_creds:
             logger.warning(f"No credentials provided for {provider!r} — skipping")
             return
@@ -324,7 +325,7 @@ class AuthManager:
         self.add(provider, **clean_creds)
         logger.debug(f"Stored credentials for provider: {provider}")
 
-    def get_credentials(self, provider: str) -> Optional[Credentials]:
+    def get_credentials(self, provider: str) -> Credentials | None:
         """
         Load stored credentials for a provider.
 
@@ -339,6 +340,7 @@ class AuthManager:
             return None
         try:
             from pydantic import SecretStr
+
             # Always inject the provider field — it may not be persisted on disk
             data = dict(data)
             data.setdefault("provider", provider)
@@ -383,10 +385,11 @@ class AuthManager:
 
         credentials = self.get_credentials(provider)
         if not credentials:
-            raise ValueError(
+            msg = (
                 f"No credentials found for {provider!r}. "
                 f"Add them with: pygeofetch auth add {provider}"
             )
+            raise ValueError(msg)
 
         prov = get_provider(provider)
         session = prov.authenticate(credentials)
@@ -397,14 +400,14 @@ class AuthManager:
         """Manually set a session (e.g. from OAuth2 callback)."""
         self._sessions[provider] = session
 
-    def get_session(self, provider: str) -> Optional[AuthSession]:
+    def get_session(self, provider: str) -> AuthSession | None:
         """Return cached session for a provider, or None."""
         session = self._sessions.get(provider)
         if session and session.is_valid:
             return session
         return None
 
-    def list(self) -> List[Dict[str, Any]]:
+    def list(self) -> builtins.list[dict[str, Any]]:
         """
         List all providers with stored credentials.
 
@@ -415,11 +418,15 @@ class AuthManager:
         result = []
         for provider in providers:
             session = self._sessions.get(provider)
-            result.append({
-                "provider": provider,
-                "has_session": session is not None and session.is_valid,
-                "session_expires": session.expires_at.isoformat() if session and session.expires_at else None,
-            })
+            result.append(
+                {
+                    "provider": provider,
+                    "has_session": session is not None and session.is_valid,
+                    "session_expires": session.expires_at.isoformat()
+                    if session and session.expires_at
+                    else None,
+                }
+            )
         return result
 
     def remove(self, provider: str) -> bool:
@@ -438,7 +445,7 @@ class AuthManager:
             logger.info(f"Credentials removed for {provider!r}")
         return removed
 
-    def export_credentials(self, providers: Optional[List[str]] = None) -> Dict[str, Any]:
+    def export_credentials(self, providers: builtins.list[str] | None = None) -> dict[str, Any]:
         """
         Export credentials for backup (passwords are obfuscated).
 

@@ -9,7 +9,7 @@ Authentication:
     Free registration at https://dataspace.copernicus.eu
 
 Supported datasets:
-    - Sentinel-1 (SAR C-band, GRD + SLC)
+    - Sentinel-1 (SAR C-band)
     - Sentinel-2 (Multispectral, 10-60m)
     - Sentinel-3 (Ocean/Land colour, OLCI/SLSTR)
     - Sentinel-5P (Atmospheric composition)
@@ -32,8 +32,8 @@ Example::
         bbox=(-74.1, 40.6, -73.7, 40.9),
         start_date="2024-01-01",
         end_date="2024-03-01",
-        satellites=["Sentinel-1"],
-        cloud_cover_max=100,
+        satellites=["Sentinel-2"],
+        cloud_cover_max=15,
     ))
 """
 
@@ -42,8 +42,7 @@ from __future__ import annotations
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-from urllib.parse import urlencode
+from typing import TYPE_CHECKING, Any
 
 from pygeofetch.models.download_task import DownloadOptions, DownloadResult, DownloadStatus
 from pygeofetch.models.satellite_data import (
@@ -54,14 +53,14 @@ from pygeofetch.models.satellite_data import (
     SatelliteAsset,
     SatelliteData,
 )
-from pygeofetch.models.search_query import SearchQuery
 from pygeofetch.models.user_auth import AuthSession, Credentials
 from pygeofetch.providers.base import (
     AbstractBaseProvider,
     AuthenticationError,
-    DownloadError,
-    SearchError,
 )
+
+if TYPE_CHECKING:
+    from pygeofetch.models.search_query import SearchQuery
 
 
 class CopernicusProvider(AbstractBaseProvider):
@@ -86,78 +85,33 @@ class CopernicusProvider(AbstractBaseProvider):
     )
     DATA_TYPES = ["Sentinel-1", "Sentinel-2", "Sentinel-3", "Sentinel-5P", "Sentinel-6"]
     BASE_URL = "https://catalogue.dataspace.copernicus.eu/odata/v1"
-    AUTH_URL = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
+    AUTH_URL = (
+        "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
+    )
     S3_ENDPOINT = "https://eodata.dataspace.copernicus.eu"
 
-    # ── STAC collection ID → OData collection name + product type ─────────────
-    #
-    # ROOT CAUSE OF BUG: The original code did [c.upper() for c in query.collections]
-    # which turned "sentinel-1-grd" into "SENTINEL-1-GRD". The Copernicus OData API
-    # only accepts TOP-LEVEL collection names ("SENTINEL-1", "SENTINEL-2" etc.).
-    # The product type (GRD, SLC) is a separate OData attribute filter.
-    #
-    # STAC collection IDs (planetary_computer / dataspace STAC):
-    #   "sentinel-1-grd", "sentinel-1-slc"
-    # OData collection names:
-    #   "SENTINEL-1"  (plus productType attribute filter "GRD" or "SLC")
-    #
-    STAC_TO_ODATA_COLLECTION: Dict[str, str] = {
-        # Sentinel-1 — all product types map to the same OData collection
-        "sentinel-1-grd":     "SENTINEL-1",
-        "sentinel-1-slc":     "SENTINEL-1",
-        "sentinel-1-grd-cog": "SENTINEL-1",
-        "sentinel-1-ocn":     "SENTINEL-1",
-        "sentinel-1-rtc":     "SENTINEL-1",
-        "sentinel-1":         "SENTINEL-1",
-        # Sentinel-2
-        "sentinel-2-l2a":     "SENTINEL-2",
-        "sentinel-2-l1c":     "SENTINEL-2",
-        "sentinel-2":         "SENTINEL-2",
-        # Sentinel-3
-        "sentinel-3-olci":    "SENTINEL-3",
-        "sentinel-3-slstr":   "SENTINEL-3",
-        "sentinel-3":         "SENTINEL-3",
-        # Sentinel-5P
-        "sentinel-5p-tropomi": "SENTINEL-5P",
-        "sentinel-5p":         "SENTINEL-5P",
-        # Sentinel-6
-        "sentinel-6":         "SENTINEL-6",
-    }
-
-    # Infer OData productType from STAC collection ID.
-    # These are passed to the productType attribute filter automatically.
-    STAC_TO_PRODUCT_TYPE: Dict[str, Optional[str]] = {
-        "sentinel-1-grd":     "GRD",
-        "sentinel-1-slc":     "SLC",
-        "sentinel-1-grd-cog": "GRD-COG",
-        "sentinel-1-ocn":     "OCN",
-        "sentinel-1-rtc":     "GRD",   # RTC is derived from GRD
-        "sentinel-2-l2a":     None,     # Sentinel-2 uses processingLevel, not productType
-        "sentinel-2-l1c":     None,
-    }
-
-    # Map user-friendly satellite names to Copernicus OData collection codes
+    # Map user-friendly satellite names to CDSE collection names
     SATELLITE_COLLECTION_MAP = {
-        # Sentinel-1 — all platform variants map to the same OData collection
-        "sentinel-1":  "SENTINEL-1",
+        # Sentinel-1 — all platform variants map to the same collection
+        "sentinel-1": "SENTINEL-1",
         "sentinel-1a": "SENTINEL-1",
         "sentinel-1b": "SENTINEL-1",
-        "sentinel-1c": "SENTINEL-1",   # active constellation (May 2025+)
-        "sentinel-1d": "SENTINEL-1",   # active constellation (Apr 2026+)
-        "s1a":         "SENTINEL-1",
-        "s1b":         "SENTINEL-1",
-        "s1c":         "SENTINEL-1",
-        "s1d":         "SENTINEL-1",
+        "sentinel-1c": "SENTINEL-1",  # active constellation (May 2025+)
+        "sentinel-1d": "SENTINEL-1",  # active constellation (Apr 2026+)
+        "s1a": "SENTINEL-1",
+        "s1b": "SENTINEL-1",
+        "s1c": "SENTINEL-1",
+        "s1d": "SENTINEL-1",
         # Sentinel-2
-        "sentinel-2":  "SENTINEL-2",
+        "sentinel-2": "SENTINEL-2",
         "sentinel-2a": "SENTINEL-2",
         "sentinel-2b": "SENTINEL-2",
         "sentinel-2c": "SENTINEL-2",
         # Sentinel-3, 5P, 6
-        "sentinel-3":  "SENTINEL-3",
-        "sentinel-5":  "SENTINEL-5P",
+        "sentinel-3": "SENTINEL-3",
+        "sentinel-5": "SENTINEL-5P",
         "sentinel-5p": "SENTINEL-5P",
-        "sentinel-6":  "SENTINEL-6",
+        "sentinel-6": "SENTINEL-6",
     }
 
     def authenticate(self, credentials: Credentials) -> AuthSession:
@@ -174,10 +128,12 @@ class CopernicusProvider(AbstractBaseProvider):
             AuthenticationError: If login fails.
         """
         if not credentials.username or not credentials.get_password():
-            raise AuthenticationError("Copernicus requires username (email) and password")
+            msg = "Copernicus requires username (email) and password"
+            raise AuthenticationError(msg)
 
         try:
             import httpx
+
             response = httpx.post(
                 self.AUTH_URL,
                 data={
@@ -194,7 +150,8 @@ class CopernicusProvider(AbstractBaseProvider):
                     err = response.json().get("error_description", response.text[:200])
                 except Exception:
                     err = response.text[:200]
-                raise AuthenticationError(f"Copernicus login failed: {err}")
+                msg = f"Copernicus login failed: {err}"
+                raise AuthenticationError(msg)
 
             token_data = response.json()
             session = AuthSession(
@@ -205,13 +162,16 @@ class CopernicusProvider(AbstractBaseProvider):
                 session_data={"username": credentials.username},
             )
             self._session = session
-            self._logger.info(f"Authenticated with Copernicus Data Space as {credentials.username!r}")
+            self._logger.info(
+                f"Authenticated with Copernicus Data Space as {credentials.username!r}"
+            )
             return session
 
         except AuthenticationError:
             raise
         except Exception as exc:
-            raise AuthenticationError(f"Copernicus auth error: {exc}") from exc
+            msg = f"Copernicus auth error: {exc}"
+            raise AuthenticationError(msg) from exc
 
     def _refresh_token_if_needed(self) -> None:
         """Refresh the access token if it expires soon."""
@@ -221,6 +181,7 @@ class CopernicusProvider(AbstractBaseProvider):
         if mins is not None and mins < 5 and self._session.refresh_token:
             try:
                 import httpx
+
                 response = httpx.post(
                     self.AUTH_URL,
                     data={
@@ -233,7 +194,9 @@ class CopernicusProvider(AbstractBaseProvider):
                 if response.status_code == 200:
                     token_data = response.json()
                     self._session.access_token = token_data["access_token"]
-                    self._session.refresh_token = token_data.get("refresh_token", self._session.refresh_token)
+                    self._session.refresh_token = token_data.get(
+                        "refresh_token", self._session.refresh_token
+                    )
                     self._session.expires_at = datetime.utcnow() + timedelta(
                         seconds=token_data.get("expires_in", 600)
                     )
@@ -248,7 +211,7 @@ class CopernicusProvider(AbstractBaseProvider):
         """Store an authenticated session for use in requests."""
         self._session = session
 
-    def search(self, query: SearchQuery) -> List[SatelliteData]:
+    def search(self, query: SearchQuery) -> list[SatelliteData]:
         """
         Search the Copernicus OData catalog.
 
@@ -261,18 +224,12 @@ class CopernicusProvider(AbstractBaseProvider):
         self.require_auth()
         self._refresh_token_if_needed()
 
-        collections, inferred_product_type = self._resolve_collections(query)
-        results: List[SatelliteData] = []
-
-        # If a product type was inferred from the STAC collection ID and the
-        # query doesn't already have one set, apply it as the search filter.
-        effective_product_type = getattr(query, "product_type", None) or inferred_product_type
+        collections = self._resolve_collections(query)
+        results: list[SatelliteData] = []
 
         for collection in collections:
             try:
-                items = self._search_collection(
-                    collection, query, product_type=effective_product_type
-                )
+                items = self._search_collection(collection, query)
                 results.extend(items)
                 if len(results) >= query.max_results:
                     break
@@ -281,111 +238,51 @@ class CopernicusProvider(AbstractBaseProvider):
 
         return results[: query.max_results]
 
-    def _resolve_collections(
-        self, query: SearchQuery
-    ) -> tuple[List[str], Optional[str]]:
-        """
-        Map query satellite names or STAC collection IDs to OData collection names.
-
-        Returns:
-            (odata_collection_names, inferred_product_type)
-
-        ── Key fix ────────────────────────────────────────────────────────────
-        The original implementation did:
+    def _resolve_collections(self, query: SearchQuery) -> list[str]:
+        """Map query satellite names to Copernicus collection codes."""
+        if query.collections:
             return [c.upper() for c in query.collections]
 
-        This turned "sentinel-1-grd" into "SENTINEL-1-GRD" — which the
-        Copernicus OData API rejects with HTTP 400 because the valid OData
-        collection name is "SENTINEL-1" (top-level). The product type (GRD,
-        SLC) is passed separately as an OData attribute filter.
-
-        Now we map STAC collection IDs → OData collection names and also
-        extract the product type so it is applied as a filter automatically.
-        ───────────────────────────────────────────────────────────────────────
-        """
-        inferred_product_type: Optional[str] = None
-
-        if query.collections:
-            resolved: set[str] = set()
-            for c in query.collections:
-                c_lower = c.lower().strip()
-
-                # Try exact STAC collection ID match first
-                if c_lower in self.STAC_TO_ODATA_COLLECTION:
-                    resolved.add(self.STAC_TO_ODATA_COLLECTION[c_lower])
-                    # Infer product type from STAC collection if not set
-                    pt = self.STAC_TO_PRODUCT_TYPE.get(c_lower)
-                    if pt and inferred_product_type is None:
-                        inferred_product_type = pt
-
-                # Already a valid OData collection name (user knew what they wanted)
-                elif c.upper() in ("SENTINEL-1", "SENTINEL-2", "SENTINEL-3",
-                                   "SENTINEL-5P", "SENTINEL-6"):
-                    resolved.add(c.upper())
-
-                # Prefix fallback: "sentinel-1-*" → SENTINEL-1
-                elif c_lower.startswith("sentinel-1") or c_lower.startswith("s1"):
-                    resolved.add("SENTINEL-1")
-                elif c_lower.startswith("sentinel-2") or c_lower.startswith("s2"):
-                    resolved.add("SENTINEL-2")
-                elif c_lower.startswith("sentinel-3") or c_lower.startswith("s3"):
-                    resolved.add("SENTINEL-3")
-                elif c_lower.startswith("sentinel-5") or c_lower.startswith("s5"):
-                    resolved.add("SENTINEL-5P")
-
-                else:
-                    # Unknown — pass through uppercased and log a warning
-                    self._logger.warning(
-                        "Unknown collection ID %r. Expected a STAC ID like "
-                        "'sentinel-1-grd' or an OData name like 'SENTINEL-1'. "
-                        "Passing through as-is — search may return 400.",
-                        c
-                    )
-                    resolved.add(c.upper())
-
-            return list(resolved), inferred_product_type
-
         if not query.satellites:
-            # No collection, no satellite — use product_type to pick a default
+            # Use product_type to pick a sensible default collection
             pt = getattr(query, "product_type", None) or ""
             if pt.upper() in ("SLC", "GRD", "GRD-COG", "OCN"):
-                return ["SENTINEL-1"], None
-            return ["SENTINEL-2"], None
+                return ["SENTINEL-1"]  # SAR product type → Sentinel-1
+            return ["SENTINEL-2"]  # default for optical
 
-        # Resolve from satellite names
-        resolved_from_sat: set[str] = set()
+        collections = set()
         for sat in query.satellites:
             sat_lower = sat.lower().replace("-", "").replace("_", "").replace(" ", "")
-            sat_orig  = sat.lower()
+            sat_orig = sat.lower()
             matched = False
+            # Try exact match first, then prefix/substring
             for key, col in self.SATELLITE_COLLECTION_MAP.items():
                 key_norm = key.replace("-", "").replace("_", "")
                 if key_norm == sat_lower or key in sat_orig or sat_orig.startswith(key):
-                    resolved_from_sat.add(col)
+                    collections.add(col)
                     matched = True
                     break
             if not matched:
+                # Fall back: if it mentions "sentinel-1" anywhere, use SENTINEL-1
                 if "sentinel-1" in sat_orig or sat_orig.startswith("s1"):
-                    resolved_from_sat.add("SENTINEL-1")
+                    collections.add("SENTINEL-1")
                 elif "sentinel-2" in sat_orig or sat_orig.startswith("s2"):
-                    resolved_from_sat.add("SENTINEL-2")
+                    collections.add("SENTINEL-2")
                 else:
-                    resolved_from_sat.add(sat.upper())
+                    # Pass through as-is (user may know the collection name)
+                    collections.add(sat.upper())
 
-        if not resolved_from_sat:
+        # If no satellite matched but product_type suggests SAR, use Sentinel-1
+        if not collections:
             pt = getattr(query, "product_type", None) or ""
             if pt.upper() in ("SLC", "GRD", "GRD-COG", "OCN"):
-                return ["SENTINEL-1"], None
-            return ["SENTINEL-2"], None
+                collections.add("SENTINEL-1")
+            else:
+                collections.add("SENTINEL-2")
 
-        return list(resolved_from_sat), inferred_product_type
+        return list(collections)
 
-    def _build_odata_filter(
-        self,
-        collection: str,
-        query: SearchQuery,
-        product_type: Optional[str] = None,
-    ) -> str:
+    def _build_odata_filter(self, collection: str, query: SearchQuery) -> str:
         """Build OData $filter string for the given collection and query."""
         filters = [f"Collection/Name eq '{collection}'"]
 
@@ -406,56 +303,33 @@ class CopernicusProvider(AbstractBaseProvider):
             )
             filters.append(f"OData.CSC.Intersects(area=geography'SRID=4326;{polygon}')")
 
-        # Cloud cover — only meaningful for optical (Sentinel-2/3)
-        # Sentinel-1 SAR has no cloud cover — skip filter to avoid empty results
-        is_sar = collection == "SENTINEL-1"
-        if not is_sar and (query.cloud_cover_max or 100) < 100:
+        if (query.cloud_cover_max or 100) < 100:
             filters.append(
-                f"Attributes/OData.CSC.DoubleAttribute/any("
-                f"att:att/Name eq 'cloudCover' and "
-                f"att/OData.CSC.DoubleAttribute/Value le {query.cloud_cover_max})"
+                f"Attributes/OData.CSC.DoubleAttribute/any(att:att/Name eq 'cloudCover' and att/OData.CSC.DoubleAttribute/Value le {query.cloud_cover_max})"  # noqa: E501
             )
-        if not is_sar and getattr(query, "cloud_cover_min", 0) > 0:
+        if getattr(query, "cloud_cover_min", 0) > 0:
             filters.append(
-                f"Attributes/OData.CSC.DoubleAttribute/any("
-                f"att:att/Name eq 'cloudCover' and "
-                f"att/OData.CSC.DoubleAttribute/Value ge {getattr(query, 'cloud_cover_min', 0)})"
+                f"Attributes/OData.CSC.DoubleAttribute/any(att:att/Name eq 'cloudCover' and att/OData.CSC.DoubleAttribute/Value ge {getattr(query, 'cloud_cover_min', 0)})"  # noqa: E501
             )
 
-        # Processing level filter (Sentinel-2: L1C, L2A)
+        # Processing level filter
         if query.processing_levels:
             level_filter = " or ".join(
-                f"Attributes/OData.CSC.StringAttribute/any("
-                f"att:att/Name eq 'processingLevel' and "
-                f"att/OData.CSC.StringAttribute/Value eq '{level}')"
+                f"Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'processingLevel' and att/OData.CSC.StringAttribute/Value eq '{level}')"  # noqa: E501
                 for level in query.processing_levels
             )
             filters.append(f"({level_filter})")
 
-        # Product type filter — GRD, SLC, GRD-COG, OCN (Sentinel-1)
-        effective_pt = product_type or getattr(query, "product_type", None)
-        if effective_pt:
+        # Product type filter (SLC, GRD, GRD-COG, OCN for Sentinel-1)
+        pt = getattr(query, "product_type", None)
+        if pt:
             filters.append(
                 f"Attributes/OData.CSC.StringAttribute/any("
                 f"att:att/Name eq 'productType' and "
-                f"att/OData.CSC.StringAttribute/Value eq '{effective_pt.upper()}')"
+                f"att/OData.CSC.StringAttribute/Value eq '{pt.upper()}')"
             )
 
-        # ── Exclude COG (Cloud Optimized GeoTIFF) products ───────────────────
-        # Copernicus stores two variants of Sentinel-1 GRD:
-        #   - Standard SAFE packages (S1A_IW_GRDH_..._SAFE)
-        #     → downloadable via OData Products/$value with Bearer token
-        #   - COG reformats (S1A_IW_GRDH_..._COG.SAFE)
-        #     → stored on S3, NOT downloadable via OData → returns HTTP 422
-        #
-        # The STAC sentinel-1-grd collection includes BOTH. We must exclude
-        # COG products when we need direct OData download (GRD and SLC use cases).
-        # If the caller explicitly requested COG (product_type='GRD-COG'), skip.
-        if is_sar and (effective_pt or "").upper() not in ("GRD-COG", "OCN"):
-            filters.append("not endswith(Name, '_COG.SAFE')")
-        # ─────────────────────────────────────────────────────────────────────
-
-        # Polarisation filter (VV+VH, HH, etc.)
+        # Polarisation filter (VV, VH, VV+VH, HH etc.)
         pol = getattr(query, "polarisation", None)
         if pol:
             filters.append(
@@ -464,7 +338,7 @@ class CopernicusProvider(AbstractBaseProvider):
                 f"att/OData.CSC.StringAttribute/Value eq '{pol.upper()}')"
             )
 
-        # Pass direction filter (ASCENDING / DESCENDING)
+        # Pass direction filter (ascending / descending)
         pass_dir = getattr(query, "pass_direction", None)
         if pass_dir:
             filters.append(
@@ -475,20 +349,15 @@ class CopernicusProvider(AbstractBaseProvider):
 
         return " and ".join(filters)
 
-    def _search_collection(
-        self,
-        collection: str,
-        query: SearchQuery,
-        product_type: Optional[str] = None,
-    ) -> List[SatelliteData]:
+    def _search_collection(self, collection: str, query: SearchQuery) -> list[SatelliteData]:
         """Perform OData search for a specific collection."""
         import httpx
 
-        params: Dict[str, Any] = {
-            "$filter":  self._build_odata_filter(collection, query, product_type),
+        params: dict[str, Any] = {
+            "$filter": self._build_odata_filter(collection, query),
             "$orderby": "ContentDate/Start desc",
-            "$top":     min(query.max_results, 1000),
-            "$expand":  "Attributes",
+            "$top": min(query.max_results, 1000),
+            "$expand": "Attributes",
         }
 
         response = httpx.get(
@@ -501,10 +370,10 @@ class CopernicusProvider(AbstractBaseProvider):
         data = response.json()
         return [self._product_to_satellite_data(p) for p in data.get("value", [])]
 
-    def _product_to_satellite_data(self, product: Dict) -> SatelliteData:
+    def _product_to_satellite_data(self, product: dict) -> SatelliteData:
         """Convert a Copernicus OData product dict to SatelliteData."""
         product_id = product.get("Id", "")
-        name       = product.get("Name", "")
+        name = product.get("Name", "")
         collection = product.get("S3Path", "").split("/")[2] if product.get("S3Path") else ""
 
         # Parse footprint
@@ -513,10 +382,7 @@ class CopernicusProvider(AbstractBaseProvider):
         if "POLYGON" in footprint:
             try:
                 coords_str = footprint.split("((")[1].split("))")[0]
-                coords = [
-                    (float(p.split()[0]), float(p.split()[1]))
-                    for p in coords_str.split(",")
-                ]
+                coords = [(float(p.split()[0]), float(p.split()[1])) for p in coords_str.split(",")]
                 lons = [c[0] for c in coords]
                 lats = [c[1] for c in coords]
                 bbox = (min(lons), min(lats), max(lons), max(lats))
@@ -532,11 +398,8 @@ class CopernicusProvider(AbstractBaseProvider):
             except Exception:
                 pass
 
-        # Extract attributes from OData $expand=Attributes
-        attributes = {
-            a.get("Name"): a.get("Value")
-            for a in (product.get("Attributes") or [])
-        }
+        # Extract attributes
+        attributes = {a.get("Name"): a.get("Value") for a in (product.get("Attributes") or [])}
         cloud_cover = attributes.get("cloudCover")
         if cloud_cover is not None:
             try:
@@ -544,10 +407,9 @@ class CopernicusProvider(AbstractBaseProvider):
             except (ValueError, TypeError):
                 cloud_cover = None
 
-        # Determine satellite platform from product name
-        # (e.g. S1C_IW_SLC → Sentinel-1C)
+        # Determine satellite platform from product name (e.g. S1C_IW_SLC...)
         satellite = "Sentinel"
-        platform  = attributes.get("platform") or attributes.get("platformShortName", "")
+        platform = attributes.get("platform") or attributes.get("platformShortName", "")
         if name.startswith("S1C") or "SENTINEL-1C" in platform.upper():
             satellite = "SENTINEL-1C"
         elif name.startswith("S1D") or "SENTINEL-1D" in platform.upper():
@@ -565,23 +427,24 @@ class CopernicusProvider(AbstractBaseProvider):
         elif name.startswith("S5P"):
             satellite = "Sentinel-5P"
 
-        # SAR-specific attributes (all from OData $expand=Attributes)
-        product_type    = attributes.get("productType")           # "SLC", "GRD", "GRD-COG"
-        polarisation    = attributes.get("polarisationChannels")  # "VV VH", "HH", etc.
-        pass_direction  = attributes.get("orbitDirection")        # "ASCENDING", "DESCENDING"
-        rel_orbit       = attributes.get("relativeOrbitNumber")
-        abs_orbit       = attributes.get("absoluteOrbitNumber")
+        # Extract SAR-specific attributes
+        # Copernicus OData attribute names (from $expand=Attributes):
+        product_type = attributes.get("productType")  # "SLC", "GRD", "GRD-COG"
+        polarisation = attributes.get("polarisationChannels")  # "VV VH", "HH", etc.
+        pass_direction = attributes.get("orbitDirection")  # "ASCENDING", "DESCENDING"
+        rel_orbit = attributes.get("relativeOrbitNumber")
+        abs_orbit = attributes.get("absoluteOrbitNumber")
         incidence_angle = attributes.get("incidenceAngleMax")
 
-        # Normalise polarisation string: "VV VH" → "VV+VH"
+        # Normalise polarisation to "VV+VH" style
         if polarisation:
             polarisation = polarisation.strip().replace(" ", "+")
 
-        # Normalise pass direction to lowercase: "ASCENDING" → "ascending"
+        # Normalise pass direction to lowercase
         if pass_direction:
-            pass_direction = pass_direction.lower()
+            pass_direction = pass_direction.lower()  # "ascending" / "descending"
 
-        # Parse numeric fields
+        # Parse orbit numbers to int
         try:
             rel_orbit = int(rel_orbit) if rel_orbit is not None else None
         except (ValueError, TypeError):
@@ -599,8 +462,8 @@ class CopernicusProvider(AbstractBaseProvider):
         gsd_map = {"SLC": 5.0, "GRD": 10.0, "GRD-COG": 10.0, "OCN": None}
         gsd_m = gsd_map.get(product_type or "", None)
 
-        # Build assets dict
-        assets: Dict[str, SatelliteAsset] = {}
+        # Build assets
+        assets: dict[str, SatelliteAsset] = {}
         s3_path = product.get("S3Path")
         if s3_path:
             assets["data"] = SatelliteAsset(
@@ -638,19 +501,19 @@ class CopernicusProvider(AbstractBaseProvider):
             processing_level=proc_level,
             assets=assets,
             properties={
-                "name":    name,
+                "name": name,
                 "s3_path": s3_path,
                 **attributes,
             },
-            # SAR / platform metadata fields
-            product_type    = product_type,
-            polarisation    = polarisation,
-            pass_direction  = pass_direction,
-            relative_orbit  = rel_orbit,
-            orbit_number    = abs_orbit,
-            incidence_angle = incidence_angle,
-            gsd_m           = gsd_m,
-            resolution_m    = gsd_m,
+            # SAR / platform fields (Capability 1 + 2)
+            product_type=product_type,
+            polarisation=polarisation,
+            pass_direction=pass_direction,
+            relative_orbit=rel_orbit,
+            orbit_number=abs_orbit,
+            incidence_angle=incidence_angle,
+            gsd_m=gsd_m,
+            resolution_m=gsd_m,
         )
 
     def download(
@@ -663,9 +526,9 @@ class CopernicusProvider(AbstractBaseProvider):
         Download a Copernicus product via authenticated HTTPS.
 
         Args:
-            data:        SatelliteData to download.
+            data: SatelliteData to download.
             destination: Output directory.
-            options:     Download configuration.
+            options: Download configuration.
 
         Returns:
             DownloadResult.
@@ -690,6 +553,7 @@ class CopernicusProvider(AbstractBaseProvider):
 
         try:
             import httpx
+
             start_time = time.time()
 
             with httpx.stream(
@@ -701,12 +565,11 @@ class CopernicusProvider(AbstractBaseProvider):
             ) as resp:
                 self._handle_http_error(resp)
                 with open(output_file, "wb") as f:
-                    for chunk in resp.iter_bytes(
-                        chunk_size=int(options.chunk_size_mb * 1024 * 1024)
-                    ):
-                        f.write(chunk)
+                    f.writelines(
+                        resp.iter_bytes(chunk_size=int(options.chunk_size_mb * 1024 * 1024))
+                    )
 
-            duration  = time.time() - start_time
+            duration = time.time() - start_time
             file_size = output_file.stat().st_size
 
             return DownloadResult(
@@ -738,13 +601,16 @@ class CopernicusProvider(AbstractBaseProvider):
             stac=False,
             requires_auth=True,
             supported_satellites=[
-                "Sentinel-1", "Sentinel-2", "Sentinel-3", "Sentinel-5P", "Sentinel-6"
+                "Sentinel-1",
+                "Sentinel-2",
+                "Sentinel-3",
+                "Sentinel-5P",
+                "Sentinel-6",
             ],
             supported_formats=[DataFormat.SAFE, DataFormat.GEOTIFF, DataFormat.ZIP],
             supports_cloud_filter=True,
             supports_date_filter=True,
             supports_aoi_filter=True,
-            has_quota=True,
         )
 
     def get_quota_info(self) -> QuotaInfo:

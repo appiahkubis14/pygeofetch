@@ -38,11 +38,10 @@ Example::
 
 from __future__ import annotations
 
-import json
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 from pygeofetch.models.download_task import DownloadOptions, DownloadResult, DownloadStatus
 from pygeofetch.models.satellite_data import (
@@ -53,16 +52,21 @@ from pygeofetch.models.satellite_data import (
     SatelliteAsset,
     SatelliteData,
 )
-from pygeofetch.models.search_query import SearchQuery
 from pygeofetch.models.user_auth import AuthSession, Credentials
 from pygeofetch.providers.base import (
     AbstractBaseProvider,
     AuthenticationError,
-    DownloadError,
-    ProviderError,
     SearchError,
 )
-from pygeofetch.utils.retry_handler import RetryConfig, retry_on_failure
+
+if TYPE_CHECKING:
+    from pygeofetch.models.search_query import SearchQuery
+
+
+def _plain(v) -> str:
+    if v is None:
+        return ""
+    return v.get_secret_value() if hasattr(v, "get_secret_value") else str(v)
 
 
 class USGSProvider(AbstractBaseProvider):
@@ -111,20 +115,20 @@ class USGSProvider(AbstractBaseProvider):
             AuthenticationError: If credentials are invalid.
         """
         if not credentials.username or not credentials.get_password():
-            raise AuthenticationError("USGS requires username and password")
+            msg = "USGS requires username and password"
+            raise AuthenticationError(msg)
 
         try:
             import httpx
+
             # Extract plain-text password from SecretStr if needed
-            raw_password = credentials.get_password()
-            if hasattr(raw_password, "get_secret_value"):
-                raw_password = raw_password.get_secret_value()
+            raw_password = _plain(credentials.get_password())
 
             payload = {
                 "username": credentials.username,
                 "password": raw_password,
-                "authType":  "EROS",   # required by M2M API v1.5 for ERS accounts
-                "catalogId": "EE",     # EarthExplorer catalog
+                "authType": "EROS",  # required by M2M API v1.5 for ERS accounts
+                "catalogId": "EE",  # EarthExplorer catalog
             }
             response = httpx.post(
                 f"{self.BASE_URL}/login",
@@ -135,18 +139,19 @@ class USGSProvider(AbstractBaseProvider):
             data = response.json()
             # USGS M2M API always returns HTTP 200; errors are in the JSON body
             if response.status_code not in (200, 201):
-                raise AuthenticationError(
-                    f"USGS API HTTP {response.status_code}: {response.text[:200]}"
-                )
+                msg = f"USGS API HTTP {response.status_code}: {response.text[:200]}"
+                raise AuthenticationError(msg)
             if data.get("errorCode"):
-                raise AuthenticationError(
+                msg = (
                     f"USGS login failed: {data.get('errorMessage', 'Unknown error')} "
                     f"(errorCode: {data.get('errorCode')})"
                 )
+                raise AuthenticationError(msg)
 
             token = data.get("data")
             if not token:
-                raise AuthenticationError("USGS returned no API token")
+                msg = "USGS returned no API token"
+                raise AuthenticationError(msg)
 
             session = AuthSession(
                 provider=self.PROVIDER_ID,
@@ -160,7 +165,8 @@ class USGSProvider(AbstractBaseProvider):
         except AuthenticationError:
             raise
         except Exception as exc:
-            raise AuthenticationError(f"USGS authentication error: {exc}") from exc
+            msg = f"USGS authentication error: {exc}"
+            raise AuthenticationError(msg) from exc
 
     def validate_credentials(self, credentials: Credentials) -> bool:
         """Check if credentials are non-empty (does not make a network call)."""
@@ -170,7 +176,7 @@ class USGSProvider(AbstractBaseProvider):
         """Store an authenticated session for use in requests."""
         self._session = session
 
-    def search(self, query: SearchQuery) -> List[SatelliteData]:
+    def search(self, query: SearchQuery) -> list[SatelliteData]:
         """
         Search the USGS EarthExplorer catalog.
 
@@ -184,17 +190,17 @@ class USGSProvider(AbstractBaseProvider):
             SearchError: If search fails.
         """
         if self.REQUIRES_AUTH and self._session is None:
-            raise AuthenticationError(
+            msg = (
                 f"Provider '{self.PROVIDER_ID}' requires authentication. "
                 f"Run: PyGeoFetch auth add usgs --username USER --password PASS"
             )
+            raise AuthenticationError(msg)
         if self.REQUIRES_AUTH and self._session is not None and not self._session.is_valid:
-            raise AuthenticationError(
-                f"USGS session token expired. Re-run: PyGeoFetch auth add usgs"
-            )
+            msg = "USGS session token expired. Re-run: PyGeoFetch auth add usgs"
+            raise AuthenticationError(msg)
 
         datasets = self._resolve_datasets(query)
-        results: List[SatelliteData] = []
+        results: list[SatelliteData] = []
 
         for dataset_name in datasets:
             try:
@@ -207,7 +213,7 @@ class USGSProvider(AbstractBaseProvider):
 
         return results[: query.max_results]
 
-    def _resolve_datasets(self, query: SearchQuery) -> List[str]:
+    def _resolve_datasets(self, query: SearchQuery) -> list[str]:
         """Map query satellite names to USGS dataset codes."""
         if query.collections:
             return query.collections
@@ -227,11 +233,11 @@ class USGSProvider(AbstractBaseProvider):
 
         return list(datasets)
 
-    def _search_dataset(self, dataset_name: str, query: SearchQuery) -> List[SatelliteData]:
+    def _search_dataset(self, dataset_name: str, query: SearchQuery) -> list[SatelliteData]:
         """Search a specific USGS dataset."""
         import httpx
 
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "datasetName": dataset_name,
             "maxResults": min(query.max_results, 100),
             "startingNumber": 1,
@@ -253,7 +259,7 @@ class USGSProvider(AbstractBaseProvider):
                 "upperRight": {"latitude": bbox.max_lat, "longitude": bbox.max_lon},
             }
 
-        cloud_max = getattr(query, 'cloud_cover_max', 100) or 100
+        cloud_max = getattr(query, "cloud_cover_max", 100) or 100
         if cloud_max < 100:
             payload["cloudCoverFilter"] = {
                 "min": int(getattr(query, "cloud_cover_min", 0)),
@@ -269,18 +275,16 @@ class USGSProvider(AbstractBaseProvider):
         )
         data = response.json()
         if response.status_code not in (200, 201):
-            raise SearchError(
-                f"USGS scene-search HTTP {response.status_code}: {response.text[:200]}"
-            )
+            msg = f"USGS scene-search HTTP {response.status_code}: {response.text[:200]}"
+            raise SearchError(msg)
         if data.get("errorCode"):
-            raise SearchError(
-                f"USGS search error [{data.get('errorCode')}]: {data.get('errorMessage')}"
-            )
+            msg = f"USGS search error [{data.get('errorCode')}]: {data.get('errorMessage')}"
+            raise SearchError(msg)
 
         scenes = (data.get("data") or {}).get("results", [])
         return [self._scene_to_satellite_data(s, dataset_name) for s in scenes]
 
-    def _scene_to_satellite_data(self, scene: Dict, dataset_name: str) -> SatelliteData:
+    def _scene_to_satellite_data(self, scene: dict, dataset_name: str) -> SatelliteData:
         """Convert a USGS scene dict to SatelliteData."""
         scene_id = scene.get("entityId", scene.get("displayId", "unknown"))
         display_id = scene.get("displayId", scene_id)
@@ -321,7 +325,7 @@ class USGSProvider(AbstractBaseProvider):
                 cloud_cover = None
 
         # Build assets from browse/download links
-        assets: Dict[str, SatelliteAsset] = {}
+        assets: dict[str, SatelliteAsset] = {}
         browse_list = scene.get("browse", [])
         if browse_list:
             for i, b in enumerate(browse_list):
@@ -345,7 +349,7 @@ class USGSProvider(AbstractBaseProvider):
             properties={
                 "display_id": display_id,
                 "dataset": dataset_name,
-                **{k: v for k, v in scene.items() if k not in ("browse",)},
+                **{k: v for k, v in scene.items() if k != "browse"},
             },
         )
 
@@ -374,7 +378,7 @@ class USGSProvider(AbstractBaseProvider):
 
         try:
             # Request download URLs
-            dataset = data.properties.get("dataset", "landsat_ot_c2_l2")
+            data.properties.get("dataset", "landsat_ot_c2_l2")
             payload = {
                 "downloads": [{"entityId": data.id, "productId": "5e83d14fb9436d88"}],
                 "downloadApplication": "EE",
@@ -408,11 +412,14 @@ class USGSProvider(AbstractBaseProvider):
                 output_file = destination / filename
 
                 self._logger.info(f"Downloading {filename} from USGS...")
-                with httpx.stream("GET", url, timeout=options.timeout_seconds, follow_redirects=True) as resp:
+                with httpx.stream(
+                    "GET", url, timeout=options.timeout_seconds, follow_redirects=True
+                ) as resp:
                     self._handle_http_error(resp)
                     with open(output_file, "wb") as f:
-                        for chunk in resp.iter_bytes(chunk_size=int(options.chunk_size_mb * 1024 * 1024)):
-                            f.write(chunk)
+                        f.writelines(
+                            resp.iter_bytes(chunk_size=int(options.chunk_size_mb * 1024 * 1024))
+                        )
                 output_paths.append(output_file)
 
             duration = time.time() - start_time
@@ -447,7 +454,15 @@ class USGSProvider(AbstractBaseProvider):
             streaming=False,
             stac=False,
             requires_auth=True,
-            supported_satellites=["Landsat 4", "Landsat 5", "Landsat 7", "Landsat 8", "Landsat 9", "MODIS", "EO-1"],
+            supported_satellites=[
+                "Landsat 4",
+                "Landsat 5",
+                "Landsat 7",
+                "Landsat 8",
+                "Landsat 9",
+                "MODIS",
+                "EO-1",
+            ],
             supported_formats=[DataFormat.GEOTIFF, DataFormat.HDF4, DataFormat.TAR],
             supports_cloud_filter=True,
             supports_date_filter=True,
@@ -462,7 +477,7 @@ class USGSProvider(AbstractBaseProvider):
             extra_info={"note": "USGS does not impose download quotas for most datasets"},
         )
 
-    def list_datasets(self) -> List[Dict[str, Any]]:
+    def list_datasets(self) -> list[dict[str, Any]]:
         """
         List available USGS datasets.
 
@@ -471,6 +486,7 @@ class USGSProvider(AbstractBaseProvider):
         """
         self.require_auth()
         import httpx
+
         response = httpx.post(
             f"{self.BASE_URL}/dataset-search",
             json={},

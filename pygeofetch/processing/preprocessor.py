@@ -6,33 +6,36 @@ Preprocessor — A-H categories:
     D: Resolution & Resampling
     H: Mosaicking & Compositing
 """
+
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any
 
 from pygeofetch.processing.base import (
-    ProcessingResult, _require_rasterio, _require_numpy,
-    _resolve_output, _timed,
-    _safe_read_band, _safe_write_band,
+    ProcessingResult,
+    _require_numpy,
+    _require_rasterio,
+    _resolve_output,
+    _safe_read_band,
+    _timed,
 )
 
 logger = logging.getLogger(__name__)
 
-BBox = Tuple[float, float, float, float]  # minx, miny, maxx, maxy
-
+BBox = tuple[float, float, float, float]  # minx, miny, maxx, maxy
 
 
 def _safe_read_1(src, path=None):
     """Read band 1 safely with block fallback."""
-    import numpy as np
     try:
         return _safe_read_1(src)
     except Exception:
         if path is None:
             raise
         from pygeofetch.processing.base import _safe_read_band
+
         data, _, _ = _safe_read_band(path, band=1)
         return data
 
@@ -63,9 +66,9 @@ class Preprocessor:
     @_timed
     def atmos(
         self,
-        input: Union[str, Path],
+        input: str | Path,
         method: str = "dos1",
-        output: Optional[str] = None,
+        output: str | None = None,
         **kwargs: Any,
     ) -> ProcessingResult:
         """
@@ -99,7 +102,9 @@ class Preprocessor:
         with rasterio.open(inp) as src:
             profile = src.profile.copy()
             nodata = src.nodata
-            data = np.stack([_safe_read_band(inp, band=b)[0] for b in range(1, src.count+1)], axis=0)
+            data = np.stack(
+                [_safe_read_band(inp, band=b)[0] for b in range(1, src.count + 1)], axis=0
+            )
 
         method = method.lower()
 
@@ -110,7 +115,7 @@ class Preprocessor:
                 band = data[b]
                 valid = band > 0 if nodata is None else (band != nodata) & (band > 0)
                 dark_pixel = float(np.percentile(band[valid], 1)) if valid.any() else 0.0
-                corrected[b] = np.where(valid, band - dark_pixel, nodata if nodata else 0)
+                corrected[b] = np.where(valid, band - dark_pixel, nodata or 0)
             if method == "dos2":
                 # DOS2: also apply path radiance correction
                 for b in range(corrected.shape[0]):
@@ -126,7 +131,7 @@ class Preprocessor:
             corrected = np.where(
                 (data != nodata) if nodata else np.ones_like(data, dtype=bool),
                 np.clip(data / quantification, 0, 1),
-                nodata if nodata else 0,
+                nodata or 0,
             ).astype(np.float32)
 
         elif method in ("flaash", "6s", "icor"):
@@ -144,29 +149,32 @@ class Preprocessor:
                 if valid.any():
                     corrected[b] -= float(np.percentile(band[valid], 1))
         else:
-            raise ValueError(
+            msg = (
                 f"Unknown atmospheric correction method: {method!r}. "
                 "Supported: dos1, dos2, sen2cor, flaash, 6s, icor"
             )
+            raise ValueError(msg)
 
-        profile.update(dtype="float32", nodata=nodata if nodata else None)
+        profile.update(dtype="float32", nodata=nodata or None)
         with rasterio.open(out_path, "w", **profile) as dst:
             dst.write(corrected)
 
         logger.info(f"Atmospheric correction ({method}) → {out_path}")
         return ProcessingResult(
-            success=True, operation=f"atmos:{method}",
-            input_path=inp, output_path=out_path,
+            success=True,
+            operation=f"atmos:{method}",
+            input_path=inp,
+            output_path=out_path,
             metadata={"method": method},
         )
 
     @_timed
     def topo_correct(
         self,
-        input: Union[str, Path],
-        dem: Union[str, Path],
+        input: str | Path,
+        dem: str | Path,
         method: str = "cosine",
-        output: Optional[str] = None,
+        output: str | None = None,
     ) -> ProcessingResult:
         """
         Topographic correction to remove illumination effects from terrain.
@@ -193,23 +201,31 @@ class Preprocessor:
 
         with rasterio.open(inp) as src:
             profile = src.profile.copy()
-            data = __import__("numpy").array([_safe_read_1(src)] if src.count==1 else [src.read(b).astype(__import__("numpy").float32) for b in range(1,src.count+1)])
+            data = __import__("numpy").array(
+                [_safe_read_1(src)]
+                if src.count == 1
+                else [
+                    src.read(b).astype(__import__("numpy").float32) for b in range(1, src.count + 1)
+                ]
+            )
             nodata = src.nodata
 
         with rasterio.open(dem_path) as dem_src:
             dem_data = _safe_read_1(dem_src)
 
         # Compute slope and aspect from DEM (simplified gradient-based)
-        from numpy import gradient, arctan2, arctan, sqrt, cos, pi, clip, where, nan
+        from numpy import arctan, cos, gradient, pi, sqrt, where
+
         dy, dx = gradient(dem_data)
-        slope  = arctan(sqrt(dx**2 + dy**2))
+        slope = arctan(sqrt(dx**2 + dy**2))
         # Solar zenith angle — use 45° as default (override via metadata)
         cos_z = cos(45 * pi / 180)
 
         # Resize dem arrays to match image shape
         if dem_data.shape != data[0].shape:
-            from rasterio.enums import Resampling
             import rasterio.transform
+            from rasterio.enums import Resampling
+
             with rasterio.open(dem_path) as dem_src:
                 dem_data = dem_src.read(
                     1,
@@ -250,7 +266,8 @@ class Preprocessor:
                         band,
                     )
             else:
-                raise ValueError(f"Unknown topo method: {method!r}")
+                msg = f"Unknown topo method: {method!r}"
+                raise ValueError(msg)
 
         if nodata is not None:
             corrected = np.where(data == nodata, nodata, corrected)
@@ -261,8 +278,10 @@ class Preprocessor:
 
         logger.info(f"Topographic correction ({method}) → {out_path}")
         return ProcessingResult(
-            success=True, operation=f"topo:{method}",
-            input_path=inp, output_path=out_path,
+            success=True,
+            operation=f"topo:{method}",
+            input_path=inp,
+            output_path=out_path,
         )
 
     # ──────────────────────────────────────────────────────────────────────
@@ -272,11 +291,11 @@ class Preprocessor:
     @_timed
     def cloud_mask(
         self,
-        input: Union[str, Path],
+        input: str | Path,
         method: str = "scl",
-        output: Optional[str] = None,
-        scl_band: Optional[Union[str, Path]] = None,
-        cloud_classes: Optional[List[int]] = None,
+        output: str | None = None,
+        scl_band: str | Path | None = None,
+        cloud_classes: list[int] | None = None,
     ) -> ProcessingResult:
         """
         Cloud masking — sets cloud pixels to NoData.
@@ -310,20 +329,27 @@ class Preprocessor:
 
         with rasterio.open(inp) as src:
             profile = src.profile.copy()
-            data = __import__("numpy").array([_safe_read_1(src)] if src.count==1 else [src.read(b).astype(__import__("numpy").float32) for b in range(1,src.count+1)])
+            data = __import__("numpy").array(
+                [_safe_read_1(src)]
+                if src.count == 1
+                else [
+                    src.read(b).astype(__import__("numpy").float32) for b in range(1, src.count + 1)
+                ]
+            )
             nodata_val = src.nodata if src.nodata is not None else 0.0
 
         cloud_classes = cloud_classes or [3, 8, 9, 10, 11]  # SCL cloud classes
 
         if method == "scl":
             if scl_band is None:
-                raise ValueError("scl_band path is required for method='scl'")
+                msg = "scl_band path is required for method='scl'"
+                raise ValueError(msg)
             with rasterio.open(Path(scl_band)) as scl_src:
                 scl = scl_src.read(1)
                 if scl.shape != data[0].shape:
-                    from rasterio.enums import Resampling
                     scl = scl_src.read(
-                        1, out_shape=data[0].shape,
+                        1,
+                        out_shape=data[0].shape,
                         resampling=rasterio.enums.Resampling.nearest,
                     )
             cloud_mask_arr = np.isin(scl, cloud_classes)
@@ -333,13 +359,15 @@ class Preprocessor:
         elif method == "fmask":
             # Simplified FMask heuristic using band reflectance ratios
             if data.shape[0] >= 4:
-                blue  = data[0].astype(float) / 10000
+                blue = data[0].astype(float) / 10000
                 green = data[1].astype(float) / 10000
-                red   = data[2].astype(float) / 10000
-                nir   = data[3].astype(float) / 10000
+                red = data[2].astype(float) / 10000
+                nir = data[3].astype(float) / 10000
                 # Brightness + whiteness test
                 brightness = (blue + green + red + nir) / 4
-                whiteness = (abs(blue - green) + abs(blue - red) + abs(green - red)) / (brightness + 1e-6)
+                whiteness = (abs(blue - green) + abs(blue - red) + abs(green - red)) / (
+                    brightness + 1e-6
+                )
                 cloud_mask_arr = (brightness > 0.3) & (whiteness < 0.7)
             else:
                 # Fallback: simple brightness threshold on band 1
@@ -368,7 +396,8 @@ class Preprocessor:
             else:
                 logger.warning("NDSI requires at least 4 bands; no masking applied")
         else:
-            raise ValueError(f"Unknown cloud mask method: {method!r}")
+            msg = f"Unknown cloud mask method: {method!r}"
+            raise ValueError(msg)
 
         profile.update(dtype="float32", nodata=nodata_val)
         with rasterio.open(out_path, "w", **profile) as dst:
@@ -377,17 +406,19 @@ class Preprocessor:
         masked_pct = 100 * np.mean(data[0] == nodata_val) if data.size > 0 else 0
         logger.info(f"Cloud mask ({method}) masked {masked_pct:.1f}% pixels → {out_path}")
         return ProcessingResult(
-            success=True, operation=f"cloud_mask:{method}",
-            input_path=inp, output_path=out_path,
+            success=True,
+            operation=f"cloud_mask:{method}",
+            input_path=inp,
+            output_path=out_path,
             metadata={"masked_pct": round(masked_pct, 2)},
         )
 
     @_timed
     def cloud_fill(
         self,
-        input: Union[str, Path],
-        time_series: List[Union[str, Path]],
-        output: Optional[str] = None,
+        input: str | Path,
+        time_series: list[str | Path],
+        output: str | None = None,
         method: str = "interpolate",
     ) -> ProcessingResult:
         """
@@ -416,7 +447,13 @@ class Preprocessor:
 
         with rasterio.open(inp) as src:
             profile = src.profile.copy()
-            target = __import__("numpy").array([_safe_read_1(src)] if src.count==1 else [src.read(b).astype(__import__("numpy").float32) for b in range(1,src.count+1)])
+            target = __import__("numpy").array(
+                [_safe_read_1(src)]
+                if src.count == 1
+                else [
+                    src.read(b).astype(__import__("numpy").float32) for b in range(1, src.count + 1)
+                ]
+            )
             nodata_val = src.nodata if src.nodata is not None else 0.0
 
         # Build stack of fill candidates
@@ -450,8 +487,10 @@ class Preprocessor:
 
         logger.info(f"Cloud fill ({method}) → {out_path}")
         return ProcessingResult(
-            success=True, operation=f"cloud_fill:{method}",
-            input_path=inp, output_path=out_path,
+            success=True,
+            operation=f"cloud_fill:{method}",
+            input_path=inp,
+            output_path=out_path,
         )
 
     # ──────────────────────────────────────────────────────────────────────
@@ -461,11 +500,11 @@ class Preprocessor:
     @_timed
     def reproject(
         self,
-        input: Union[str, Path],
+        input: str | Path,
         crs: str = "EPSG:4326",
-        output: Optional[str] = None,
+        output: str | None = None,
         resampling: str = "bilinear",
-        resolution: Optional[float] = None,
+        resolution: float | None = None,
     ) -> ProcessingResult:
         """
         Reproject raster to a new coordinate reference system.
@@ -484,8 +523,9 @@ class Preprocessor:
             result = client.preprocess.reproject("scene.tif", crs="EPSG:4326", resolution=0.0001)
         """
         rasterio = _require_rasterio()
-        from rasterio.warp import calculate_default_transform, reproject as warp_reproject
         from rasterio.enums import Resampling as RS
+        from rasterio.warp import calculate_default_transform
+        from rasterio.warp import reproject as warp_reproject
 
         rs_map = {
             "nearest": RS.nearest,
@@ -502,14 +542,19 @@ class Preprocessor:
 
         with rasterio.open(inp) as src:
             transform, width, height = calculate_default_transform(
-                src.crs, crs, src.width, src.height,
+                src.crs,
+                crs,
+                src.width,
+                src.height,
                 *src.bounds,
                 resolution=resolution,
             )
             profile = src.profile.copy()
             profile.update(
-                crs=crs, transform=transform,
-                width=width, height=height,
+                crs=crs,
+                transform=transform,
+                width=width,
+                height=height,
                 dtype="float32",
             )
             with rasterio.open(out_path, "w", **profile) as dst:
@@ -524,20 +569,46 @@ class Preprocessor:
                         resampling=rs_method,
                     )
 
+        # Validate the output — detect identity/pixel-space transforms
+        try:
+            with rasterio.open(out_path) as dst:
+                t = dst.transform
+                is_identity = (
+                    abs(t.a) == 1.0
+                    and abs(t.e) == 1.0
+                    and t.c == 0.0
+                    and dst.crs is not None
+                    and dst.crs.is_projected
+                )
+            if is_identity:
+                out_path.unlink(missing_ok=True)
+                raise RuntimeError(
+                    f"Reprojection to {crs} produced an identity/pixel-space transform "
+                    f"(a={t.a}, origin=({t.c},{t.f})). "
+                    "The source CRS or bounding box may be invalid. "
+                    "Check that the input file has a valid georeference."
+                )
+        except RuntimeError:
+            raise
+        except Exception:
+            pass  # validation error shouldn't block a successful reproject
+
         logger.info(f"Reprojected → {crs} → {out_path}")
         return ProcessingResult(
-            success=True, operation="reproject",
-            input_path=inp, output_path=out_path,
+            success=True,
+            operation="reproject",
+            input_path=inp,
+            output_path=out_path,
             metadata={"crs": crs, "resampling": resampling},
         )
 
     @_timed
     def clip(
         self,
-        input: Union[str, Path],
-        bbox: Optional[BBox] = None,
-        geometry: Optional[Union[str, Path, dict]] = None,
-        output: Optional[str] = None,
+        input: str | Path,
+        bbox: BBox | None = None,
+        geometry: str | Path | dict | None = None,
+        output: str | None = None,
         all_touched: bool = False,
     ) -> ProcessingResult:
         """
@@ -556,9 +627,9 @@ class Preprocessor:
             result = client.preprocess.clip("scene.tif", geometry="study_area.geojson")
         """
         rasterio = _require_rasterio()
-        from rasterio.mask import mask as rasterio_mask
-        from rasterio.crs import CRS
         import json
+
+        from rasterio.mask import mask as rasterio_mask
 
         inp = Path(input)
         out_path = _resolve_output(inp, output, "clipped")
@@ -567,6 +638,7 @@ class Preprocessor:
         # Build geometry list
         if bbox is not None:
             from shapely.geometry import box
+
             shapes = [box(*bbox).__geo_interface__]
         elif geometry is not None:
             if isinstance(geometry, (str, Path)):
@@ -583,7 +655,8 @@ class Preprocessor:
             else:
                 shapes = [geometry.__geo_interface__]
         else:
-            raise ValueError("Either bbox or geometry must be provided")
+            msg = "Either bbox or geometry must be provided"
+            raise ValueError(msg)
 
         with rasterio.open(inp) as src:
             out_image, out_transform = rasterio_mask(
@@ -601,18 +674,20 @@ class Preprocessor:
 
         logger.info(f"Clipped → {out_path}")
         return ProcessingResult(
-            success=True, operation="clip",
-            input_path=inp, output_path=out_path,
+            success=True,
+            operation="clip",
+            input_path=inp,
+            output_path=out_path,
             metadata={"bbox": bbox},
         )
 
     @_timed
     def tile(
         self,
-        input: Union[str, Path],
+        input: str | Path,
         tile_size: int = 512,
         overlap: int = 64,
-        output_dir: Optional[str] = None,
+        output_dir: str | None = None,
         min_coverage: float = 0.1,
     ) -> ProcessingResult:
         """
@@ -641,7 +716,7 @@ class Preprocessor:
         out_dir = Path(output_dir) if output_dir else inp.parent / f"{inp.stem}_tiles"
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        tile_paths: List[Path] = []
+        tile_paths: list[Path] = []
         stride = tile_size - overlap
 
         with rasterio.open(inp) as src:
@@ -679,10 +754,16 @@ class Preprocessor:
 
         logger.info(f"Tiled into {len(tile_paths)} tiles → {out_dir}")
         return ProcessingResult(
-            success=True, operation="tile",
-            input_path=inp, output_path=out_dir,
-            metadata={"tile_count": len(tile_paths), "tile_paths": tile_paths,
-                      "tile_size": tile_size, "overlap": overlap},
+            success=True,
+            operation="tile",
+            input_path=inp,
+            output_path=out_dir,
+            metadata={
+                "tile_count": len(tile_paths),
+                "tile_paths": tile_paths,
+                "tile_size": tile_size,
+                "overlap": overlap,
+            },
         )
 
     # ──────────────────────────────────────────────────────────────────────
@@ -692,11 +773,11 @@ class Preprocessor:
     @_timed
     def resample(
         self,
-        input: Union[str, Path],
-        resolution: Optional[float] = None,
-        scale_factor: Optional[float] = None,
+        input: str | Path,
+        resolution: float | None = None,
+        scale_factor: float | None = None,
         method: str = "bilinear",
-        output: Optional[str] = None,
+        output: str | None = None,
     ) -> ProcessingResult:
         """
         Resample raster to a different spatial resolution.
@@ -722,8 +803,11 @@ class Preprocessor:
         from rasterio.enums import Resampling as RS
 
         rs_map = {
-            "nearest": RS.nearest, "bilinear": RS.bilinear,
-            "cubic": RS.cubic, "lanczos": RS.lanczos, "average": RS.average,
+            "nearest": RS.nearest,
+            "bilinear": RS.bilinear,
+            "cubic": RS.cubic,
+            "lanczos": RS.lanczos,
+            "average": RS.average,
         }
         rs_method = rs_map.get(method, RS.bilinear)
 
@@ -742,10 +826,11 @@ class Preprocessor:
                 scale_x = scale_factor
                 scale_y = scale_factor
             else:
-                raise ValueError("Provide either resolution or scale_factor")
+                msg = "Provide either resolution or scale_factor"
+                raise ValueError(msg)
 
             new_h = max(1, int(src.height * scale_y))
-            new_w = max(1, int(src.width  * scale_x))
+            new_w = max(1, int(src.width * scale_x))
 
             data = src.read(
                 out_shape=(src.count, new_h, new_w),
@@ -753,7 +838,7 @@ class Preprocessor:
             )
 
             new_transform = src.transform * src.transform.scale(
-                src.width  / new_w,
+                src.width / new_w,
                 src.height / new_h,
             )
             profile = src.profile.copy()
@@ -764,19 +849,25 @@ class Preprocessor:
 
         logger.info(f"Resampled → {new_w}×{new_h} → {out_path}")
         return ProcessingResult(
-            success=True, operation="resample",
-            input_path=inp, output_path=out_path,
-            metadata={"resolution": resolution, "method": method,
-                      "new_width": new_w, "new_height": new_h},
+            success=True,
+            operation="resample",
+            input_path=inp,
+            output_path=out_path,
+            metadata={
+                "resolution": resolution,
+                "method": method,
+                "new_width": new_w,
+                "new_height": new_h,
+            },
         )
 
     @_timed
     def pansharpen(
         self,
-        pan: Union[str, Path],
-        ms: Union[str, Path],
+        pan: str | Path,
+        ms: str | Path,
         method: str = "brovey",
-        output: Optional[str] = None,
+        output: str | None = None,
     ) -> ProcessingResult:
         """
         Pan-sharpen multispectral image using panchromatic band.
@@ -798,7 +889,7 @@ class Preprocessor:
         from rasterio.enums import Resampling
 
         pan_p = Path(pan)
-        ms_p  = Path(ms)
+        ms_p = Path(ms)
         out_path = _resolve_output(pan_p, output, f"pansharp_{method}")
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -838,7 +929,8 @@ class Preprocessor:
                 result[b] = ms_data[b] * ratio
 
         else:
-            raise ValueError(f"Unknown pansharpen method: {method!r}")
+            msg = f"Unknown pansharpen method: {method!r}"
+            raise ValueError(msg)
 
         pan_profile.update(count=ms_data.shape[0], dtype="float32")
         with rasterio.open(out_path, "w", **pan_profile) as dst:
@@ -846,8 +938,10 @@ class Preprocessor:
 
         logger.info(f"Pan-sharpened ({method}) → {out_path}")
         return ProcessingResult(
-            success=True, operation=f"pansharpen:{method}",
-            input_path=pan_p, output_path=out_path,
+            success=True,
+            operation=f"pansharpen:{method}",
+            input_path=pan_p,
+            output_path=out_path,
         )
 
     # ──────────────────────────────────────────────────────────────────────
@@ -857,8 +951,8 @@ class Preprocessor:
     @_timed
     def mosaic(
         self,
-        inputs: List[Union[str, Path]],
-        output: Optional[str] = None,
+        inputs: list[str | Path],
+        output: str | None = None,
         method: str = "first",
     ) -> ProcessingResult:
         """
@@ -903,7 +997,8 @@ class Preprocessor:
 
         logger.info(f"Mosaicked {len(inputs)} rasters → {out_path}")
         return ProcessingResult(
-            success=True, operation=f"mosaic:{method}",
+            success=True,
+            operation=f"mosaic:{method}",
             output_path=out_path,
             metadata={"n_inputs": len(inputs), "method": method},
         )
@@ -911,10 +1006,10 @@ class Preprocessor:
     @_timed
     def composite(
         self,
-        inputs: List[Union[str, Path]],
+        inputs: list[str | Path],
         method: str = "median",
-        output: Optional[str] = None,
-        cloud_masks: Optional[List[Union[str, Path]]] = None,
+        output: str | None = None,
+        cloud_masks: list[str | Path] | None = None,
     ) -> ProcessingResult:
         """
         Create a multi-temporal composite from a stack of rasters.
@@ -950,7 +1045,9 @@ class Preprocessor:
 
         for p in src_paths:
             with rasterio.open(p) as src:
-                data = src.read(out_shape=ref_shape, resampling=rasterio.enums.Resampling.bilinear).astype(np.float32)
+                data = src.read(
+                    out_shape=ref_shape, resampling=rasterio.enums.Resampling.bilinear
+                ).astype(np.float32)
                 if nodata is not None:
                     data = np.where(data == nodata, np.nan, data)
                 stack.append(data)
@@ -978,17 +1075,16 @@ class Preprocessor:
             composite_data = np.nanmin(arr, axis=0)
         elif method == "best_pixel":
             # Select pixel from scene with most valid data per pixel
-            valid_counts = np.sum(~np.isnan(arr), axis=0)  # (bands, h, w)
-            best_scene_idx = np.argmax(
-                np.sum(~np.isnan(arr), axis=1), axis=0
-            )  # (h, w)
+            np.sum(~np.isnan(arr), axis=0)  # (bands, h, w)
+            best_scene_idx = np.argmax(np.sum(~np.isnan(arr), axis=1), axis=0)  # (h, w)
             composite_data = np.zeros(ref_shape, dtype=np.float32)
             for b in range(ref_shape[0]):
                 for si in range(len(stack)):
                     mask = best_scene_idx == si
                     composite_data[b][mask] = arr[si, b][mask]
         else:
-            raise ValueError(f"Unknown composite method: {method!r}")
+            msg = f"Unknown composite method: {method!r}"
+            raise ValueError(msg)
 
         if nodata is not None:
             composite_data = np.where(np.isnan(composite_data), nodata, composite_data)
@@ -999,7 +1095,8 @@ class Preprocessor:
 
         logger.info(f"Composite ({method}) from {len(inputs)} scenes → {out_path}")
         return ProcessingResult(
-            success=True, operation=f"composite:{method}",
+            success=True,
+            operation=f"composite:{method}",
             output_path=out_path,
             metadata={"n_inputs": len(inputs), "method": method},
         )

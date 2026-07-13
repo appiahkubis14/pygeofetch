@@ -22,7 +22,7 @@ import hashlib
 import json
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 
 def _default_cache_dir() -> Path:
@@ -44,7 +44,7 @@ class CacheManager:
 
     def __init__(
         self,
-        cache_dir: Optional[Path] = None,
+        cache_dir: Path | None = None,
         ttl_seconds: int = 86_400,
     ) -> None:
         self.cache_dir = Path(cache_dir) if cache_dir else _default_cache_dir()
@@ -55,7 +55,7 @@ class CacheManager:
     # Core API
     # ------------------------------------------------------------------
 
-    def get(self, key: str) -> Optional[Any]:
+    def get(self, key: str) -> Any | None:
         """
         Retrieve a cached value.
 
@@ -80,7 +80,7 @@ class CacheManager:
 
         return envelope.get("value")
 
-    def set(self, key: str, value: Any, ttl: Optional[int] = None) -> None:
+    def set(self, key: str, value: Any, ttl: int | None = None) -> None:
         """
         Store a value in the cache.
 
@@ -103,7 +103,8 @@ class CacheManager:
             tmp.replace(path)
         except OSError as exc:
             tmp.unlink(missing_ok=True)
-            raise RuntimeError(f"Cache write failed for key {key!r}: {exc}") from exc
+            msg = f"Cache write failed for key {key!r}: {exc}"
+            raise RuntimeError(msg) from exc
 
     def delete(self, key: str) -> bool:
         """
@@ -161,7 +162,7 @@ class CacheManager:
                 count += 1
         return count
 
-    def stats(self) -> Dict[str, Any]:
+    def stats(self) -> dict[str, Any]:
         """
         Return cache statistics.
 
@@ -189,7 +190,7 @@ class CacheManager:
             "cache_dir": str(self.cache_dir),
         }
 
-    def list_keys(self) -> List[Tuple[str, float]]:
+    def list_keys(self) -> list[tuple[str, float]]:
         """
         List all non-expired cache keys and their expiry timestamps.
 
@@ -235,10 +236,14 @@ class CacheManager:
             Number of entries removed.
         """
         import json as _json
+
         files = sorted(
-            [(f, _json.loads(f.read_text()).get("stored_at", 0)) for f in self.cache_dir.glob("*.json")
-             if f.exists()],
-            key=lambda x: x[1]
+            [
+                (f, _json.loads(f.read_text()).get("stored_at", 0))
+                for f in self.cache_dir.glob("*.json")
+                if f.exists()
+            ],
+            key=lambda x: x[1],
         )
         removed = 0
         for f, _ in files:
@@ -252,10 +257,10 @@ class CacheManager:
                 pass
         return removed
 
-    def clear(
+    def clear_filtered(
         self,
-        provider_filter: str = None,
-        max_age_seconds: float = None,
+        provider_filter: str | None = None,
+        max_age_seconds: float | None = None,
     ) -> int:
         """
         Remove cache entries with optional filters.
@@ -268,6 +273,7 @@ class CacheManager:
             Number of entries removed.
         """
         import json as _json
+
         now = time.time()
         count = 0
         for f in self.cache_dir.glob("*.json"):

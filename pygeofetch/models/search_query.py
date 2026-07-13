@@ -21,7 +21,7 @@ Example::
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -43,14 +43,16 @@ class BoundingBox(BaseModel):
     max_lat: float = Field(..., ge=-90, le=90)
 
     @model_validator(mode="after")
-    def validate_ordering(self) -> "BoundingBox":
+    def validate_ordering(self) -> BoundingBox:
         if self.min_lon >= self.max_lon:
-            raise ValueError(f"min_lon ({self.min_lon}) must be less than max_lon ({self.max_lon})")
+            msg = f"min_lon ({self.min_lon}) must be less than max_lon ({self.max_lon})"
+            raise ValueError(msg)
         if self.min_lat >= self.max_lat:
-            raise ValueError(f"min_lat ({self.min_lat}) must be less than max_lat ({self.max_lat})")
+            msg = f"min_lat ({self.min_lat}) must be less than max_lat ({self.max_lat})"
+            raise ValueError(msg)
         return self
 
-    def to_tuple(self) -> Tuple[float, float, float, float]:
+    def to_tuple(self) -> tuple[float, float, float, float]:
         """Return as (min_lon, min_lat, max_lon, max_lat)."""
         return (self.min_lon, self.min_lat, self.max_lon, self.max_lat)
 
@@ -65,12 +67,12 @@ class BoundingBox(BaseModel):
         )
 
     @classmethod
-    def from_tuple(cls, t: Tuple[float, float, float, float]) -> "BoundingBox":
+    def from_tuple(cls, t: tuple[float, float, float, float]) -> BoundingBox:
         """Create from (min_lon, min_lat, max_lon, max_lat) tuple."""
         return cls(min_lon=t[0], min_lat=t[1], max_lon=t[2], max_lat=t[3])
 
     @classmethod
-    def from_string(cls, s: str) -> "BoundingBox":
+    def from_string(cls, s: str) -> BoundingBox:
         """
         Parse from string like '-74.1,40.6,-73.7,40.9'.
 
@@ -79,7 +81,8 @@ class BoundingBox(BaseModel):
         """
         parts = [float(x.strip()) for x in s.split(",")]
         if len(parts) != 4:
-            raise ValueError(f"Expected 4 comma-separated values, got {len(parts)}")
+            msg = f"Expected 4 comma-separated values, got {len(parts)}"
+            raise ValueError(msg)
         return cls.from_tuple(tuple(parts))  # type: ignore
 
 
@@ -126,31 +129,31 @@ class SearchQuery(BaseModel):
     """
 
     # Spatial filters
-    bbox: Optional[BoundingBox] = None
-    geometry: Optional[Dict[str, Any]] = None
+    bbox: BoundingBox | None = None
+    geometry: dict[str, Any] | None = None
 
     # Temporal filters
-    start_date: Optional[Union[date, datetime]] = None
-    end_date: Optional[Union[date, datetime]] = None
+    start_date: date | datetime | None = None
+    end_date: date | datetime | None = None
 
     # Quality filters
     cloud_cover_min: float = Field(default=0, ge=0, le=100)
     cloud_cover_max: float = Field(default=100, ge=0, le=100)
 
     # Platform / sensor filters
-    satellites: List[str] = Field(default_factory=list)
-    sensors: List[str] = Field(default_factory=list)
-    collections: List[str] = Field(default_factory=list)
-    processing_levels: List[str] = Field(default_factory=list)
+    satellites: list[str] = Field(default_factory=list)
+    sensors: list[str] = Field(default_factory=list)
+    collections: list[str] = Field(default_factory=list)
+    processing_levels: list[str] = Field(default_factory=list)
 
     # Resolution filters (meters)
-    resolution_min_m: Optional[float] = Field(None, gt=0)
-    resolution_max_m: Optional[float] = Field(None, gt=0)
+    resolution_min_m: float | None = Field(None, gt=0)
+    resolution_max_m: float | None = Field(None, gt=0)
 
     # Pagination
-    product_type: Optional[str] = None       # "GRD"|"SLC"|"GRD-COG"
-    polarisation: Optional[str] = None
-    pass_direction: Optional[str] = None
+    product_type: str | None = None  # "GRD"|"SLC"|"GRD-COG"
+    polarisation: str | None = None
+    pass_direction: str | None = None
     max_results: int = Field(default=100, ge=1, le=10000)
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=100, ge=1, le=1000)
@@ -160,15 +163,15 @@ class SearchQuery(BaseModel):
     sort_ascending: bool = False
 
     # Provider control
-    providers: List[str] = Field(default_factory=list)
-    provider_filters: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
+    providers: list[str] = Field(default_factory=list)
+    provider_filters: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
     # Advanced filtering
-    cql2_filter: Optional[str] = None
-    ids: List[str] = Field(default_factory=list)
+    cql2_filter: str | None = None
+    ids: list[str] = Field(default_factory=list)
 
     # Geometry (alternative to bbox)
-    geometry_geojson: Optional[Dict[str, Any]] = None  # GeoJSON geometry dict
+    geometry_geojson: dict[str, Any] | None = None  # GeoJSON geometry dict
 
     # Provider failure handling
     on_provider_failure: str = "skip"  # "skip", "abort", or "retry"
@@ -178,7 +181,7 @@ class SearchQuery(BaseModel):
 
     @field_validator("bbox", mode="before")
     @classmethod
-    def coerce_bbox(cls, v: Any) -> Optional[BoundingBox]:
+    def coerce_bbox(cls, v: Any) -> BoundingBox | None:
         """Accept tuple, list, string, dict, or BoundingBox."""
         if v is None:
             return None
@@ -190,11 +193,12 @@ class SearchQuery(BaseModel):
             return BoundingBox.from_string(v)
         if isinstance(v, dict):
             return BoundingBox(**v)
-        raise ValueError(f"Cannot coerce {type(v)} to BoundingBox")
+        msg = f"Cannot coerce {type(v)} to BoundingBox"
+        raise ValueError(msg)
 
     @field_validator("start_date", "end_date", mode="before")
     @classmethod
-    def coerce_date(cls, v: Any) -> Optional[Union[date, datetime]]:
+    def coerce_date(cls, v: Any) -> date | datetime | None:
         """Accept string dates in ISO format."""
         if v is None or isinstance(v, (date, datetime)):
             return v
@@ -203,39 +207,48 @@ class SearchQuery(BaseModel):
                 return date.fromisoformat(v)
             except ValueError:
                 from dateutil.parser import parse
+
                 return parse(v)
-        raise ValueError(f"Cannot parse date from {type(v)}")
+        msg = f"Cannot parse date from {type(v)}"
+        raise ValueError(msg)
 
     @model_validator(mode="after")
-    def validate_cloud_cover_range(self) -> "SearchQuery":
+    def validate_cloud_cover_range(self) -> SearchQuery:
         if self.cloud_cover_min > self.cloud_cover_max:
-            raise ValueError(
+            msg = (
                 f"cloud_cover_min ({self.cloud_cover_min}) must be ≤ "
                 f"cloud_cover_max ({self.cloud_cover_max})"
             )
+            raise ValueError(msg)
         return self
 
     @model_validator(mode="after")
-    def validate_date_range(self) -> "SearchQuery":
+    def validate_date_range(self) -> SearchQuery:
         if self.start_date and self.end_date:
-            sd = self.start_date if isinstance(self.start_date, datetime) else datetime(
-                self.start_date.year, self.start_date.month, self.start_date.day
+            sd = (
+                self.start_date
+                if isinstance(self.start_date, datetime)
+                else datetime(self.start_date.year, self.start_date.month, self.start_date.day)
             )
-            ed = self.end_date if isinstance(self.end_date, datetime) else datetime(
-                self.end_date.year, self.end_date.month, self.end_date.day
+            ed = (
+                self.end_date
+                if isinstance(self.end_date, datetime)
+                else datetime(self.end_date.year, self.end_date.month, self.end_date.day)
             )
             if sd > ed:
-                raise ValueError("start_date must be before or equal to end_date")
+                msg = "start_date must be before or equal to end_date"
+                raise ValueError(msg)
         return self
 
     @model_validator(mode="after")
-    def validate_resolution_range(self) -> "SearchQuery":
+    def validate_resolution_range(self) -> SearchQuery:
         if self.resolution_min_m and self.resolution_max_m:
             if self.resolution_min_m > self.resolution_max_m:
-                raise ValueError("resolution_min_m must be ≤ resolution_max_m")
+                msg = "resolution_min_m must be ≤ resolution_max_m"
+                raise ValueError(msg)
         return self
 
-    def set_product_type(self, product_type: str) -> "SearchQuery":
+    def set_product_type(self, product_type: str) -> SearchQuery:
         """
         Set the SAR product type.
 
@@ -251,14 +264,14 @@ class SearchQuery(BaseModel):
         self.product_type = product_type.upper()
         return self
 
-    def to_stac_filter(self) -> Dict[str, Any]:
+    def to_stac_filter(self) -> dict[str, Any]:
         """
         Convert to STAC API search parameters.
 
         Returns:
             Dictionary of STAC-compliant search parameters.
         """
-        params: Dict[str, Any] = {}
+        params: dict[str, Any] = {}
 
         if self.bbox:
             params["bbox"] = list(self.bbox.to_tuple())
@@ -267,11 +280,13 @@ class SearchQuery(BaseModel):
             params["intersects"] = self.geometry
 
         if self.start_date or self.end_date:
+
             def _to_rfc3339(d) -> str:
                 """Format date/datetime as RFC3339 string required by STAC APIs."""
-                if hasattr(d, 'hour'):  # it's a datetime
+                if hasattr(d, "hour"):  # it's a datetime
                     return d.strftime("%Y-%m-%dT%H:%M:%SZ")
                 return f"{d.year:04d}-{d.month:02d}-{d.day:02d}T00:00:00Z"
+
             start = _to_rfc3339(self.start_date) if self.start_date else ".."
             end = _to_rfc3339(self.end_date) if self.end_date else ".."
             params["datetime"] = f"{start}/{end}"
@@ -289,15 +304,13 @@ class SearchQuery(BaseModel):
         cql2_args = []
 
         if self.cloud_cover_max < 100:
-            cql2_args.append({
-                "op": "<=",
-                "args": [{"property": "eo:cloud_cover"}, self.cloud_cover_max]
-            })
+            cql2_args.append(
+                {"op": "<=", "args": [{"property": "eo:cloud_cover"}, self.cloud_cover_max]}
+            )
         if self.cloud_cover_min > 0:
-            cql2_args.append({
-                "op": ">=",
-                "args": [{"property": "eo:cloud_cover"}, self.cloud_cover_min]
-            })
+            cql2_args.append(
+                {"op": ">=", "args": [{"property": "eo:cloud_cover"}, self.cloud_cover_min]}
+            )
 
         # Merge in any user-supplied CQL2 filter (accept dict or text string)
         if self.cql2_filter:
@@ -332,7 +345,7 @@ class SearchQuery(BaseModel):
         """Return True if any date constraint is set."""
         return self.start_date is not None or self.end_date is not None
 
-    def copy_for_provider(self, provider: str) -> "SearchQuery":
+    def copy_for_provider(self, provider: str) -> SearchQuery:
         """
         Return a copy of this query with provider-specific filters merged.
 

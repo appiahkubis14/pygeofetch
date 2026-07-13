@@ -23,17 +23,33 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 from pygeofetch.models.download_task import DownloadOptions, DownloadResult, DownloadStatus
 from pygeofetch.models.satellite_data import (
-    DataFormat, ProviderCapabilities, QuotaInfo, SatelliteData,
+    ProviderCapabilities,
+    QuotaInfo,
+    SatelliteData,
 )
-from pygeofetch.models.search_query import SearchQuery
 from pygeofetch.models.user_auth import AuthSession, Credentials
 from pygeofetch.providers.base import (
-    AbstractBaseProvider, AuthenticationError, SearchError, DownloadError,
+    AbstractBaseProvider,
+    AuthenticationError,
+    DownloadError,
+    SearchError,
 )
+
+if TYPE_CHECKING:
+    from pygeofetch.models.search_query import SearchQuery
+
+
+def _plain(v) -> str:
+    """Extract plain string from str or SecretStr."""
+    if v is None:
+        return ""
+    if hasattr(v, "get_secret_value"):
+        return v.get_secret_value()
+    return str(v)
 
 
 class NASAEarthdataCloudProvider(AbstractBaseProvider):
@@ -78,10 +94,11 @@ class NASAEarthdataCloudProvider(AbstractBaseProvider):
         import httpx
 
         if not credentials.username or not credentials.password:
-            raise AuthenticationError(
+            msg = (
                 "NASA Earthdata Cloud requires username and password. "
                 "Register at: https://urs.earthdata.nasa.gov"
             )
+            raise AuthenticationError(msg)
 
         # Step 1: EDL login to get bearer token
         try:
@@ -91,20 +108,27 @@ class NASAEarthdataCloudProvider(AbstractBaseProvider):
                 timeout=30,
             )
             if resp.status_code == 401:
-                raise AuthenticationError("Invalid Earthdata Login credentials.")
+                msg = "Invalid Earthdata Login credentials."
+                raise AuthenticationError(msg)
             if resp.status_code not in (200, 201):
-                raise AuthenticationError(f"EDL auth failed: HTTP {resp.status_code}")
+                msg = f"EDL auth failed: HTTP {resp.status_code}"
+                raise AuthenticationError(msg)
 
             token_data = resp.json()
-            edl_token = token_data[0].get("access_token") if isinstance(token_data, list) else token_data.get("access_token")
+            edl_token = (
+                token_data[0].get("access_token")
+                if isinstance(token_data, list)
+                else token_data.get("access_token")
+            )
 
         except AuthenticationError:
             raise
         except Exception as exc:
-            raise AuthenticationError(f"EDL authentication error: {exc}") from exc
+            msg = f"EDL authentication error: {exc}"
+            raise AuthenticationError(msg) from exc
 
         # Step 2: Get temporary AWS credentials for S3 direct access
-        s3_creds: Dict[str, str] = {}
+        s3_creds: dict[str, str] = {}
         try:
             s3_resp = httpx.get(
                 self.S3_CREDS_URL,
@@ -121,9 +145,12 @@ class NASAEarthdataCloudProvider(AbstractBaseProvider):
                 }
                 self._logger.info("Obtained temporary S3 credentials for NASA Earthdata Cloud")
         except Exception as exc:
-            self._logger.warning(f"Could not obtain S3 credentials (will fall back to HTTPS): {exc}")
+            self._logger.warning(
+                f"Could not obtain S3 credentials (will fall back to HTTPS): {exc}"
+            )
 
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timedelta, timezone
+
         session = AuthSession(
             provider=self.PROVIDER_ID,
             access_token=edl_token,
@@ -141,7 +168,7 @@ class NASAEarthdataCloudProvider(AbstractBaseProvider):
         """Store an authenticated session for use in requests."""
         self._session = session
 
-    def search(self, query: SearchQuery) -> List[SatelliteData]:
+    def search(self, query: SearchQuery) -> list[SatelliteData]:
         """
         Search NASA CMR for cloud-hosted granules.
 
@@ -154,7 +181,7 @@ class NASAEarthdataCloudProvider(AbstractBaseProvider):
         self.require_auth()
         import httpx
 
-        params: Dict[str, Any] = {
+        params: dict[str, Any] = {
             "cloud_hosted": "true",
             "page_size": min(query.max_results, 2000),
         }
@@ -175,7 +202,9 @@ class NASAEarthdataCloudProvider(AbstractBaseProvider):
             params["short_name[]"] = query.satellites
 
         try:
-            headers = {"Authorization": f"Bearer {self._session.access_token}"}
+            headers = {
+                "Authorization": f"Bearer {(self._session.access_token if self._session else None)}"
+            }
             resp = httpx.get(
                 f"{self.BASE_URL}/granules.json",
                 params=params,
@@ -190,9 +219,10 @@ class NASAEarthdataCloudProvider(AbstractBaseProvider):
             return results
 
         except Exception as exc:
-            raise SearchError(f"NASA Earthdata Cloud search failed: {exc}") from exc
+            msg = f"NASA Earthdata Cloud search failed: {exc}"
+            raise SearchError(msg) from exc
 
-    def _parse_granule(self, entry: Dict[str, Any]) -> SatelliteData:
+    def _parse_granule(self, entry: dict[str, Any]) -> SatelliteData:
         """Convert a CMR granule entry to SatelliteData."""
         from pygeofetch.models.satellite_data import SatelliteAsset
 
@@ -201,19 +231,24 @@ class NASAEarthdataCloudProvider(AbstractBaseProvider):
         bbox = None
         if len(bbox_raw) == 4:
             try:
-                bbox = (float(bbox_raw[1]), float(bbox_raw[0]),
-                        float(bbox_raw[3]), float(bbox_raw[2]))
+                bbox = (
+                    float(bbox_raw[1]),
+                    float(bbox_raw[0]),
+                    float(bbox_raw[3]),
+                    float(bbox_raw[2]),
+                )
             except ValueError:
                 pass
 
-        assets: Dict[str, SatelliteAsset] = {}
+        assets: dict[str, SatelliteAsset] = {}
         for link in entry.get("links", []):
             href = link.get("href", "")
-            rel = link.get("rel", "")
+            link.get("rel", "")
             if "s3://" in href or href.endswith((".nc", ".h5", ".hdf", ".tif", ".zarr")):
                 key = f"data_{len(assets)}"
                 assets[key] = SatelliteAsset(
-                    key=key, href=href,
+                    key=key,
+                    href=href,
                     roles=["data"],
                     media_type=link.get("type"),
                 )
@@ -221,7 +256,7 @@ class NASAEarthdataCloudProvider(AbstractBaseProvider):
         return SatelliteData(
             id=granule_id,
             provider=self.PROVIDER_ID,
-            collection=entry.get("collection_concept_id"),
+            collection=entry.get("collection_concept_id", cloud_cover=None),
             satellite=entry.get("data_center", "NASA"),
             bbox=bbox,
             assets=assets,
@@ -256,7 +291,11 @@ class NASAEarthdataCloudProvider(AbstractBaseProvider):
         destination = Path(destination)
         destination.mkdir(parents=True, exist_ok=True)
 
-        s3_creds = self._session.session_data.get("s3_credentials", {}) if self._session.session_data else {}
+        s3_creds = (
+            (self._session.session_data if self._session else {}).get("s3_credentials", {})
+            if (self._session.session_data if self._session else {})
+            else {}
+        )
         start_time = time.time()
         output_paths = []
         total_bytes = 0
@@ -286,19 +325,26 @@ class NASAEarthdataCloudProvider(AbstractBaseProvider):
         duration = time.time() - start_time
         if not output_paths:
             return DownloadResult(
-                status=DownloadStatus.FAILED, data_id=data.id,
-                provider=self.PROVIDER_ID, error="No assets downloaded",
+                status=DownloadStatus.FAILED,
+                data_id=data.id,
+                provider=self.PROVIDER_ID,
+                error="No assets downloaded",
             )
         return DownloadResult(
-            status=DownloadStatus.COMPLETED, data_id=data.id, provider=self.PROVIDER_ID,
-            output_path=output_paths[0], output_paths=output_paths,
-            bytes_downloaded=total_bytes, duration_seconds=duration,
+            status=DownloadStatus.COMPLETED,
+            data_id=data.id,
+            provider=self.PROVIDER_ID,
+            output_path=output_paths[0],
+            output_paths=output_paths,
+            bytes_downloaded=total_bytes,
+            duration_seconds=duration,
         )
 
-    def _download_s3(self, s3_uri: str, out_file: Path, creds: Dict[str, str]) -> None:
+    def _download_s3(self, s3_uri: str, out_file: Path, creds: dict[str, str]) -> None:
         """Download from S3 using temporary credentials."""
         try:
             import boto3
+
             s3 = boto3.client(
                 "s3",
                 aws_access_key_id=creds["aws_access_key_id"],
@@ -311,20 +357,24 @@ class NASAEarthdataCloudProvider(AbstractBaseProvider):
             s3.download_file(bucket, key, str(out_file))
             self._logger.debug(f"S3 download: {s3_uri} → {out_file}")
         except ImportError:
-            raise DownloadError("boto3 not installed. Install with: pip install boto3")
+            msg = "boto3 not installed. Install with: pip install boto3"
+            raise DownloadError(msg)
 
     def _download_https(self, url: str, out_file: Path, options: DownloadOptions) -> None:
         """HTTPS fallback download with Bearer token auth."""
         import httpx
+
         headers = {}
-        if self._session and self._session.access_token:
-            headers["Authorization"] = f"Bearer {self._session.access_token}"
-        with httpx.stream("GET", url, headers=headers, timeout=options.timeout_seconds,
-                          follow_redirects=True) as resp:
+        if self._session and (self._session.access_token if self._session else None):
+            headers["Authorization"] = (
+                f"Bearer {(self._session.access_token if self._session else None)}"
+            )
+        with httpx.stream(
+            "GET", url, headers=headers, timeout=options.timeout_seconds, follow_redirects=True
+        ) as resp:
             self._handle_http_error(resp)
             with open(out_file, "wb") as f:
-                for chunk in resp.iter_bytes(chunk_size=int(options.chunk_size_mb * 1024 * 1024)):
-                    f.write(chunk)
+                f.writelines(resp.iter_bytes(chunk_size=int(options.chunk_size_mb * 1024 * 1024)))
 
     def get_capabilities(self) -> ProviderCapabilities:
         return ProviderCapabilities(
@@ -333,10 +383,14 @@ class NASAEarthdataCloudProvider(AbstractBaseProvider):
             description=self.DESCRIPTION,
             auth_type="oauth2",
             satellites=["Terra", "Aqua", "CALIPSO", "ICESat-2", "GEDI"],
-            search=True, download=True, streaming=True,
-            stac=True, supports_direct_s3=True,
-            supports_aoi_filter=True, supports_date_filter=True,
-            requires_auth=True, has_quota=False,
+            search=True,
+            download=True,
+            streaming=True,
+            stac=True,
+            supports_direct_s3=True,
+            supports_aoi_filter=True,
+            supports_date_filter=True,
+            requires_auth=True,
             regions=["global"],
             endpoint_url=self.BASE_URL,
             docs_url="https://www.earthdata.nasa.gov/esds/cloud-evolution",

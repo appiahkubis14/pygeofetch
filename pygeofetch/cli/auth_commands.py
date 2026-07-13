@@ -121,9 +121,9 @@ def auth_login(provider: str) -> None:
     # Determine what to prompt based on auth type
     auth_type = caps.auth_type if hasattr(caps, "auth_type") else "username_password"
 
-    if auth_type in ("api_key",):
+    if auth_type == "api_key":
         creds["api_key"] = click.prompt("API Key", hide_input=True)
-    elif auth_type in ("oauth2_client",):
+    elif auth_type == "oauth2_client":
         creds["client_id"] = click.prompt("Client ID")
         creds["client_secret"] = click.prompt("Client Secret", hide_input=True)
     else:
@@ -139,7 +139,9 @@ def auth_login(provider: str) -> None:
     if click.confirm("Verify credentials now?", default=True):
         try:
             session = mgr.authenticate(provider)
-            console.print(f"[green]Authentication successful![/] Session expires: {session.expires_at}")
+            console.print(
+                f"[green]Authentication successful![/] Session expires: {session.expires_at}"
+            )
         except Exception as exc:
             console.print(f"[red]Authentication failed: {exc}[/]")
 

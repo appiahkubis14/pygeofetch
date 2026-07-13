@@ -26,17 +26,21 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-from urllib.parse import urlparse
+from typing import TYPE_CHECKING, Any
 
 from pygeofetch.models.download_task import DownloadOptions, DownloadResult, DownloadStatus
-from pygeofetch.models.satellite_data import resolve_band_keys
 from pygeofetch.models.satellite_data import (
-    DataFormat, ProviderCapabilities, QuotaInfo, SatelliteData,
+    DataFormat,
+    ProviderCapabilities,
+    QuotaInfo,
+    SatelliteData,
+    resolve_band_keys,
 )
-from pygeofetch.models.search_query import SearchQuery
 from pygeofetch.models.user_auth import AuthSession, Credentials
 from pygeofetch.providers.base import AbstractBaseProvider, SearchError
+
+if TYPE_CHECKING:
+    from pygeofetch.models.search_query import SearchQuery
 
 
 class PlanetaryComputerProvider(AbstractBaseProvider):
@@ -64,7 +68,7 @@ class PlanetaryComputerProvider(AbstractBaseProvider):
     SAS_URL = "https://planetarycomputer.microsoft.com/api/sas/v1/token"
 
     # STAC collection IDs in Planetary Computer
-    COLLECTION_MAP: Dict[str, str] = {
+    COLLECTION_MAP: dict[str, str] = {
         "sentinel-1": "sentinel-1-rtc",
         "sentinel-2": "sentinel-2-l2a",
         "landsat": "landsat-c2-l2",
@@ -80,7 +84,9 @@ class PlanetaryComputerProvider(AbstractBaseProvider):
 
     def authenticate(self, credentials: Credentials) -> AuthSession:
         """No login required — return empty session."""
-        session = AuthSession(provider=self.PROVIDER_ID)
+        session = AuthSession(provider=self.PROVIDER_ID,
+                access_token=None,
+            )
         self._session = session
         return session
 
@@ -91,7 +97,7 @@ class PlanetaryComputerProvider(AbstractBaseProvider):
         """Store an authenticated session for use in requests."""
         self._session = session
 
-    def search(self, query: SearchQuery) -> List[SatelliteData]:
+    def search(self, query: SearchQuery) -> list[SatelliteData]:
         """
         Search the Planetary Computer STAC catalog.
 
@@ -129,9 +135,10 @@ class PlanetaryComputerProvider(AbstractBaseProvider):
             return results
 
         except Exception as exc:
-            raise SearchError(f"Planetary Computer search failed: {exc}") from exc
+            msg = f"Planetary Computer search failed: {exc}"
+            raise SearchError(msg) from exc
 
-    def _resolve_collections(self, query: SearchQuery) -> List[str]:
+    def _resolve_collections(self, query: SearchQuery) -> list[str]:
         """Map satellite names to Planetary Computer collection IDs."""
         if query.collections:
             return query.collections
@@ -148,7 +155,7 @@ class PlanetaryComputerProvider(AbstractBaseProvider):
                 collections.add(sat.lower())
         return list(collections)
 
-    def _get_sas_token(self, collection: str) -> Optional[str]:
+    def _get_sas_token(self, collection: str) -> str | None:
         """
         Request a SAS token for downloading assets from a collection.
 
@@ -159,6 +166,7 @@ class PlanetaryComputerProvider(AbstractBaseProvider):
             SAS token string, or None on failure.
         """
         import httpx
+
         try:
             resp = httpx.get(
                 f"{self.SAS_URL}/{collection}",
@@ -170,7 +178,7 @@ class PlanetaryComputerProvider(AbstractBaseProvider):
             self._logger.warning(f"Failed to get SAS token for {collection}: {exc}")
         return None
 
-    def _sign_url(self, href: str, token: Optional[str]) -> str:
+    def _sign_url(self, href: str, token: str | None) -> str:
         """Append SAS token to a URL if present."""
         if not token:
             return href
@@ -235,12 +243,14 @@ class PlanetaryComputerProvider(AbstractBaseProvider):
 
             try:
                 self._logger.info(f"  Fetching asset {key!r} → {out_file.name}")
-                with httpx.stream("GET", signed_url, timeout=options.timeout_seconds,
-                                  follow_redirects=True) as resp:
+                with httpx.stream(
+                    "GET", signed_url, timeout=options.timeout_seconds, follow_redirects=True
+                ) as resp:
                     self._handle_http_error(resp)
                     with open(out_file, "wb") as f:
-                        for chunk in resp.iter_bytes(chunk_size=int(options.chunk_size_mb * 1024 * 1024)):
-                            f.write(chunk)
+                        f.writelines(
+                            resp.iter_bytes(chunk_size=int(options.chunk_size_mb * 1024 * 1024))
+                        )
                 output_paths.append(out_file)
                 total_bytes += out_file.stat().st_size
                 self._logger.info(
@@ -252,13 +262,19 @@ class PlanetaryComputerProvider(AbstractBaseProvider):
         duration = time.time() - start_time
         if not output_paths:
             return DownloadResult(
-                status=DownloadStatus.FAILED, data_id=data.id,
-                provider=self.PROVIDER_ID, error="No assets downloaded",
+                status=DownloadStatus.FAILED,
+                data_id=data.id,
+                provider=self.PROVIDER_ID,
+                error="No assets downloaded",
             )
         return DownloadResult(
-            status=DownloadStatus.COMPLETED, data_id=data.id, provider=self.PROVIDER_ID,
-            output_path=output_paths[0], output_paths=output_paths,
-            bytes_downloaded=total_bytes, duration_seconds=duration,
+            status=DownloadStatus.COMPLETED,
+            data_id=data.id,
+            provider=self.PROVIDER_ID,
+            output_path=output_paths[0],
+            output_paths=output_paths,
+            bytes_downloaded=total_bytes,
+            duration_seconds=duration,
         )
 
     def get_capabilities(self) -> ProviderCapabilities:
@@ -268,13 +284,20 @@ class PlanetaryComputerProvider(AbstractBaseProvider):
             description=self.DESCRIPTION,
             auth_type="none",
             satellites=["Sentinel-1", "Sentinel-2", "Landsat-8", "Landsat-9", "MODIS", "NAIP"],
-            search=True, download=True, streaming=True,
-            stac=True, supports_sar=True, supports_cql2=True,
-            supports_aoi_filter=True, supports_cloud_filter=True,
-            supports_date_filter=True, supports_processing_level_filter=True,
-            requires_auth=False, has_quota=False,
+            search=True,
+            download=True,
+            streaming=True,
+            stac=True,
+            supports_sar=True,
+            supports_cql2=True,
+            supports_aoi_filter=True,
+            supports_cloud_filter=True,
+            supports_date_filter=True,
+            supports_processing_level_filter=True,
+            requires_auth=False,
             regions=["global"],
-            resolution_min_m=0.6, resolution_max_m=1000.0,
+            resolution_min_m=0.6,
+            resolution_max_m=1000.0,
             endpoint_url=self.BASE_URL,
             docs_url="https://planetarycomputer.microsoft.com/docs",
             supported_formats=[DataFormat.COG, DataFormat.GEOTIFF],
@@ -286,9 +309,10 @@ class PlanetaryComputerProvider(AbstractBaseProvider):
             extra_info={"note": "Free, no quota limits. SAS tokens auto-generated per request."},
         )
 
-    def list_collections(self) -> List[Dict[str, Any]]:
+    def list_collections(self) -> list[dict[str, Any]]:
         """List all available STAC collections."""
         import httpx
+
         resp = httpx.get(f"{self.BASE_URL}/collections", timeout=30)
         self._handle_http_error(resp)
         return resp.json().get("collections", [])

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field, SecretStr
 
@@ -48,33 +48,33 @@ class Credentials(BaseModel):
 
     provider: str
     auth_type: AuthType = AuthType.USERNAME_PASSWORD
-    username: Optional[str] = None
-    password: Optional[SecretStr] = None
-    api_key: Optional[SecretStr] = None
-    token: Optional[SecretStr] = None
-    client_id: Optional[str] = None
-    client_secret: Optional[SecretStr] = None
-    access_key: Optional[str] = None
-    secret_key: Optional[SecretStr] = None
-    service_account_json: Optional[str] = None
-    extra: Dict[str, Any] = Field(default_factory=dict)
+    username: str | None = None
+    password: SecretStr | None = None
+    api_key: SecretStr | None = None
+    token: SecretStr | None = None
+    client_id: str | None = None
+    client_secret: SecretStr | None = None
+    access_key: str | None = None
+    secret_key: SecretStr | None = None
+    service_account_json: str | None = None
+    extra: dict[str, Any] = Field(default_factory=dict)
 
     class Config:
         json_encoders = {SecretStr: lambda v: "***"}
 
-    def get_password(self) -> Optional[str]:
+    def get_password(self) -> str | None:
         """Return password as plain string."""
         return self.password.get_secret_value() if self.password else None
 
-    def get_api_key(self) -> Optional[str]:
+    def get_api_key(self) -> str | None:
         """Return API key as plain string."""
         return self.api_key.get_secret_value() if self.api_key else None
 
-    def get_token(self) -> Optional[str]:
+    def get_token(self) -> str | None:
         """Return token as plain string."""
         return self.token.get_secret_value() if self.token else None
 
-    def get_secret_key(self) -> Optional[str]:
+    def get_secret_key(self) -> str | None:
         """Return AWS secret key as plain string."""
         return self.secret_key.get_secret_value() if self.secret_key else None
 
@@ -93,10 +93,10 @@ class AuthSession(BaseModel):
     """
 
     provider: str
-    access_token: Optional[str] = None
-    refresh_token: Optional[str] = None
-    expires_at: Optional[datetime] = None
-    session_data: Dict[str, Any] = Field(default_factory=dict)
+    access_token: Any | None  # str or SecretStr — use .get_secret_value() if SecretStr = None
+    refresh_token: str | None = None
+    expires_at: datetime | None = None
+    session_data: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     @property
@@ -105,6 +105,7 @@ class AuthSession(BaseModel):
         if self.expires_at is None:
             return False
         from datetime import timezone
+
         if self.expires_at.tzinfo is not None:
             return datetime.now(timezone.utc) >= self.expires_at
         return datetime.utcnow() >= self.expires_at
@@ -115,7 +116,7 @@ class AuthSession(BaseModel):
         return self.access_token is not None and not self.is_expired
 
     @property
-    def minutes_until_expiry(self) -> Optional[float]:
+    def minutes_until_expiry(self) -> float | None:
         """Return minutes until session expires, or None if no expiry set."""
         if self.expires_at is None:
             return None

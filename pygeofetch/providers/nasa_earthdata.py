@@ -7,40 +7,70 @@ NSIDC, ORNL, LP DAAC, PO.DAAC, ASF DAAC, and more.
 
 Authentication: NASA Earthdata Login (urs.earthdata.nasa.gov)
 """
+
 from __future__ import annotations
+
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
+
 from pygeofetch.models.download_task import DownloadOptions, DownloadResult, DownloadStatus
-from pygeofetch.models.satellite_data import DataFormat, ProcessingLevel, ProviderCapabilities, QuotaInfo, SatelliteAsset, SatelliteData
-from pygeofetch.models.search_query import SearchQuery
+from pygeofetch.models.satellite_data import (
+    DataFormat,
+    ProviderCapabilities,
+    QuotaInfo,
+    SatelliteAsset,
+    SatelliteData,
+)
 from pygeofetch.models.user_auth import AuthSession, Credentials
 from pygeofetch.providers.base import AbstractBaseProvider, AuthenticationError, SearchError
+
+if TYPE_CHECKING:
+    from pygeofetch.models.search_query import SearchQuery
+
+
+def _plain(v) -> str:
+    """Extract plain string from str or SecretStr."""
+    if v is None:
+        return ""
+    if hasattr(v, "get_secret_value"):
+        return v.get_secret_value()
+    return str(v)
+
 
 class NASAEarthdataProvider(AbstractBaseProvider):
     PROVIDER_ID = "nasa_earthdata"
     DISPLAY_NAME = "NASA Earthdata (CMR)"
     REQUIRES_AUTH = True
-    DESCRIPTION = "Access to NASA Earth science data from all DAACs via the Common Metadata Repository."
+    DESCRIPTION = (
+        "Access to NASA Earth science data from all DAACs via the Common Metadata Repository."
+    )
     DATA_TYPES = ["MODIS", "VIIRS", "ICESat-2", "GEDI", "Landsat", "SRTM", "ASTER"]
     BASE_URL = "https://cmr.earthdata.nasa.gov/search"
 
     def authenticate(self, credentials: Credentials) -> AuthSession:
         if not credentials.username or not credentials.get_password():
-            raise AuthenticationError("NASA Earthdata requires username and password")
+            msg = "NASA Earthdata requires username and password"
+            raise AuthenticationError(msg)
         import httpx
+
         try:
             resp = httpx.get(
                 "https://urs.earthdata.nasa.gov/api/users/user",
-                auth=(credentials.username, credentials.get_password()),
+                auth=(credentials.username, _plain(credentials.get_password())),
                 timeout=30,
             )
             if resp.status_code not in (200, 404):
-                raise AuthenticationError(f"NASA Earthdata login failed: HTTP {resp.status_code}")
+                msg = f"NASA Earthdata login failed: HTTP {resp.status_code}"
+                raise AuthenticationError(msg)
             session = AuthSession(
                 provider=self.PROVIDER_ID,
-                session_data={"username": credentials.username, "password": credentials.get_password()},
+                access_token=None,
+                session_data={
+                    "username": credentials.username,
+                    "password": _plain(credentials.get_password()),
+                },
             )
             self._session = session
             self._logger.info(f"Authenticated with NASA Earthdata as {credentials.username!r}")
@@ -48,7 +78,8 @@ class NASAEarthdataProvider(AbstractBaseProvider):
         except AuthenticationError:
             raise
         except Exception as exc:
-            raise AuthenticationError(f"NASA Earthdata auth error: {exc}") from exc
+            msg = f"NASA Earthdata auth error: {exc}"
+            raise AuthenticationError(msg) from exc
 
     def validate_credentials(self, credentials: Credentials) -> bool:
         return bool(credentials.username and credentials.get_password())
@@ -57,10 +88,11 @@ class NASAEarthdataProvider(AbstractBaseProvider):
         """Store an authenticated session for use in requests."""
         self._session = session
 
-    def search(self, query: SearchQuery) -> List[SatelliteData]:
+    def search(self, query: SearchQuery) -> list[SatelliteData]:
         self.require_auth()
         import httpx
-        params: Dict[str, Any] = {
+
+        params: dict[str, Any] = {
             "page_size": min(query.max_results, 2000),
             "sort_key[]": "-start_date",
         }
@@ -80,7 +112,10 @@ class NASAEarthdataProvider(AbstractBaseProvider):
             resp = httpx.get(
                 f"{self.BASE_URL}/granules.json",
                 params=params,
-                auth=(self._session.session_data["username"], self._session.session_data["password"]),
+                auth=(
+                    (self._session.session_data if self._session else {})["username"],
+                    (self._session.session_data if self._session else {})["password"],
+                ),
                 timeout=60,
             )
             self._handle_http_error(resp)
@@ -88,9 +123,10 @@ class NASAEarthdataProvider(AbstractBaseProvider):
             granules = data.get("feed", {}).get("entry", [])
             return [self._granule_to_satellite_data(g) for g in granules]
         except Exception as exc:
-            raise SearchError(f"NASA Earthdata search failed: {exc}") from exc
+            msg = f"NASA Earthdata search failed: {exc}"
+            raise SearchError(msg) from exc
 
-    def _granule_to_satellite_data(self, g: Dict) -> SatelliteData:
+    def _granule_to_satellite_data(self, g: dict) -> SatelliteData:
         bbox = None
         boxes = g.get("boxes", [])
         if boxes:
@@ -121,11 +157,14 @@ class NASAEarthdataProvider(AbstractBaseProvider):
             properties=g,
         )
 
-    def download(self, data: SatelliteData, destination: Path, options: DownloadOptions) -> DownloadResult:
+    def download(
+        self, data: SatelliteData, destination: Path, options: DownloadOptions
+    ) -> DownloadResult:
         self.require_auth()
         destination = Path(destination)
         destination.mkdir(parents=True, exist_ok=True)
         import httpx
+
         output_paths = []
         start = time.time()
         for key, asset in list(data.assets.items())[:3]:
@@ -135,30 +174,64 @@ class NASAEarthdataProvider(AbstractBaseProvider):
                 output_paths.append(out)
                 continue
             try:
-                with httpx.stream("GET", asset.href,
-                    auth=(self._session.session_data["username"], self._session.session_data["password"]),
-                    timeout=options.timeout_seconds, follow_redirects=True) as resp:
+                with httpx.stream(
+                    "GET",
+                    asset.href,
+                    auth=(
+                        (self._session.session_data if self._session else {})["username"],
+                        (self._session.session_data if self._session else {})["password"],
+                    ),
+                    timeout=options.timeout_seconds,
+                    follow_redirects=True,
+                ) as resp:
                     self._handle_http_error(resp)
                     with open(out, "wb") as f:
-                        for chunk in resp.iter_bytes(chunk_size=int(options.chunk_size_mb * 1024 * 1024)):
-                            f.write(chunk)
+                        f.writelines(
+                            resp.iter_bytes(chunk_size=int(options.chunk_size_mb * 1024 * 1024))
+                        )
                 output_paths.append(out)
             except Exception as exc:
                 self._logger.warning(f"Failed to download {key}: {exc}")
         if not output_paths:
-            return DownloadResult(status=DownloadStatus.FAILED, data_id=data.id, provider=self.PROVIDER_ID, error="No assets downloaded")
-        return DownloadResult(status=DownloadStatus.COMPLETED, data_id=data.id, provider=self.PROVIDER_ID,
-            output_path=output_paths[0], output_paths=output_paths,
-            bytes_downloaded=sum(p.stat().st_size for p in output_paths), duration_seconds=time.time()-start)
+            return DownloadResult(
+                status=DownloadStatus.FAILED,
+                data_id=data.id,
+                provider=self.PROVIDER_ID,
+                error="No assets downloaded",
+            )
+        return DownloadResult(
+            status=DownloadStatus.COMPLETED,
+            data_id=data.id,
+            provider=self.PROVIDER_ID,
+            output_path=output_paths[0],
+            output_paths=output_paths,
+            bytes_downloaded=sum(p.stat().st_size for p in output_paths),
+            duration_seconds=time.time() - start,
+        )
 
     def get_capabilities(self) -> ProviderCapabilities:
         return ProviderCapabilities(
             provider_id="nasa_earthdata",
-            name="NASA Earthdata",search=True, download=True, stac=False, requires_auth=True,
+            name="NASA Earthdata",
+            search=True,
+            download=True,
+            stac=False,
+            requires_auth=True,
             supported_satellites=["MODIS", "VIIRS", "ICESat-2", "GEDI", "Landsat"],
-            supported_formats=[DataFormat.HDF4, DataFormat.HDF5, DataFormat.NETCDF, DataFormat.GEOTIFF],
-            supports_cloud_filter=True, supports_date_filter=True, supports_aoi_filter=True)
+            supported_formats=[
+                DataFormat.HDF4,
+                DataFormat.HDF5,
+                DataFormat.NETCDF,
+                DataFormat.GEOTIFF,
+            ],
+            supports_cloud_filter=True,
+            supports_date_filter=True,
+            supports_aoi_filter=True,
+        )
 
     def get_quota_info(self) -> QuotaInfo:
         self.require_auth()
-        return QuotaInfo(provider=self.PROVIDER_ID, extra_info={"note": "NASA Earthdata provides free access with Earthdata Login"})
+        return QuotaInfo(
+            provider=self.PROVIDER_ID,
+            extra_info={"note": "NASA Earthdata provides free access with Earthdata Login"},
+        )

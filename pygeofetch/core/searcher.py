@@ -28,15 +28,21 @@ from __future__ import annotations
 
 import json
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
+from concurrent.futures import ThreadPoolExecutor, TimeoutError, as_completed
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any
 
+from pygeofetch.core.logging import (
+    get_logger,
+    print_provider_progress,
+    print_search_header,
+    print_search_results,
+)
 from pygeofetch.models.satellite_data import SatelliteData
-from pygeofetch.models.search_query import SearchQuery
-from pygeofetch.core.logging import (get_logger, print_search_header,
-    print_provider_progress, print_search_results)
+
+if TYPE_CHECKING:
+    from pygeofetch.models.search_query import SearchQuery
 
 logger = get_logger(__name__)
 
@@ -46,25 +52,29 @@ class SearchCache:
 
     def __init__(self, ttl_seconds: int = 3600) -> None:
         self.ttl = ttl_seconds
-        self._cache: Dict[str, Tuple[float, List[SatelliteData]]] = {}
+        self._cache: dict[str, tuple[float, list[SatelliteData]]] = {}
 
     def _key(self, query: SearchQuery, provider: str) -> str:
         """Generate cache key from query and provider."""
         import hashlib
-        data = json.dumps({
-            "provider": provider,
-            "bbox": list(query.bbox.to_tuple()) if query.bbox else None,
-            "start": str(query.start_date),
-            "end": str(query.end_date),
-            "cloud_min": query.cloud_cover_min,
-            "cloud_max": query.cloud_cover_max,
-            "max_results": query.max_results,
-            "satellites": sorted(query.satellites),
-            "collections": sorted(query.collections),
-        }, sort_keys=True)
+
+        data = json.dumps(
+            {
+                "provider": provider,
+                "bbox": list(query.bbox.to_tuple()) if query.bbox else None,
+                "start": str(query.start_date),
+                "end": str(query.end_date),
+                "cloud_min": query.cloud_cover_min,
+                "cloud_max": query.cloud_cover_max,
+                "max_results": query.max_results,
+                "satellites": sorted(query.satellites),
+                "collections": sorted(query.collections),
+            },
+            sort_keys=True,
+        )
         return hashlib.md5(data.encode()).hexdigest()
 
-    def get(self, query: SearchQuery, provider: str) -> Optional[List[SatelliteData]]:
+    def get(self, query: SearchQuery, provider: str) -> list[SatelliteData] | None:
         """Return cached results or None if expired/missing."""
         key = self._key(query, provider)
         entry = self._cache.get(key)
@@ -76,7 +86,7 @@ class SearchCache:
             return None
         return results
 
-    def set(self, query: SearchQuery, provider: str, results: List[SatelliteData]) -> None:
+    def set(self, query: SearchQuery, provider: str, results: list[SatelliteData]) -> None:
         """Cache results for a query/provider pair."""
         key = self._key(query, provider)
         self._cache[key] = (time.time(), results)
@@ -108,7 +118,7 @@ class FederatedSearcher:
 
     def __init__(
         self,
-        auth_manager: Optional[Any] = None,
+        auth_manager: Any | None = None,
         cache_ttl: int = 3600,
         max_workers: int = 8,
         timeout_per_provider: int = 60,
@@ -117,14 +127,14 @@ class FederatedSearcher:
         self.cache = SearchCache(ttl_seconds=cache_ttl)
         self.max_workers = max_workers
         self.timeout_per_provider = timeout_per_provider
-        self._provider_instances: Dict[str, Any] = {}
+        self._provider_instances: dict[str, Any] = {}
 
     def search(
         self,
         query: SearchQuery,
-        providers: Optional[List[str]] = None,
+        providers: list[str] | None = None,
         use_cache: bool = True,
-    ) -> List[SatelliteData]:
+    ) -> list[SatelliteData]:
         """
         Execute a federated search across multiple providers.
 
@@ -152,22 +162,21 @@ class FederatedSearcher:
 
         # ── clean search header ───────────────────────────────────────────────
         import time as _st
+
         _t0_search = _st.time()
-        _bbox   = query.bbox if query.bbox else None
-        _sd     = getattr(query, "start_date", "—")
-        _ed     = getattr(query, "end_date",   "—")
-        _cc     = getattr(query, "cloud_cover_max", 100) or 100
-        _pt     = getattr(query, "product_type", None) or "any"
+        _bbox = query.bbox or None
+        _sd = getattr(query, "start_date", "—")
+        _ed = getattr(query, "end_date", "—")
+        _cc = getattr(query, "cloud_cover_max", 100) or 100
+        _pt = getattr(query, "product_type", None) or "any"
         print_search_header(providers, _bbox, _sd, _ed, _cc, _pt)
 
-        all_results: List[SatelliteData] = []
-        provider_errors: Dict[str, str] = {}
+        all_results: list[SatelliteData] = []
+        provider_errors: dict[str, str] = {}
 
         with ThreadPoolExecutor(max_workers=min(self.max_workers, len(providers))) as executor:
             futures = {
-                executor.submit(
-                    self._search_provider, provider_id, query, use_cache
-                ): provider_id
+                executor.submit(self._search_provider, provider_id, query, use_cache): provider_id
                 for provider_id in providers
             }
 
@@ -176,13 +185,13 @@ class FederatedSearcher:
                 try:
                     results = future.result(timeout=self.timeout_per_provider)
                     _pdur = _st.time() - _t0_search
-                    print_provider_progress(provider_id, 'ok', len(results), _pdur)
+                    print_provider_progress(provider_id, "ok", len(results), _pdur)
                     all_results.extend(results)
                 except TimeoutError:
-                    print_provider_progress(provider_id, 'error', error='timed out')
+                    print_provider_progress(provider_id, "error", error="timed out")
                     provider_errors[provider_id] = "Search timed out"
                 except Exception as exc:
-                    print_provider_progress(provider_id, 'error', error=str(exc)[:60])
+                    print_provider_progress(provider_id, "error", error=str(exc)[:60])
                     provider_errors[provider_id] = str(exc)
 
         # Deduplicate, score, and sort
@@ -201,7 +210,7 @@ class FederatedSearcher:
 
     def _search_provider(
         self, provider_id: str, query: SearchQuery, use_cache: bool
-    ) -> List[SatelliteData]:
+    ) -> list[SatelliteData]:
         """Search a single provider, using cache if available."""
         if use_cache:
             cached = self.cache.get(query, provider_id)
@@ -220,6 +229,7 @@ class FederatedSearcher:
     def _get_provider(self, provider_id: str) -> Any:
         """Get provider instance with fresh auth session."""
         from pygeofetch.providers import get_provider
+
         prov = get_provider(provider_id)
         if self.auth_manager and prov.REQUIRES_AUTH:
             try:
@@ -229,9 +239,9 @@ class FederatedSearcher:
                 logger.warning(f"Auth for {provider_id} failed: {exc}")
         return prov
 
-    def _get_available_providers(self) -> List[str]:
+    def _get_available_providers(self) -> list[str]:
         """Return providers that have stored credentials or require no auth."""
-        from pygeofetch.providers import list_providers, get_free_providers
+        from pygeofetch.providers import get_free_providers
 
         available = list(get_free_providers())
         if self.auth_manager:
@@ -240,9 +250,9 @@ class FederatedSearcher:
                     available.append(item["provider"])
         return available
 
-    def _deduplicate(self, results: List[SatelliteData]) -> List[SatelliteData]:
+    def _deduplicate(self, results: list[SatelliteData]) -> list[SatelliteData]:
         """Remove duplicate scenes, preferring the first occurrence."""
-        seen: Dict[str, SatelliteData] = {}
+        seen: dict[str, SatelliteData] = {}
         for item in results:
             # Key on provider+id, or try to match cross-provider by display_id
             key = f"{item.provider}:{item.id}"
@@ -251,8 +261,8 @@ class FederatedSearcher:
         return list(seen.values())
 
     def _score_results(
-        self, results: List[SatelliteData], query: SearchQuery
-    ) -> List[SatelliteData]:
+        self, results: list[SatelliteData], query: SearchQuery
+    ) -> list[SatelliteData]:
         """
         Assign relevance scores to results based on query matching.
 
@@ -278,7 +288,11 @@ class FederatedSearcher:
             # Recency score (within 1 year = 0-0.3)
             if item.datetime:
                 try:
-                    dt = item.datetime if item.datetime.tzinfo is None else item.datetime.replace(tzinfo=None)
+                    dt = (
+                        item.datetime
+                        if item.datetime.tzinfo is None
+                        else item.datetime.replace(tzinfo=None)
+                    )
                     days_old = max(0, (now - dt).days)
                     recency = max(0, 1 - days_old / 365) * 0.3
                     score += recency
@@ -287,7 +301,13 @@ class FederatedSearcher:
 
             # Processing level score (higher = 0.1 bonus)
             from pygeofetch.models.satellite_data import ProcessingLevel
-            high_levels = {ProcessingLevel.L2, ProcessingLevel.L2A, ProcessingLevel.L2SP, ProcessingLevel.ANALYSIS_READY}
+
+            high_levels = {
+                ProcessingLevel.L2,
+                ProcessingLevel.L2A,
+                ProcessingLevel.L2SP,
+                ProcessingLevel.ANALYSIS_READY,
+            }
             if item.processing_level in high_levels:
                 score += 0.1
 
@@ -295,7 +315,7 @@ class FederatedSearcher:
 
         return results
 
-    def to_geojson(self, results: List[SatelliteData]) -> Dict[str, Any]:
+    def to_geojson(self, results: list[SatelliteData]) -> dict[str, Any]:
         """
         Export results as a STAC-compatible GeoJSON FeatureCollection.
 
@@ -310,7 +330,7 @@ class FederatedSearcher:
             "features": [item.to_stac_item() for item in results],
         }
 
-    def save_results(self, results: List[SatelliteData], path: Path) -> None:
+    def save_results(self, results: list[SatelliteData], path: Path) -> None:
         """
         Save search results to a GeoJSON file.
 
@@ -326,7 +346,7 @@ class FederatedSearcher:
         logger.info(f"Saved {len(results)} results to {path}")
 
     @staticmethod
-    def load_results(path: Path) -> List[SatelliteData]:
+    def load_results(path: Path) -> list[SatelliteData]:
         """
         Load search results from a previously saved GeoJSON file.
 
@@ -340,8 +360,8 @@ class FederatedSearcher:
             geojson = json.load(f)
         results = []
         for feature in geojson.get("features", []):
-            provider = (feature.get("properties") or {}).get(
-                "providers", [{}]
-            )[0].get("name", "unknown")
+            provider = (
+                (feature.get("properties") or {}).get("providers", [{}])[0].get("name", "unknown")
+            )
             results.append(SatelliteData.from_stac_item(feature, provider))
         return results

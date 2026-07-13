@@ -2,16 +2,19 @@
 PostProcessor — G: Vector & Raster Post-Processing.
 Vectorize, smooth, regularize, zonal statistics, buffer, centroid, COG, compress.
 """
+
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
 
 from pygeofetch.processing.base import (
-    ProcessingResult, _require_rasterio, _require_numpy,
-    _require_geopandas, _require_shapely, _resolve_output, _timed,
+    ProcessingResult,
+    _require_geopandas,
+    _require_numpy,
+    _require_rasterio,
+    _resolve_output,
+    _timed,
 )
 
 logger = logging.getLogger(__name__)
@@ -35,12 +38,12 @@ class PostProcessor:
     @_timed
     def vectorize(
         self,
-        input: Union[str, Path],
-        output: Optional[str] = None,
+        input: str | Path,
+        output: str | None = None,
         band: int = 1,
-        threshold: Optional[float] = None,
+        threshold: float | None = None,
         format: str = "geojson",
-        min_area: Optional[float] = None,
+        min_area: float | None = None,
     ) -> ProcessingResult:
         """
         Convert a raster (e.g. classification or binary mask) to vector polygons.
@@ -84,8 +87,9 @@ class PostProcessor:
             data = data.astype(np.int32)
 
         features = []
-        for geom_dict, value in shapes(data.astype(np.int32), mask=mask.astype(np.uint8),
-                                       transform=transform):
+        for geom_dict, value in shapes(
+            data.astype(np.int32), mask=mask.astype(np.uint8), transform=transform
+        ):
             geom = shape(geom_dict)
             if min_area and geom.area < min_area:
                 continue
@@ -108,8 +112,10 @@ class PostProcessor:
 
         logger.info(f"Vectorized {len(gdf)} features → {out_path}")
         return ProcessingResult(
-            success=True, operation="vectorize",
-            input_path=inp, output_path=out_path,
+            success=True,
+            operation="vectorize",
+            input_path=inp,
+            output_path=out_path,
             metadata={"n_features": len(gdf), "threshold": threshold, "format": format},
         )
 
@@ -118,9 +124,9 @@ class PostProcessor:
     @_timed
     def smooth(
         self,
-        input: Union[str, Path],
+        input: str | Path,
         tolerance: float = 1.0,
-        output: Optional[str] = None,
+        output: str | None = None,
         method: str = "simplify",
     ) -> ProcessingResult:
         """
@@ -148,14 +154,17 @@ class PostProcessor:
             # Expand then shrink — removes small notches
             gdf["geometry"] = gdf.geometry.buffer(tolerance).buffer(-tolerance)
         else:
-            raise ValueError(f"Unknown smooth method: {method!r}")
+            msg = f"Unknown smooth method: {method!r}"
+            raise ValueError(msg)
 
         gdf = gdf[~gdf.geometry.is_empty]
         gdf.to_file(out_path, driver="GeoJSON")
         logger.info(f"Smoothed {len(gdf)} features → {out_path}")
         return ProcessingResult(
-            success=True, operation=f"smooth:{method}",
-            input_path=inp, output_path=out_path,
+            success=True,
+            operation=f"smooth:{method}",
+            input_path=inp,
+            output_path=out_path,
             metadata={"tolerance": tolerance, "n_features": len(gdf)},
         )
 
@@ -164,8 +173,8 @@ class PostProcessor:
     @_timed
     def regularize(
         self,
-        input: Union[str, Path],
-        output: Optional[str] = None,
+        input: str | Path,
+        output: str | None = None,
         corner_threshold_deg: float = 30.0,
     ) -> ProcessingResult:
         """
@@ -182,9 +191,7 @@ class PostProcessor:
             result = client.post.regularize("building_footprints.geojson")
         """
         gpd = _require_geopandas()
-        np = _require_numpy()
-        from shapely.geometry import Polygon
-        from shapely.affinity import rotate
+        _require_numpy()
 
         inp = Path(input)
         out_path = Path(output) if output else inp.parent / f"{inp.stem}_regularized.geojson"
@@ -218,8 +225,10 @@ class PostProcessor:
 
         logger.info(f"Regularized {len(gdf)} features → {out_path}")
         return ProcessingResult(
-            success=True, operation="regularize",
-            input_path=inp, output_path=out_path,
+            success=True,
+            operation="regularize",
+            input_path=inp,
+            output_path=out_path,
             metadata={"n_features": len(gdf)},
         )
 
@@ -228,10 +237,10 @@ class PostProcessor:
     @_timed
     def zonal_stats(
         self,
-        raster: Union[str, Path],
-        zones: Union[str, Path],
-        output: Optional[str] = None,
-        stats: Optional[List[str]] = None,
+        raster: str | Path,
+        zones: str | Path,
+        output: str | None = None,
+        stats: list[str] | None = None,
         band: int = 1,
         all_touched: bool = False,
     ) -> ProcessingResult:
@@ -259,12 +268,23 @@ class PostProcessor:
         from rasterio.mask import mask as rasterio_mask
 
         raster_path = Path(raster)
-        zones_path  = Path(zones)
+        zones_path = Path(zones)
 
-        stat_funcs = stats or ["count", "mean", "median", "min", "max", "std",
-                                "percentile_25", "percentile_75", "sum"]
+        stat_funcs = stats or [
+            "count",
+            "mean",
+            "median",
+            "min",
+            "max",
+            "std",
+            "percentile_25",
+            "percentile_75",
+            "sum",
+        ]
 
-        out_path = Path(output) if output else raster_path.parent / f"{raster_path.stem}_zonal_stats.csv"
+        out_path = (
+            Path(output) if output else raster_path.parent / f"{raster_path.stem}_zonal_stats.csv"
+        )
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
         gdf = gpd.read_file(zones_path)
@@ -278,8 +298,11 @@ class PostProcessor:
             for idx, row in gdf.iterrows():
                 try:
                     masked, _ = rasterio_mask(
-                        src, [row.geometry.__geo_interface__],
-                        crop=True, all_touched=all_touched, nodata=np.nan,
+                        src,
+                        [row.geometry.__geo_interface__],
+                        crop=True,
+                        all_touched=all_touched,
+                        nodata=np.nan,
                     )
                     vals = masked[band - 1].ravel()
                     vals = vals[~np.isnan(vals)]
@@ -316,6 +339,7 @@ class PostProcessor:
                             record[s] = float(np.percentile(vals, pct))
                         elif s == "majority":
                             from scipy.stats import mode
+
                             record[s] = float(mode(vals.astype(int))[0])
 
                 records.append(record)
@@ -325,8 +349,10 @@ class PostProcessor:
 
         logger.info(f"Zonal stats ({len(gdf)} zones) → {out_path}")
         return ProcessingResult(
-            success=True, operation="zonal_stats",
-            input_path=raster_path, output_path=out_path,
+            success=True,
+            operation="zonal_stats",
+            input_path=raster_path,
+            output_path=out_path,
             metadata={"n_zones": len(gdf), "stats": stat_funcs},
         )
 
@@ -335,9 +361,9 @@ class PostProcessor:
     @_timed
     def buffer(
         self,
-        input: Union[str, Path],
+        input: str | Path,
         distance: float = 10.0,
-        output: Optional[str] = None,
+        output: str | None = None,
         cap_style: str = "round",
         join_style: str = "round",
     ) -> ProcessingResult:
@@ -355,11 +381,13 @@ class PostProcessor:
             result = client.post.buffer("roads.geojson", distance=15)
         """
         gpd = _require_geopandas()
-        cap_map  = {"round": 1, "flat": 2, "square": 3}
+        cap_map = {"round": 1, "flat": 2, "square": 3}
         join_map = {"round": 1, "mitre": 2, "bevel": 3}
 
         inp = Path(input)
-        out_path = Path(output) if output else inp.parent / f"{inp.stem}_buffer{distance:.0f}.geojson"
+        out_path = (
+            Path(output) if output else inp.parent / f"{inp.stem}_buffer{distance:.0f}.geojson"
+        )
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
         gdf = gpd.read_file(inp)
@@ -373,8 +401,10 @@ class PostProcessor:
 
         logger.info(f"Buffered {len(gdf)} features by {distance} → {out_path}")
         return ProcessingResult(
-            success=True, operation="buffer",
-            input_path=inp, output_path=out_path,
+            success=True,
+            operation="buffer",
+            input_path=inp,
+            output_path=out_path,
             metadata={"distance": distance, "n_features": len(gdf)},
         )
 
@@ -383,8 +413,8 @@ class PostProcessor:
     @_timed
     def centroids(
         self,
-        input: Union[str, Path],
-        output: Optional[str] = None,
+        input: str | Path,
+        output: str | None = None,
     ) -> ProcessingResult:
         """
         Extract centroid points from polygon/line geometries.
@@ -404,8 +434,10 @@ class PostProcessor:
 
         logger.info(f"Extracted {len(gdf)} centroids → {out_path}")
         return ProcessingResult(
-            success=True, operation="centroids",
-            input_path=inp, output_path=out_path,
+            success=True,
+            operation="centroids",
+            input_path=inp,
+            output_path=out_path,
             metadata={"n_features": len(gdf)},
         )
 
@@ -414,8 +446,8 @@ class PostProcessor:
     @_timed
     def add_geometry_metrics(
         self,
-        input: Union[str, Path],
-        output: Optional[str] = None,
+        input: str | Path,
+        output: str | None = None,
     ) -> ProcessingResult:
         """
         Add area, perimeter, and compactness columns to a vector file.
@@ -432,16 +464,16 @@ class PostProcessor:
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
         gdf = gpd.read_file(inp)
-        gdf["area_m2"]    = gdf.geometry.area
+        gdf["area_m2"] = gdf.geometry.area
         gdf["perimeter_m"] = gdf.geometry.length
         # Polsby-Popper compactness (1 = circle)
-        gdf["compactness"] = (
-            4 * np.pi * gdf["area_m2"] / (gdf["perimeter_m"] ** 2 + 1e-10)
-        )
+        gdf["compactness"] = 4 * np.pi * gdf["area_m2"] / (gdf["perimeter_m"] ** 2 + 1e-10)
         gdf.to_file(out_path, driver="GeoJSON")
         return ProcessingResult(
-            success=True, operation="geometry_metrics",
-            input_path=inp, output_path=out_path,
+            success=True,
+            operation="geometry_metrics",
+            input_path=inp,
+            output_path=out_path,
         )
 
     # ── G9/G10: Compress & COG ────────────────────────────────────────────
@@ -449,9 +481,9 @@ class PostProcessor:
     @_timed
     def compress(
         self,
-        input: Union[str, Path],
+        input: str | Path,
         method: str = "lzw",
-        output: Optional[str] = None,
+        output: str | None = None,
         zlevel: int = 6,
     ) -> ProcessingResult:
         """
@@ -485,18 +517,23 @@ class PostProcessor:
         ratio = orig_size / comp_size if comp_size else 1.0
         logger.info(f"Compressed ({method}) ratio={ratio:.2f}× → {out_path}")
         return ProcessingResult(
-            success=True, operation=f"compress:{method}",
-            input_path=inp, output_path=out_path,
-            metadata={"method": method, "ratio": round(ratio, 2),
-                      "original_mb": orig_size / (1024*1024),
-                      "compressed_mb": comp_size / (1024*1024)},
+            success=True,
+            operation=f"compress:{method}",
+            input_path=inp,
+            output_path=out_path,
+            metadata={
+                "method": method,
+                "ratio": round(ratio, 2),
+                "original_mb": orig_size / (1024 * 1024),
+                "compressed_mb": comp_size / (1024 * 1024),
+            },
         )
 
     @_timed
     def cog(
         self,
-        input: Union[str, Path],
-        output: Optional[str] = None,
+        input: str | Path,
+        output: str | None = None,
         compress: str = "deflate",
         overview_resampling: str = "average",
         blocksize: int = 512,
@@ -519,7 +556,7 @@ class PostProcessor:
             result = client.post.cog("scene.tif", compress="deflate")
         """
         rasterio = _require_rasterio()
-        np = _require_numpy()
+        _require_numpy()
         import tempfile
 
         inp = Path(input)
@@ -545,9 +582,14 @@ class PostProcessor:
             with rasterio.open(tmp_path, "w", **profile) as tmp_dst:
                 tmp_dst.write(data)
                 overview_levels = [2, 4, 8, 16, 32, 64]
-                tmp_dst.build_overviews(overview_levels,
-                                        getattr(rasterio.enums.Resampling,
-                                                overview_resampling, rasterio.enums.Resampling.average))
+                tmp_dst.build_overviews(
+                    overview_levels,
+                    getattr(
+                        rasterio.enums.Resampling,
+                        overview_resampling,
+                        rasterio.enums.Resampling.average,
+                    ),
+                )
                 tmp_dst.update_tags(ns="rio_overview", resampling=overview_resampling)
 
             # Write final COG with overviews interleaved (copy_src_overviews)
@@ -561,7 +603,9 @@ class PostProcessor:
         size_mb = out_path.stat().st_size / (1024 * 1024)
         logger.info(f"COG ({compress}, {blocksize}px tiles) {size_mb:.1f} MB → {out_path}")
         return ProcessingResult(
-            success=True, operation="cog",
-            input_path=inp, output_path=out_path,
+            success=True,
+            operation="cog",
+            input_path=inp,
+            output_path=out_path,
             metadata={"compress": compress, "blocksize": blocksize, "size_mb": round(size_mb, 1)},
         )

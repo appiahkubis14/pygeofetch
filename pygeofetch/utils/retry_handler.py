@@ -21,7 +21,9 @@ import functools
 import logging
 import random
 import time
-from typing import Any, Callable, Optional, Tuple, Type, TypeVar
+from typing import Any, Callable, TypeVar
+
+from typing_extensions import Self
 
 F = TypeVar("F", bound=Callable[..., Any])
 logger = logging.getLogger("pygeofetch.retry")
@@ -47,7 +49,7 @@ class RetryConfig:
         delay: float = 1.0,
         max_delay: float = 60.0,
         jitter: bool = True,
-        reraise_on: Optional[Tuple[Type[Exception], ...]] = None,
+        reraise_on: tuple[type[Exception], ...] | None = None,
     ) -> None:
         self.attempts = max(1, attempts)
         self.strategy = strategy
@@ -71,20 +73,20 @@ class RetryConfig:
         elif self.strategy == "linear":
             delay = self.delay * (attempt + 1)
         elif self.strategy in ("exponential", "exponential_jitter"):
-            delay = self.delay * (2 ** attempt)
+            delay = self.delay * (2**attempt)
         else:
             delay = self.delay
 
         delay = min(delay, self.max_delay)
 
         if self.jitter or self.strategy == "exponential_jitter":
-            delay *= (0.5 + random.random() * 0.5)
+            delay *= 0.5 + random.random() * 0.5
 
         return delay
 
 
 def retry_on_failure(
-    config: Optional[RetryConfig] = None,
+    config: RetryConfig | None = None,
     attempts: int = 3,
     strategy: str = "exponential_jitter",
 ) -> Callable[[F], F]:
@@ -112,7 +114,7 @@ def retry_on_failure(
     def decorator(func: F) -> F:
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
-            last_exception: Optional[Exception] = None
+            last_exception: Exception | None = None
             for attempt in range(cfg.attempts):
                 try:
                     return func(*args, **kwargs)
@@ -171,7 +173,7 @@ class CircuitBreaker:
         self.name = name
         self._state = self.CLOSED
         self._failure_count = 0
-        self._last_failure_time: Optional[float] = None
+        self._last_failure_time: float | None = None
 
     @property
     def state(self) -> str:
@@ -183,21 +185,22 @@ class CircuitBreaker:
                 self._state = self.HALF_OPEN
         return self._state
 
-    def __enter__(self) -> "CircuitBreaker":
+    def __enter__(self) -> Self:
         state = self.state
         if state == self.OPEN:
-            raise CircuitBreakerOpenError(
+            msg = (
                 f"Circuit breaker for '{self.name}' is OPEN. "
                 f"Provider appears to be down. Try again later."
             )
+            raise CircuitBreakerOpenError(msg)
         return self
 
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> bool:
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         if exc_type is None:
             self._on_success()
         elif exc_type is not CircuitBreakerOpenError:
             self._on_failure()
-        return False
+        return None
 
     def _on_success(self) -> None:
         self._failure_count = 0
@@ -222,4 +225,3 @@ class CircuitBreaker:
 
 class CircuitBreakerOpenError(Exception):
     """Raised when a request is blocked by an open circuit breaker."""
-    pass

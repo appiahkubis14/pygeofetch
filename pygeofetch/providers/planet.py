@@ -23,18 +23,34 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 from pygeofetch.models.download_task import DownloadOptions, DownloadResult, DownloadStatus
 from pygeofetch.models.satellite_data import (
-    DataFormat, ProcessingLevel, ProviderCapabilities, QuotaInfo,
-    SatelliteAsset, SatelliteData,
+    DataFormat,
+    ProviderCapabilities,
+    QuotaInfo,
+    SatelliteAsset,
+    SatelliteData,
 )
-from pygeofetch.models.search_query import SearchQuery
 from pygeofetch.models.user_auth import AuthSession, Credentials
 from pygeofetch.providers.base import (
-    AbstractBaseProvider, AuthenticationError, SearchError, DownloadError,
+    AbstractBaseProvider,
+    AuthenticationError,
+    SearchError,
 )
+
+if TYPE_CHECKING:
+    from pygeofetch.models.search_query import SearchQuery
+
+
+def _plain(v) -> str:
+    """Extract plain string from str or SecretStr."""
+    if v is None:
+        return ""
+    if hasattr(v, "get_secret_value"):
+        return v.get_secret_value()
+    return str(v)
 
 
 class PlanetProvider(AbstractBaseProvider):
@@ -60,7 +76,7 @@ class PlanetProvider(AbstractBaseProvider):
     SATELLITES = ["PlanetScope", "SkySat", "RapidEye", "Landsat-8"]
     BASE_URL = "https://api.planet.com/data/v1"
 
-    ITEM_TYPES: Dict[str, str] = {
+    ITEM_TYPES: dict[str, str] = {
         "planetscope": "PSScene",
         "ps": "PSScene",
         "skysat": "SkySatCollect",
@@ -89,10 +105,8 @@ class PlanetProvider(AbstractBaseProvider):
 
         api_key = credentials.api_key or credentials.password
         if not api_key:
-            raise AuthenticationError(
-                "Planet Labs requires an API key. "
-                "Get yours at: https://www.planet.com/account"
-            )
+            msg = "Planet Labs requires an API key. Get yours at: https://www.planet.com/account"
+            raise AuthenticationError(msg)
 
         # Validate the key by hitting the /auth/v1/experimental/public endpoint
         try:
@@ -102,18 +116,22 @@ class PlanetProvider(AbstractBaseProvider):
                 timeout=15,
             )
             if resp.status_code == 401:
-                raise AuthenticationError("Invalid Planet API key.")
+                msg = "Invalid Planet API key."
+                raise AuthenticationError(msg)
             if resp.status_code not in (200, 201):
-                raise AuthenticationError(f"Planet auth check failed: HTTP {resp.status_code}")
+                msg = f"Planet auth check failed: HTTP {resp.status_code}"
+                raise AuthenticationError(msg)
         except AuthenticationError:
             raise
         except Exception as exc:
-            raise AuthenticationError(f"Planet auth error: {exc}") from exc
+            msg = f"Planet auth error: {exc}"
+            raise AuthenticationError(msg) from exc
 
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timedelta, timezone
+
         session = AuthSession(
             provider=self.PROVIDER_ID,
-            access_token=api_key,
+            access_token=_plain(api_key),
             expires_at=datetime.now(timezone.utc) + timedelta(days=365),
             session_data={"api_key": api_key},
         )
@@ -128,7 +146,7 @@ class PlanetProvider(AbstractBaseProvider):
         """Store an authenticated session for use in requests."""
         self._session = session
 
-    def search(self, query: SearchQuery) -> List[SatelliteData]:
+    def search(self, query: SearchQuery) -> list[SatelliteData]:
         """
         Search Planet Data API using the Quick Search endpoint.
 
@@ -150,7 +168,11 @@ class PlanetProvider(AbstractBaseProvider):
             "limit": min(query.max_results, 250),
         }
 
-        api_key = self._session.session_data.get("api_key", "") if self._session.session_data else ""
+        api_key = (
+            (self._session.session_data if self._session else {}).get("api_key", "")
+            if (self._session.session_data if self._session else {})
+            else ""
+        )
         try:
             resp = httpx.post(
                 f"{self.BASE_URL}/quick-search",
@@ -167,9 +189,10 @@ class PlanetProvider(AbstractBaseProvider):
             return results
 
         except Exception as exc:
-            raise SearchError(f"Planet search failed: {exc}") from exc
+            msg = f"Planet search failed: {exc}"
+            raise SearchError(msg) from exc
 
-    def _resolve_item_types(self, query: SearchQuery) -> List[str]:
+    def _resolve_item_types(self, query: SearchQuery) -> list[str]:
         if not query.satellites:
             return self.DEFAULT_ITEM_TYPES
         types = []
@@ -178,52 +201,66 @@ class PlanetProvider(AbstractBaseProvider):
             types.append(self.ITEM_TYPES.get(key, sat))
         return types or self.DEFAULT_ITEM_TYPES
 
-    def _build_filter(self, query: SearchQuery) -> Dict[str, Any]:
+    def _build_filter(self, query: SearchQuery) -> dict[str, Any]:
         """Build a Planet AndFilter from query parameters."""
         filters = []
 
         if query.bbox:
             bb = query.bbox
-            filters.append({
-                "type": "GeometryFilter",
-                "field_name": "geometry",
-                "config": {
-                    "type": "Polygon",
-                    "coordinates": [[
-                        [bb.min_lon, bb.min_lat], [bb.max_lon, bb.min_lat],
-                        [bb.max_lon, bb.max_lat], [bb.min_lon, bb.max_lat],
-                        [bb.min_lon, bb.min_lat],
-                    ]],
-                },
-            })
+            filters.append(
+                {
+                    "type": "GeometryFilter",
+                    "field_name": "geometry",
+                    "config": {
+                        "type": "Polygon",
+                        "coordinates": [
+                            [
+                                [bb.min_lon, bb.min_lat],
+                                [bb.max_lon, bb.min_lat],
+                                [bb.max_lon, bb.max_lat],
+                                [bb.min_lon, bb.max_lat],
+                                [bb.min_lon, bb.min_lat],
+                            ]
+                        ],
+                    },
+                }
+            )
 
         if query.start_date or query.end_date:
-            date_config: Dict[str, str] = {}
+            date_config: dict[str, str] = {}
             if query.start_date:
                 date_config["gte"] = f"{query.start_date}T00:00:00Z"
             if query.end_date:
                 date_config["lte"] = f"{query.end_date}T23:59:59Z"
-            filters.append({
-                "type": "DateRangeFilter",
-                "field_name": "acquired",
-                "config": date_config,
-            })
+            filters.append(
+                {
+                    "type": "DateRangeFilter",
+                    "field_name": "acquired",
+                    "config": date_config,
+                }
+            )
 
         if query.cloud_cover_max is not None:
-            filters.append({
-                "type": "RangeFilter",
-                "field_name": "cloud_cover",
-                "config": {
-                    "gte": (getattr(query, 'cloud_cover_min', 0) or 0) / 100.0,
-                    "lte": query.cloud_cover_max / 100.0,
-                },
-            })
+            filters.append(
+                {
+                    "type": "RangeFilter",
+                    "field_name": "cloud_cover",
+                    "config": {
+                        "gte": (getattr(query, "cloud_cover_min", 0) or 0) / 100.0,
+                        "lte": query.cloud_cover_max / 100.0,
+                    },
+                }
+            )
 
         if len(filters) == 1:
             return filters[0]
-        return {"type": "AndFilter", "config": filters} if filters else {"type": "AndFilter", "config": []}
+        return (
+            {"type": "AndFilter", "config": filters}
+            if filters
+            else {"type": "AndFilter", "config": []}
+        )
 
-    def _parse_feature(self, feature: Dict[str, Any]) -> SatelliteData:
+    def _parse_feature(self, feature: dict[str, Any]) -> SatelliteData:
         """Parse a Planet API GeoJSON feature into SatelliteData."""
         props = feature.get("properties", {})
         geom = feature.get("geometry", {})
@@ -238,7 +275,7 @@ class PlanetProvider(AbstractBaseProvider):
             bbox = (min(lons), min(lats), max(lons), max(lats))
 
         # Build assets
-        assets: Dict[str, SatelliteAsset] = {}
+        assets: dict[str, SatelliteAsset] = {}
         for name, link in feature.get("_links", {}).get("assets", {}).items():
             assets[name] = SatelliteAsset(key=name, href=link, roles=["data"])
 
@@ -263,18 +300,20 @@ class PlanetProvider(AbstractBaseProvider):
             },
         )
 
-    def _activate_asset(self, item_id: str, item_type: str, asset_type: str,
-                        api_key: str) -> bool:
+    def _activate_asset(self, item_id: str, item_type: str, asset_type: str, api_key: str) -> bool:
         """Activate a Planet asset for download."""
         import httpx
+
         url = f"{self.BASE_URL}/item-types/{item_type}/items/{item_id}/assets/{asset_type}/activate"
         resp = httpx.post(url, auth=(api_key, ""), timeout=30)
         return resp.status_code in (202, 204)
 
-    def _wait_for_activation(self, item_id: str, item_type: str, asset_type: str,
-                             api_key: str, max_wait: int = 300) -> Optional[str]:
+    def _wait_for_activation(
+        self, item_id: str, item_type: str, asset_type: str, api_key: str, max_wait: int = 300
+    ) -> str | None:
         """Poll until asset is activated; return download URL or None."""
         import httpx
+
         url = f"{self.BASE_URL}/item-types/{item_type}/items/{item_id}/assets/{asset_type}"
         deadline = time.time() + max_wait
         while time.time() < deadline:
@@ -308,7 +347,11 @@ class PlanetProvider(AbstractBaseProvider):
 
         destination = Path(destination)
         destination.mkdir(parents=True, exist_ok=True)
-        api_key = self._session.session_data.get("api_key", "") if self._session.session_data else ""
+        api_key = (
+            (self._session.session_data if self._session else {}).get("api_key", "")
+            if (self._session.session_data if self._session else {})
+            else ""
+        )
         item_type = data.satellite or "PSScene"
         asset_type = "ortho_analytic_4b_sr"  # default: surface reflectance
 
@@ -320,29 +363,43 @@ class PlanetProvider(AbstractBaseProvider):
 
         if not download_url:
             return DownloadResult(
-                status=DownloadStatus.FAILED, data_id=data.id, provider=self.PROVIDER_ID,
+                status=DownloadStatus.FAILED,
+                data_id=data.id,
+                provider=self.PROVIDER_ID,
                 error="Asset activation timed out",
             )
 
         out_file = destination / f"{data.id}_{asset_type}.tif"
         try:
-            with httpx.stream("GET", download_url, auth=(api_key, ""),
-                              timeout=options.timeout_seconds, follow_redirects=True) as resp:
+            with httpx.stream(
+                "GET",
+                download_url,
+                auth=(api_key, ""),
+                timeout=options.timeout_seconds,
+                follow_redirects=True,
+            ) as resp:
                 self._handle_http_error(resp)
                 with open(out_file, "wb") as f:
-                    for chunk in resp.iter_bytes(chunk_size=int(options.chunk_size_mb * 1024 * 1024)):
-                        f.write(chunk)
+                    f.writelines(
+                        resp.iter_bytes(chunk_size=int(options.chunk_size_mb * 1024 * 1024))
+                    )
         except Exception as exc:
             return DownloadResult(
-                status=DownloadStatus.FAILED, data_id=data.id, provider=self.PROVIDER_ID,
+                status=DownloadStatus.FAILED,
+                data_id=data.id,
+                provider=self.PROVIDER_ID,
                 error=str(exc),
             )
 
         duration = time.time() - start_time
         return DownloadResult(
-            status=DownloadStatus.COMPLETED, data_id=data.id, provider=self.PROVIDER_ID,
-            output_path=out_file, output_paths=[out_file],
-            bytes_downloaded=out_file.stat().st_size, duration_seconds=duration,
+            status=DownloadStatus.COMPLETED,
+            data_id=data.id,
+            provider=self.PROVIDER_ID,
+            output_path=out_file,
+            output_paths=[out_file],
+            bytes_downloaded=out_file.stat().st_size,
+            duration_seconds=duration,
         )
 
     def get_capabilities(self) -> ProviderCapabilities:
@@ -352,13 +409,20 @@ class PlanetProvider(AbstractBaseProvider):
             description=self.DESCRIPTION,
             auth_type="api_key",
             satellites=["PlanetScope", "SkySat", "RapidEye"],
-            search=True, download=True, streaming=False,
-            stac=True, supports_sub_meter=True, supports_tasking=True,
-            supports_aoi_filter=True, supports_cloud_filter=True,
-            supports_date_filter=True, supports_resolution_filter=True,
-            requires_auth=True, has_quota=True,
+            search=True,
+            download=True,
+            streaming=False,
+            stac=True,
+            supports_sub_meter=True,
+            supports_tasking=True,
+            supports_aoi_filter=True,
+            supports_cloud_filter=True,
+            supports_date_filter=True,
+            supports_resolution_filter=True,
+            requires_auth=True,
             regions=["global"],
-            resolution_min_m=0.5, resolution_max_m=5.0,
+            resolution_min_m=0.5,
+            resolution_max_m=5.0,
             endpoint_url=self.BASE_URL,
             docs_url="https://developers.planet.com/docs/apis/data/",
             supported_formats=[DataFormat.GEOTIFF, DataFormat.COG],
@@ -368,6 +432,5 @@ class PlanetProvider(AbstractBaseProvider):
         """Return Planet quota info (requires authenticated session)."""
         return QuotaInfo(
             provider=self.PROVIDER_ID,
-            has_quota=True,
             extra_info={"note": "Quota depends on Planet subscription tier."},
         )

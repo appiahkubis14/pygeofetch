@@ -27,7 +27,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
-from pygeofetch.utils.gcp_recovery import needs_recovery, recover_georeference
 from pygeofetch.core.logging import DownloadProgress, get_logger
 from pygeofetch.models.download_task import (
     DownloadOptions,
@@ -123,7 +122,9 @@ class AdaptiveDownloader:
                                         "output_path": None,
                                     }
                                 )
-                                logger.warning(f"File validation failed for {data.id!r}: {err_msg}")
+                                logger.warning(
+                                    f"File validation failed for {data.id!r}: {err_msg}"
+                                )
                                 break
                     if result.success:
                         if options.verify_checksum:
@@ -131,9 +132,13 @@ class AdaptiveDownloader:
                         if options.post_process:
                             result = self._run_post_process(result, options)
                     size_mb = (
-                        result.bytes_downloaded / (1024 * 1024) if result.bytes_downloaded else 0
+                        result.bytes_downloaded / (1024 * 1024)
+                        if result.bytes_downloaded
+                        else 0
                     )
-                    (size_mb / result.duration_seconds) if result.duration_seconds > 0 else 0
+                    (
+                        size_mb / result.duration_seconds
+                    ) if result.duration_seconds > 0 else 0
                     logger.info(
                         "  ✓ %-45s %6.0f MB  %5.1fs",
                         str(data.id)[:45],
@@ -224,7 +229,10 @@ class AdaptiveDownloader:
                 return idx, result
 
         with ThreadPoolExecutor(max_workers=options.parallel) as executor:
-            futures = {executor.submit(_run_one, data, i): i for i, data in enumerate(data_list)}
+            futures = {
+                executor.submit(_run_one, data, i): i
+                for i, data in enumerate(data_list)
+            }
             for future in as_completed(futures):
                 idx, result = future.result()
                 results[idx] = result
@@ -305,7 +313,9 @@ class AdaptiveDownloader:
                 hasher.update(chunk)
         return hasher.hexdigest()
 
-    def _run_post_process(self, result: DownloadResult, options: DownloadOptions) -> DownloadResult:
+    def _run_post_process(
+        self, result: DownloadResult, options: DownloadOptions
+    ) -> DownloadResult:
         """Run configured post-download processing actions."""
         for action in options.post_process:
             try:
@@ -341,7 +351,9 @@ class AdaptiveDownloader:
                 new_paths = []
                 for path in result.output_paths:
                     if path.suffix.lower() in (".tif", ".tiff"):
-                        out_path = path.with_stem(f"{path.stem}_{target_crs.replace(':', '_')}")
+                        out_path = path.with_stem(
+                            f"{path.stem}_{target_crs.replace(':', '_')}"
+                        )
                         self._reproject_with_validation(path, out_path, target_crs)
                         new_paths.append(out_path)
                     else:
@@ -362,7 +374,10 @@ class AdaptiveDownloader:
                         with rasterio.open(path) as src:
                             profile = src.profile.copy()
                             profile.update(
-                                compress=method, tiled=True, blockxsize=512, blockysize=512
+                                compress=method,
+                                tiled=True,
+                                blockxsize=512,
+                                blockysize=512,
                             )
                             with rasterio.open(out_path, "w", **profile) as dst:
                                 dst.write(src.read())
@@ -398,12 +413,16 @@ class AdaptiveDownloader:
                                 driver="GTiff",
                             )
                             data = src.read()
-                            with tempfile.NamedTemporaryFile(suffix=".tif", delete=False) as tmp:
+                            with tempfile.NamedTemporaryFile(
+                                suffix=".tif", delete=False
+                            ) as tmp:
                                 tmp_path = Path(tmp.name)
                             with rasterio.open(tmp_path, "w", **profile) as tmp_dst:
                                 tmp_dst.write(data)
                                 tmp_dst.build_overviews([2, 4, 8, 16, 32], RS.average)
-                                tmp_dst.update_tags(ns="rio_overview", resampling="average")
+                                tmp_dst.update_tags(
+                                    ns="rio_overview", resampling="average"
+                                )
                             profile.update(copy_src_overviews=True)
                             with rasterio.open(tmp_path) as tmp_src:
                                 with rasterio.open(out_path, "w", **profile) as cog_dst:
@@ -451,7 +470,9 @@ class AdaptiveDownloader:
                         if path.suffix.lower() in (".tif", ".tiff"):
                             out_path = path.with_stem(f"{path.stem}_clip")
                             with rasterio.open(path) as src:
-                                out_img, out_transform = rasterio_mask(src, shapes, crop=True)
+                                out_img, out_transform = rasterio_mask(
+                                    src, shapes, crop=True
+                                )
                                 profile = src.profile.copy()
                                 profile.update(
                                     height=out_img.shape[1],
@@ -489,13 +510,16 @@ class AdaptiveDownloader:
                             new_h = max(1, int(src.height * scale_y))
                             new_w = max(1, int(src.width * scale_x))
                             data = src.read(
-                                out_shape=(src.count, new_h, new_w), resampling=RS.bilinear
+                                out_shape=(src.count, new_h, new_w),
+                                resampling=RS.bilinear,
                             )
                             transform = src.transform * src.transform.scale(
                                 src.width / new_w, src.height / new_h
                             )
                             profile = src.profile.copy()
-                            profile.update(height=new_h, width=new_w, transform=transform)
+                            profile.update(
+                                height=new_h, width=new_w, transform=transform
+                            )
                         out_path = path.with_stem(f"{path.stem}_resamp")
                         with rasterio.open(out_path, "w", **profile) as dst:
                             dst.write(data)
@@ -516,11 +540,19 @@ class AdaptiveDownloader:
                 import rasterio
 
                 red_path = next(
-                    (p for p in result.output_paths if "B04" in p.name or "red" in p.name.lower()),
+                    (
+                        p
+                        for p in result.output_paths
+                        if "B04" in p.name or "red" in p.name.lower()
+                    ),
                     None,
                 )
                 nir_path = next(
-                    (p for p in result.output_paths if "B08" in p.name or "nir" in p.name.lower()),
+                    (
+                        p
+                        for p in result.output_paths
+                        if "B08" in p.name or "nir" in p.name.lower()
+                    ),
                     None,
                 )
                 if red_path and nir_path:
@@ -529,10 +561,14 @@ class AdaptiveDownloader:
                         profile = rs.profile.copy()
                     with rasterio.open(nir_path) as ns:
                         nir = ns.read(
-                            1, out_shape=red.shape, resampling=rasterio.enums.Resampling.bilinear
+                            1,
+                            out_shape=red.shape,
+                            resampling=rasterio.enums.Resampling.bilinear,
                         ).astype(np.float32)
                     with np.errstate(divide="ignore", invalid="ignore"):
-                        ndvi = np.where(nir + red > 0, (nir - red) / (nir + red), -9999.0)
+                        ndvi = np.where(
+                            nir + red > 0, (nir - red) / (nir + red), -9999.0
+                        )
                     ndvi_path = red_path.parent / "ndvi.tif"
                     profile.update(count=1, dtype="float32", nodata=-9999.0)
                     with rasterio.open(ndvi_path, "w", **profile) as dst:
@@ -557,13 +593,19 @@ class AdaptiveDownloader:
                 import rasterio
                 from rasterio.merge import merge
 
-                tifs = [p for p in result.output_paths if p.suffix.lower() in (".tif", ".tiff")]
+                tifs = [
+                    p
+                    for p in result.output_paths
+                    if p.suffix.lower() in (".tif", ".tiff")
+                ]
                 if len(tifs) > 1:
                     src_files = [rasterio.open(p) for p in tifs]
                     mosaic, transform = merge(src_files)
                     profile = src_files[0].profile.copy()
                     profile.update(
-                        height=mosaic.shape[1], width=mosaic.shape[2], transform=transform
+                        height=mosaic.shape[1],
+                        width=mosaic.shape[2],
+                        transform=transform,
                     )
                     merge_path = tifs[0].parent / "merged.tif"
                     with rasterio.open(merge_path, "w", **profile) as dst:
@@ -653,7 +695,17 @@ class AdaptiveDownloader:
             return True, ""  # already passed size > 0 above
 
         # ── 3. Raster formats — open with rasterio ────────────────────────
-        RASTER_SUFFIXES = {".tif", ".tiff", ".jp2", ".img", ".vrt", ".hdf", ".h4", ".h5", ".hdf5"}
+        RASTER_SUFFIXES = {
+            ".tif",
+            ".tiff",
+            ".jp2",
+            ".img",
+            ".vrt",
+            ".hdf",
+            ".h4",
+            ".h5",
+            ".hdf5",
+        }
         if suffix in RASTER_SUFFIXES:
             try:
                 import rasterio
@@ -662,7 +714,10 @@ class AdaptiveDownloader:
                     if src.count == 0:
                         return False, "Raster has zero bands"
                     if src.width == 0 or src.height == 0:
-                        return False, f"Raster has zero dimensions: {src.width}x{src.height}"
+                        return (
+                            False,
+                            f"Raster has zero dimensions: {src.width}x{src.height}",
+                        )
                     # Read one small tile to confirm data is accessible
                     windows = list(src.block_windows(1))
                     if windows:

@@ -15,7 +15,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from pygeofetch.models.download_task import DownloadOptions, DownloadResult, DownloadStatus
+from pygeofetch.models.download_task import (
+    DownloadOptions,
+    DownloadResult,
+    DownloadStatus,
+)
 from pygeofetch.models.satellite_data import (
     DataFormat,
     ProviderCapabilities,
@@ -24,7 +28,11 @@ from pygeofetch.models.satellite_data import (
     SatelliteData,
 )
 from pygeofetch.models.user_auth import AuthSession, Credentials
-from pygeofetch.providers.base import AbstractBaseProvider, AuthenticationError, SearchError
+from pygeofetch.providers.base import (
+    AbstractBaseProvider,
+    AuthenticationError,
+    SearchError,
+)
 
 if TYPE_CHECKING:
     from pygeofetch.models.search_query import SearchQuery
@@ -43,9 +51,7 @@ class NASAEarthdataProvider(AbstractBaseProvider):
     PROVIDER_ID = "nasa_earthdata"
     DISPLAY_NAME = "NASA Earthdata (CMR)"
     REQUIRES_AUTH = True
-    DESCRIPTION = (
-        "Access to NASA Earth science data from all DAACs via the Common Metadata Repository."
-    )
+    DESCRIPTION = "Access to NASA Earth science data from all DAACs via the Common Metadata Repository."
     DATA_TYPES = ["MODIS", "VIIRS", "ICESat-2", "GEDI", "Landsat", "SRTM", "ASTER"]
     BASE_URL = "https://cmr.earthdata.nasa.gov/search"
 
@@ -73,7 +79,9 @@ class NASAEarthdataProvider(AbstractBaseProvider):
                 },
             )
             self._session = session
-            self._logger.info(f"Authenticated with NASA Earthdata as {credentials.username!r}")
+            self._logger.info(
+                f"Authenticated with NASA Earthdata as {credentials.username!r}"
+            )
             return session
         except AuthenticationError:
             raise
@@ -98,12 +106,16 @@ class NASAEarthdataProvider(AbstractBaseProvider):
         }
         if query.bbox:
             b = query.bbox
-            params["bounding_box[]"] = f"{b.min_lon},{b.min_lat},{b.max_lon},{b.max_lat}"
+            params["bounding_box[]"] = (
+                f"{b.min_lon},{b.min_lat},{b.max_lon},{b.max_lat}"
+            )
         if query.start_date:
             params["temporal[]"] = f"{query.start_date}T00:00:00Z,"
         if query.end_date:
             existing = params.get("temporal[]", ",")
-            params["temporal[]"] = f"{existing.split(',')[0]},{query.end_date}T23:59:59Z"
+            params["temporal[]"] = (
+                f"{existing.split(',')[0]},{query.end_date}T23:59:59Z"
+            )
         if (query.cloud_cover_max or 100) < 100:
             params["cloud_cover[]"] = f"0,{int(query.cloud_cover_max)}"
         if query.collections:
@@ -149,7 +161,9 @@ class NASAEarthdataProvider(AbstractBaseProvider):
             id=g.get("id", g.get("title", "unknown")),
             provider=self.PROVIDER_ID,
             collection=g.get("short_name", g.get("collection_concept_id")),
-            satellite=g.get("platforms", [{}])[0].get("short_name") if g.get("platforms") else None,
+            satellite=g.get("platforms", [{}])[0].get("short_name")
+            if g.get("platforms")
+            else None,
             datetime=dt,
             bbox=bbox,
             cloud_cover=g.get("cloud_cover"),
@@ -178,8 +192,12 @@ class NASAEarthdataProvider(AbstractBaseProvider):
                     "GET",
                     asset.href,
                     auth=(
-                        (self._session.session_data if self._session else {})["username"],
-                        (self._session.session_data if self._session else {})["password"],
+                        (self._session.session_data if self._session else {})[
+                            "username"
+                        ],
+                        (self._session.session_data if self._session else {})[
+                            "password"
+                        ],
                     ),
                     timeout=options.timeout_seconds,
                     follow_redirects=True,
@@ -187,7 +205,9 @@ class NASAEarthdataProvider(AbstractBaseProvider):
                     self._handle_http_error(resp)
                     with open(out, "wb") as f:
                         f.writelines(
-                            resp.iter_bytes(chunk_size=int(options.chunk_size_mb * 1024 * 1024))
+                            resp.iter_bytes(
+                                chunk_size=int(options.chunk_size_mb * 1024 * 1024)
+                            )
                         )
                 output_paths.append(out)
             except Exception as exc:
@@ -233,5 +253,7 @@ class NASAEarthdataProvider(AbstractBaseProvider):
         self.require_auth()
         return QuotaInfo(
             provider=self.PROVIDER_ID,
-            extra_info={"note": "NASA Earthdata provides free access with Earthdata Login"},
+            extra_info={
+                "note": "NASA Earthdata provides free access with Earthdata Login"
+            },
         )

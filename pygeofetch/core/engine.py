@@ -46,7 +46,9 @@ from pygeofetch.utils.geo_utils import _normalise_satellite_name
 
 
 # Backward-compatible alias
-def setup_logging(level: str = "INFO", use_rich: bool = True, log_file=None, **kwargs) -> None:
+def setup_logging(
+    level: str = "INFO", use_rich: bool = True, log_file=None, **kwargs
+) -> None:
     """Thin wrapper kept for backward compatibility with engine.__init__."""
     configure_logging(level=level, log_file=str(log_file) if log_file else None)
 
@@ -249,7 +251,9 @@ class PyGeoFetch:
             elif p in self._SLC_CAPABLE:
                 routed.append(p)
             else:
-                routed.append(p)  # unknown provider — pass through, let it fail naturally
+                routed.append(
+                    p
+                )  # unknown provider — pass through, let it fail naturally
         # Deduplicate, preserve order
         return _dedup(routed)
 
@@ -414,7 +418,9 @@ class PyGeoFetch:
 
     def batch_process(self, inputs, chain, output_dir=".", parallel=2):
         """Batch process multiple files through a processing chain."""
-        return self.batch.process(inputs, chain, output_dir=output_dir, parallel=parallel)
+        return self.batch.process(
+            inputs, chain, output_dir=output_dir, parallel=parallel
+        )
 
     def fetch_orbit_file(
         self,
@@ -454,6 +460,4 @@ class PyGeoFetch:
 
     def __repr__(self) -> str:
         authed = [item["provider"] for item in self.auth.list()]
-        return (
-            f"PyGeoFetch(authenticated={authed}, cache_entries={len(self.searcher.cache._cache)})"
-        )
+        return f"PyGeoFetch(authenticated={authed}, cache_entries={len(self.searcher.cache._cache)})"

@@ -1,5 +1,5 @@
 {% set name = "pygeofetch" %}
-{% set version = "1.1.0" %}
+{% set version = "1.0.0" %}
 
 package:
   name: {{ name|lower }}
@@ -7,7 +7,7 @@ package:
 
 source:
   url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
-  sha256: PLACEHOLDER_SHA256_REPLACE_AFTER_PYPI_UPLOAD
+  sha256: 0307001e4a585f035c709ccc61c7b23217280a7ddf2775229600340d878b5cf2
 
 build:
   number: 0

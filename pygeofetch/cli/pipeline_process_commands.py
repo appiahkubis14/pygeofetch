@@ -21,7 +21,11 @@ def proc_pipeline() -> None:
 @proc_pipeline.command("run")
 @click.argument("yaml_file", type=click.Path(exists=True))
 @click.option(
-    "--input", "-i", default=None, type=click.Path(exists=True), help="Starting input file."
+    "--input",
+    "-i",
+    default=None,
+    type=click.Path(exists=True),
+    help="Starting input file.",
 )
 @click.option("--output-dir", "-o", default="./pipeline_out", show_default=True)
 @click.option("--json", "as_json", is_flag=True, help="Output summary as JSON.")
@@ -71,7 +75,14 @@ def proc_validate_cmd(yaml_file):
 @click.argument(
     "template_name",
     type=click.Choice(
-        ["ndvi", "change_detection", "flood_map", "urban_mapping", "sar_analysis", "land_cover"]
+        [
+            "ndvi",
+            "change_detection",
+            "flood_map",
+            "urban_mapping",
+            "sar_analysis",
+            "land_cover",
+        ]
     ),
 )
 @click.option("--output", "-o", default=None)

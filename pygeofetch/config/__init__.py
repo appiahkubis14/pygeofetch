@@ -8,4 +8,10 @@ from pygeofetch.config.settings import (
     save_user_config,
 )
 
-__all__ = ["Settings", "get_settings", "reset_settings", "get_config_dir", "save_user_config"]
+__all__ = [
+    "Settings",
+    "get_settings",
+    "reset_settings",
+    "get_config_dir",
+    "save_user_config",
+]

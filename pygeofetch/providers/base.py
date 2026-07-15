@@ -38,7 +38,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional  # noqa: F401
 
 from pygeofetch.models.download_task import DownloadOptions, DownloadResult
-from pygeofetch.models.satellite_data import ProviderCapabilities, QuotaInfo, SatelliteData
+from pygeofetch.models.satellite_data import (
+    ProviderCapabilities,
+    QuotaInfo,
+    SatelliteData,
+)
 from pygeofetch.models.search_query import SearchQuery
 from pygeofetch.models.user_auth import AuthSession, Credentials
 from pygeofetch.utils.logging_setup import get_logger

@@ -69,7 +69,9 @@ class PostProcessor:
         from shapely.geometry import shape
 
         inp = Path(input)
-        ext = {"geojson": ".geojson", "gpkg": ".gpkg", "shp": ".shp"}.get(format, ".geojson")
+        ext = {"geojson": ".geojson", "gpkg": ".gpkg", "shp": ".shp"}.get(
+            format, ".geojson"
+        )
         out_path = Path(output) if output else inp.parent / f"{inp.stem}_vectors{ext}"
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -83,7 +85,11 @@ class PostProcessor:
             data = (data >= threshold).astype(np.uint8)
             mask = data > 0
         else:
-            mask = (data != nodata) if nodata is not None else np.ones_like(data, dtype=bool)
+            mask = (
+                (data != nodata)
+                if nodata is not None
+                else np.ones_like(data, dtype=bool)
+            )
             data = data.astype(np.int32)
 
         features = []
@@ -194,7 +200,9 @@ class PostProcessor:
         _require_numpy()
 
         inp = Path(input)
-        out_path = Path(output) if output else inp.parent / f"{inp.stem}_regularized.geojson"
+        out_path = (
+            Path(output) if output else inp.parent / f"{inp.stem}_regularized.geojson"
+        )
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
         gdf = gpd.read_file(inp)
@@ -214,7 +222,9 @@ class PostProcessor:
                 else:
                     # Simplify and buffer for irregular shapes
                     regularized.append(
-                        geom.simplify(0.5, preserve_topology=True).buffer(0.1).buffer(-0.1)
+                        geom.simplify(0.5, preserve_topology=True)
+                        .buffer(0.1)
+                        .buffer(-0.1)
                     )
             except Exception:
                 regularized.append(geom)
@@ -283,7 +293,9 @@ class PostProcessor:
         ]
 
         out_path = (
-            Path(output) if output else raster_path.parent / f"{raster_path.stem}_zonal_stats.csv"
+            Path(output)
+            if output
+            else raster_path.parent / f"{raster_path.stem}_zonal_stats.csv"
         )
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -386,7 +398,9 @@ class PostProcessor:
 
         inp = Path(input)
         out_path = (
-            Path(output) if output else inp.parent / f"{inp.stem}_buffer{distance:.0f}.geojson"
+            Path(output)
+            if output
+            else inp.parent / f"{inp.stem}_buffer{distance:.0f}.geojson"
         )
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -425,7 +439,9 @@ class PostProcessor:
         """
         gpd = _require_geopandas()
         inp = Path(input)
-        out_path = Path(output) if output else inp.parent / f"{inp.stem}_centroids.geojson"
+        out_path = (
+            Path(output) if output else inp.parent / f"{inp.stem}_centroids.geojson"
+        )
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
         gdf = gpd.read_file(inp)
@@ -460,14 +476,18 @@ class PostProcessor:
         gpd = _require_geopandas()
         np = _require_numpy()
         inp = Path(input)
-        out_path = Path(output) if output else inp.parent / f"{inp.stem}_metrics.geojson"
+        out_path = (
+            Path(output) if output else inp.parent / f"{inp.stem}_metrics.geojson"
+        )
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
         gdf = gpd.read_file(inp)
         gdf["area_m2"] = gdf.geometry.area
         gdf["perimeter_m"] = gdf.geometry.length
         # Polsby-Popper compactness (1 = circle)
-        gdf["compactness"] = 4 * np.pi * gdf["area_m2"] / (gdf["perimeter_m"] ** 2 + 1e-10)
+        gdf["compactness"] = (
+            4 * np.pi * gdf["area_m2"] / (gdf["perimeter_m"] ** 2 + 1e-10)
+        )
         gdf.to_file(out_path, driver="GeoJSON")
         return ProcessingResult(
             success=True,
@@ -601,11 +621,17 @@ class PostProcessor:
             tmp_path.unlink(missing_ok=True)
 
         size_mb = out_path.stat().st_size / (1024 * 1024)
-        logger.info(f"COG ({compress}, {blocksize}px tiles) {size_mb:.1f} MB → {out_path}")
+        logger.info(
+            f"COG ({compress}, {blocksize}px tiles) {size_mb:.1f} MB → {out_path}"
+        )
         return ProcessingResult(
             success=True,
             operation="cog",
             input_path=inp,
             output_path=out_path,
-            metadata={"compress": compress, "blocksize": blocksize, "size_mb": round(size_mb, 1)},
+            metadata={
+                "compress": compress,
+                "blocksize": blocksize,
+                "size_mb": round(size_mb, 1),
+            },
         )

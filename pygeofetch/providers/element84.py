@@ -26,7 +26,11 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from pygeofetch.models.download_task import DownloadOptions, DownloadResult, DownloadStatus
+from pygeofetch.models.download_task import (
+    DownloadOptions,
+    DownloadResult,
+    DownloadStatus,
+)
 from pygeofetch.models.satellite_data import (
     DataFormat,
     ProviderCapabilities,
@@ -79,9 +83,10 @@ class Element84Provider(AbstractBaseProvider):
 
     def authenticate(self, credentials: Credentials) -> AuthSession:
         """No authentication required."""
-        session = AuthSession(provider=self.PROVIDER_ID,
-                access_token=None,
-            )
+        session = AuthSession(
+            provider=self.PROVIDER_ID,
+            access_token=None,
+        )
         self._session = session
         return session
 
@@ -124,7 +129,9 @@ class Element84Provider(AbstractBaseProvider):
             if resp.status_code != 200:
                 self._handle_http_error(resp)
             features = resp.json().get("features", [])
-            results = [SatelliteData.from_stac_item(f, self.PROVIDER_ID) for f in features]
+            results = [
+                SatelliteData.from_stac_item(f, self.PROVIDER_ID) for f in features
+            ]
             self._logger.info(f"Element84: {len(results)} items found")
             return results
 
@@ -187,12 +194,17 @@ class Element84Provider(AbstractBaseProvider):
 
             try:
                 with httpx.stream(
-                    "GET", asset.href, timeout=options.timeout_seconds, follow_redirects=True
+                    "GET",
+                    asset.href,
+                    timeout=options.timeout_seconds,
+                    follow_redirects=True,
                 ) as resp:
                     self._handle_http_error(resp)
                     with open(out_file, "wb") as f:
                         f.writelines(
-                            resp.iter_bytes(chunk_size=int(options.chunk_size_mb * 1024 * 1024))
+                            resp.iter_bytes(
+                                chunk_size=int(options.chunk_size_mb * 1024 * 1024)
+                            )
                         )
                 output_paths.append(out_file)
                 total_bytes += out_file.stat().st_size

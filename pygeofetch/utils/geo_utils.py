@@ -47,7 +47,12 @@ def parse_bbox(value: str | list | tuple | dict) -> BBoxTuple:
         return tuple(parts)  # type: ignore
     if isinstance(value, dict):
         if "min_lon" in value:
-            return (value["min_lon"], value["min_lat"], value["max_lon"], value["max_lat"])
+            return (
+                value["min_lon"],
+                value["min_lat"],
+                value["max_lon"],
+                value["max_lat"],
+            )
         if "west" in value:
             return (value["west"], value["south"], value["east"], value["north"])
         msg = "Dict must have min_lon/max_lon/min_lat/max_lat or west/south/east/north keys"
@@ -135,7 +140,9 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     d_lon = math.radians(lon2 - lon1)
     a = (
         math.sin(d_lat / 2) ** 2
-        + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(d_lon / 2) ** 2
+        + math.cos(math.radians(lat1))
+        * math.cos(math.radians(lat2))
+        * math.sin(d_lon / 2) ** 2
     )
     return R * 2 * math.asin(math.sqrt(a))
 
@@ -153,7 +160,10 @@ def bbox_intersects(bbox1: BBoxTuple, bbox2: BBoxTuple) -> bool:
     min_lon1, min_lat1, max_lon1, max_lat1 = bbox1
     min_lon2, min_lat2, max_lon2, max_lat2 = bbox2
     return not (
-        max_lon1 < min_lon2 or max_lon2 < min_lon1 or max_lat1 < min_lat2 or max_lat2 < min_lat1
+        max_lon1 < min_lon2
+        or max_lon2 < min_lon1
+        or max_lat1 < min_lat2
+        or max_lat2 < min_lat1
     )
 
 

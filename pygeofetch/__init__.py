@@ -1,5 +1,5 @@
 """
-PyGeoFetch v1.1.0 — Universal Satellite Data Pipeline.
+PyGeoFetch v1.0.0 — Universal Satellite Data Pipeline.
 
 Unified access to 22+ satellite data providers with a consistent
 Python API and CLI. Supports authentication management, federated search,
@@ -30,10 +30,40 @@ CLI::
     pygeofetch doctor
 """
 
-__version__ = "1.1.0"
+__version__ = "1.0.0"
 __author__ = "PyGeoFetch Contributors"
 __license__ = "MIT"
 
 from pygeofetch.core.engine import PyGeoFetch  # noqa: F401
 
 __all__ = ["PyGeoFetch", "__version__"]
+
+
+# Optional modules — lazy imported to avoid hard dependency errors
+def _lazy(module_path: str, name: str):
+    """Return a lazy accessor that imports on first use."""
+
+    def _get():
+        import importlib
+
+        mod = importlib.import_module(module_path)
+        return getattr(mod, name)
+
+    return _get
+
+
+# Convenience accessors (fail gracefully if optional deps not installed)
+try:
+    from pygeofetch.processor import BandStacker, DataLoader, SpectralIndex
+except ImportError:
+    DataLoader = SpectralIndex = BandStacker = None  # type: ignore[assignment,misc]
+
+try:
+    from pygeofetch.sar import SARProcessor as AdvancedSARProcessor
+except ImportError:
+    AdvancedSARProcessor = None  # type: ignore[assignment,misc]
+
+try:
+    from pygeofetch.viz import MapViewer, Plotter
+except ImportError:
+    MapViewer = Plotter = None  # type: ignore[assignment,misc]

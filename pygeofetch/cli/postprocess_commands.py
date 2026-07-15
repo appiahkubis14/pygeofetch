@@ -44,17 +44,31 @@ def post() -> None:
 @click.option("--output", "-o", default=None)
 @click.option("--band", "-b", default=1, show_default=True, type=int)
 @click.option(
-    "--threshold", "-t", default=None, type=float, help="Binary threshold before vectorizing."
+    "--threshold",
+    "-t",
+    default=None,
+    type=float,
+    help="Binary threshold before vectorizing.",
 )
-@click.option("--format", "-f", default="geojson", type=click.Choice(["geojson", "gpkg", "shp"]))
 @click.option(
-    "--min-area", default=None, type=float, help="Minimum polygon area to keep (CRS units²)."
+    "--format", "-f", default="geojson", type=click.Choice(["geojson", "gpkg", "shp"])
+)
+@click.option(
+    "--min-area",
+    default=None,
+    type=float,
+    help="Minimum polygon area to keep (CRS units²).",
 )
 def vectorize_cmd(input, output, band, threshold, format, min_area):
     """Convert raster to vector polygons (polygonize)."""
     e = _engine()
     r = e.post.vectorize(
-        input, output=output, band=band, threshold=threshold, format=format, min_area=min_area
+        input,
+        output=output,
+        band=band,
+        threshold=threshold,
+        format=format,
+        min_area=min_area,
     )
     _pr(r, "vectorize")
 
@@ -62,7 +76,9 @@ def vectorize_cmd(input, output, band, threshold, format, min_area):
 @post.command("smooth")
 @click.argument("input", type=click.Path(exists=True))
 @click.option("--tolerance", "-t", default=1.0, show_default=True, type=float)
-@click.option("--method", "-m", default="simplify", type=click.Choice(["simplify", "buffer"]))
+@click.option(
+    "--method", "-m", default="simplify", type=click.Choice(["simplify", "buffer"])
+)
 @click.option("--output", "-o", default=None)
 def smooth_cmd(input, tolerance, method, output):
     """Smooth/simplify vector geometries (Douglas-Peucker or buffer-unbuffer)."""
@@ -95,14 +111,18 @@ def zonal_stats_cmd(raster, zones, output, stats, band):
     """Compute zonal statistics for each polygon zone."""
     e = _engine()
     stat_list = [s.strip() for s in stats.split(",")]
-    r = e.post.zonal_stats(raster=raster, zones=zones, output=output, stats=stat_list, band=band)
+    r = e.post.zonal_stats(
+        raster=raster, zones=zones, output=output, stats=stat_list, band=band
+    )
     _pr(r, "zonal-stats")
 
 
 @post.command("buffer")
 @click.argument("input", type=click.Path(exists=True))
 @click.option("--distance", "-d", required=True, type=float)
-@click.option("--cap-style", default="round", type=click.Choice(["round", "flat", "square"]))
+@click.option(
+    "--cap-style", default="round", type=click.Choice(["round", "flat", "square"])
+)
 @click.option("--output", "-o", default=None)
 def buffer_cmd(input, distance, cap_style, output):
     """Add buffer around vector geometries."""
@@ -151,7 +171,10 @@ def compress_cmd(input, method, output):
 @post.command("cog")
 @click.argument("input", type=click.Path(exists=True))
 @click.option(
-    "--compress", "-c", default="deflate", type=click.Choice(["deflate", "lzw", "zstd", "none"])
+    "--compress",
+    "-c",
+    default="deflate",
+    type=click.Choice(["deflate", "lzw", "zstd", "none"]),
 )
 @click.option("--blocksize", "-b", default=512, show_default=True, type=int)
 @click.option("--output", "-o", default=None)

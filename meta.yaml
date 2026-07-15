@@ -1,5 +1,5 @@
 {% set name = "pygeofetch" %}
-{% set version = "1.1.0" %}
+{% set version = "1.2.0" %}
 
 package:
   name: {{ name|lower }}
@@ -14,7 +14,7 @@ build:
   noarch: python
   script: {{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
   entry_points:
-    - PyGeoFetch = pygeofetch.cli.main:cli
+    - pygeofetch = pygeofetch.cli.main:cli
 
 requirements:
   host:
@@ -44,20 +44,20 @@ test:
     - pygeofetch.models.search_query
     - pygeofetch.providers
   commands:
-    - PyGeoFetch --version
-    - PyGeoFetch --help
+    - pygeofetch --version
+    - pygeofetch --help
   requires:
     - pytest
     - pytest-mock
 
 about:
-  home: https://github.com/pygeofetch/PyGeoFetch
+  home: https://github.com/appiahkubis14/pygeofetch
   license: MIT
   license_family: MIT
   license_file: LICENSE
   summary: Universal satellite data pipeline — unified access to 22+ providers
   description: |
-    PyGeoFetch is a production-ready Python package for satellite data
+    pygeofetch is a production-ready Python package for satellite data
     acquisition and geospatial processing. It provides unified access to
     22+ satellite data providers including Copernicus, AWS Earth, USGS,
     Planetary Computer, Planet, NASA Earthdata, and more.
@@ -72,8 +72,8 @@ about:
       - YAML pipeline definitions
       - Clean search tables and live download progress
   doc_url: https://pygeofetch.readthedocs.io
-  dev_url: https://github.com/pygeofetch/PyGeoFetch
+  dev_url: https://github.com/appiahkubis14/pygeofetch
 
 extra:
   recipe-maintainers:
-    - your-github-username
+    - github: appiahkubis14

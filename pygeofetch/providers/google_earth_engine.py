@@ -9,9 +9,13 @@ from __future__ import annotations
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
-from pygeofetch.models.download_task import DownloadOptions, DownloadResult, DownloadStatus
+from pygeofetch.models.download_task import (
+    DownloadOptions,
+    DownloadResult,
+    DownloadStatus,
+)
 from pygeofetch.models.satellite_data import (
     DataFormat,
     ProviderCapabilities,
@@ -47,16 +51,15 @@ class GoogleEarthEngineProvider(AbstractBaseProvider):
     PROVIDER_ID = "google_earth_engine"
     DISPLAY_NAME = "Google Earth Engine"
     REQUIRES_AUTH = True
-    DESCRIPTION = (
-        "Google Earth Engine catalog. Multi-petabyte multi-mission archive. Service account auth."
-    )
+    DESCRIPTION = "Google Earth Engine catalog. Multi-petabyte multi-mission archive. Service account auth."
     SATELLITES = ["Sentinel-1", "Sentinel-2", "Landsat", "MODIS", "VIIRS"]
     BASE_URL = "https://earthengine.googleapis.com/v1alpha"
 
     def authenticate(self, credentials: Credentials) -> AuthSession:
-        from datetime import datetime, timedelta, timezone
 
-        token = credentials.api_key or credentials.password or credentials.access_key or ""
+        token = (
+            credentials.api_key or credentials.password or credentials.access_key or ""
+        )
         if self.REQUIRES_AUTH and not token and not credentials.username:
             msg = f"{self.DISPLAY_NAME} requires credentials. See: https://developers.google.com/earth-engine/"
             raise AuthenticationError(msg)
@@ -119,7 +122,9 @@ class GoogleEarthEngineProvider(AbstractBaseProvider):
                 self._logger.warning(f"{self.DISPLAY_NAME}: HTTP {resp.status_code}")
                 return []
             data = resp.json()
-            items = data.get("features", data.get("items", data if isinstance(data, list) else []))
+            items = data.get(
+                "features", data.get("items", data if isinstance(data, list) else [])
+            )
             return [self._parse_item(item) for item in items]
         except Exception as exc:
             self._logger.warning(f"{self.DISPLAY_NAME} search: {exc}")
@@ -142,7 +147,9 @@ class GoogleEarthEngineProvider(AbstractBaseProvider):
             satellite=item.get("satellite", item.get("mission", self.DISPLAY_NAME)),
             cloud_cover=float(cloud_raw) if cloud_raw is not None else None,
             bbox=bbox,
-            properties={k: v for k, v in item.items() if k not in ("id", "bbox", "assets")},
+            properties={
+                k: v for k, v in item.items() if k not in ("id", "bbox", "assets")
+            },
         )
 
     def download(
@@ -178,7 +185,9 @@ class GoogleEarthEngineProvider(AbstractBaseProvider):
                     self._handle_http_error(resp)
                     with open(out_file, "wb") as f:
                         f.writelines(
-                            resp.iter_bytes(chunk_size=int(options.chunk_size_mb * 1024 * 1024))
+                            resp.iter_bytes(
+                                chunk_size=int(options.chunk_size_mb * 1024 * 1024)
+                            )
                         )
                 output_paths.append(out_file)
                 total_bytes += out_file.stat().st_size
@@ -227,5 +236,6 @@ class GoogleEarthEngineProvider(AbstractBaseProvider):
 
     def get_quota_info(self) -> QuotaInfo:
         return QuotaInfo(
-            provider=self.PROVIDER_ID, extra_info={"note": "Quota depends on subscription."}
+            provider=self.PROVIDER_ID,
+            extra_info={"note": "Quota depends on subscription."},
         )

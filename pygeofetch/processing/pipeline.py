@@ -303,7 +303,9 @@ class ProcessingPipeline:
                     current_input = result.output_path
                     run_result.outputs.append(result.output_path)
                 step_record["status"] = "ok" if result.success else "failed"
-                step_record["output"] = str(result.output_path) if result.output_path else None
+                step_record["output"] = (
+                    str(result.output_path) if result.output_path else None
+                )
                 step_record["duration"] = round(time.time() - step_t0, 2)
                 if result.error:
                     step_record["error"] = result.error

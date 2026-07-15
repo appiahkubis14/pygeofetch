@@ -9,9 +9,13 @@ from __future__ import annotations
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
-from pygeofetch.models.download_task import DownloadOptions, DownloadResult, DownloadStatus
+from pygeofetch.models.download_task import (
+    DownloadOptions,
+    DownloadResult,
+    DownloadStatus,
+)
 from pygeofetch.models.satellite_data import (
     DataFormat,
     ProviderCapabilities,
@@ -47,14 +51,17 @@ class AlaskaSatelliteFacilityProvider(AbstractBaseProvider):
     PROVIDER_ID = "alaska_satellite_facility"
     DISPLAY_NAME = "Alaska Satellite Facility"
     REQUIRES_AUTH = True
-    DESCRIPTION = "SAR data from Sentinel-1, ALOS PALSAR, ERS, JERS. NASA Earthdata login."
+    DESCRIPTION = (
+        "SAR data from Sentinel-1, ALOS PALSAR, ERS, JERS. NASA Earthdata login."
+    )
     SATELLITES = ["Sentinel-1A", "Sentinel-1B", "ALOS PALSAR", "ERS-1", "ERS-2"]
     BASE_URL = "https://api.daac.asf.alaska.edu"
 
     def authenticate(self, credentials: Credentials) -> AuthSession:
-        from datetime import datetime, timedelta, timezone
 
-        token = credentials.api_key or credentials.password or credentials.access_key or ""
+        token = (
+            credentials.api_key or credentials.password or credentials.access_key or ""
+        )
         if self.REQUIRES_AUTH and not token and not credentials.username:
             msg = f"{self.DISPLAY_NAME} requires credentials. See: https://asf.alaska.edu/api/"
             raise AuthenticationError(msg)
@@ -117,7 +124,9 @@ class AlaskaSatelliteFacilityProvider(AbstractBaseProvider):
                 self._logger.warning(f"{self.DISPLAY_NAME}: HTTP {resp.status_code}")
                 return []
             data = resp.json()
-            items = data.get("features", data.get("items", data if isinstance(data, list) else []))
+            items = data.get(
+                "features", data.get("items", data if isinstance(data, list) else [])
+            )
             return [self._parse_item(item) for item in items]
         except Exception as exc:
             self._logger.warning(f"{self.DISPLAY_NAME} search: {exc}")
@@ -140,7 +149,9 @@ class AlaskaSatelliteFacilityProvider(AbstractBaseProvider):
             satellite=item.get("satellite", item.get("mission", self.DISPLAY_NAME)),
             cloud_cover=float(cloud_raw) if cloud_raw is not None else None,
             bbox=bbox,
-            properties={k: v for k, v in item.items() if k not in ("id", "bbox", "assets")},
+            properties={
+                k: v for k, v in item.items() if k not in ("id", "bbox", "assets")
+            },
         )
 
     def download(
@@ -176,7 +187,9 @@ class AlaskaSatelliteFacilityProvider(AbstractBaseProvider):
                     self._handle_http_error(resp)
                     with open(out_file, "wb") as f:
                         f.writelines(
-                            resp.iter_bytes(chunk_size=int(options.chunk_size_mb * 1024 * 1024))
+                            resp.iter_bytes(
+                                chunk_size=int(options.chunk_size_mb * 1024 * 1024)
+                            )
                         )
                 output_paths.append(out_file)
                 total_bytes += out_file.stat().st_size
@@ -225,5 +238,6 @@ class AlaskaSatelliteFacilityProvider(AbstractBaseProvider):
 
     def get_quota_info(self) -> QuotaInfo:
         return QuotaInfo(
-            provider=self.PROVIDER_ID, extra_info={"note": "Quota depends on subscription."}
+            provider=self.PROVIDER_ID,
+            extra_info={"note": "Quota depends on subscription."},
         )

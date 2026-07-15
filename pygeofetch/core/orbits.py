@@ -84,7 +84,9 @@ def fetch_orbit_file(
         return None
 
     sat = _parse_satellite(product_name)
-    logger.debug("Orbit lookup: satellite=%s, acq_dt=%s, type=%s", sat, acq_dt, orbit_type)
+    logger.debug(
+        "Orbit lookup: satellite=%s, acq_dt=%s, type=%s", sat, acq_dt, orbit_type
+    )
 
     # Check precise orbit availability window (published 21 days after acquisition)
     if orbit_type == "precise":
@@ -131,7 +133,9 @@ def fetch_orbit_file(
         logger.info("Downloading orbit file: %s", orbit_filename)
         _download_file(download_url, output_path, timeout=timeout)
         logger.info(
-            "Orbit file saved: %s (%.1f KB)", output_path, output_path.stat().st_size / 1024
+            "Orbit file saved: %s (%.1f KB)",
+            output_path,
+            output_path.stat().st_size / 1024,
         )
         return str(output_path)
 
@@ -142,7 +146,9 @@ def fetch_orbit_file(
         logger.error("HTTP error fetching orbit listing %s: %s", listing_url, exc)
         return None
     except requests.exceptions.Timeout:
-        logger.error("Timeout fetching orbit listing after %ds: %s", timeout, listing_url)
+        logger.error(
+            "Timeout fetching orbit listing after %ds: %s", timeout, listing_url
+        )
         return None
     except requests.RequestException as exc:
         logger.error("Orbit file download failed: %s", exc)

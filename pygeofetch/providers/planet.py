@@ -25,7 +25,11 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from pygeofetch.models.download_task import DownloadOptions, DownloadResult, DownloadStatus
+from pygeofetch.models.download_task import (
+    DownloadOptions,
+    DownloadResult,
+    DownloadStatus,
+)
 from pygeofetch.models.satellite_data import (
     DataFormat,
     ProviderCapabilities,
@@ -300,7 +304,9 @@ class PlanetProvider(AbstractBaseProvider):
             },
         )
 
-    def _activate_asset(self, item_id: str, item_type: str, asset_type: str, api_key: str) -> bool:
+    def _activate_asset(
+        self, item_id: str, item_type: str, asset_type: str, api_key: str
+    ) -> bool:
         """Activate a Planet asset for download."""
         import httpx
 
@@ -309,7 +315,12 @@ class PlanetProvider(AbstractBaseProvider):
         return resp.status_code in (202, 204)
 
     def _wait_for_activation(
-        self, item_id: str, item_type: str, asset_type: str, api_key: str, max_wait: int = 300
+        self,
+        item_id: str,
+        item_type: str,
+        asset_type: str,
+        api_key: str,
+        max_wait: int = 300,
     ) -> str | None:
         """Poll until asset is activated; return download URL or None."""
         import httpx
@@ -359,7 +370,9 @@ class PlanetProvider(AbstractBaseProvider):
 
         # Activate
         self._activate_asset(data.id, item_type, asset_type, api_key)
-        download_url = self._wait_for_activation(data.id, item_type, asset_type, api_key)
+        download_url = self._wait_for_activation(
+            data.id, item_type, asset_type, api_key
+        )
 
         if not download_url:
             return DownloadResult(
@@ -381,7 +394,9 @@ class PlanetProvider(AbstractBaseProvider):
                 self._handle_http_error(resp)
                 with open(out_file, "wb") as f:
                     f.writelines(
-                        resp.iter_bytes(chunk_size=int(options.chunk_size_mb * 1024 * 1024))
+                        resp.iter_bytes(
+                            chunk_size=int(options.chunk_size_mb * 1024 * 1024)
+                        )
                     )
         except Exception as exc:
             return DownloadResult(

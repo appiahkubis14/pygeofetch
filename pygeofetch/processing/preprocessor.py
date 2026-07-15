@@ -103,7 +103,8 @@ class Preprocessor:
             profile = src.profile.copy()
             nodata = src.nodata
             data = np.stack(
-                [_safe_read_band(inp, band=b)[0] for b in range(1, src.count + 1)], axis=0
+                [_safe_read_band(inp, band=b)[0] for b in range(1, src.count + 1)],
+                axis=0,
             )
 
         method = method.lower()
@@ -114,14 +115,18 @@ class Preprocessor:
             for b in range(data.shape[0]):
                 band = data[b]
                 valid = band > 0 if nodata is None else (band != nodata) & (band > 0)
-                dark_pixel = float(np.percentile(band[valid], 1)) if valid.any() else 0.0
+                dark_pixel = (
+                    float(np.percentile(band[valid], 1)) if valid.any() else 0.0
+                )
                 corrected[b] = np.where(valid, band - dark_pixel, nodata or 0)
             if method == "dos2":
                 # DOS2: also apply path radiance correction
                 for b in range(corrected.shape[0]):
                     valid = corrected[b] > 0
                     if valid.any():
-                        corrected[b] = np.where(valid, corrected[b] * 1.05, corrected[b])
+                        corrected[b] = np.where(
+                            valid, corrected[b] * 1.05, corrected[b]
+                        )
 
         elif method == "sen2cor":
             # Simplified Sen2Cor: band-specific scale + offset
@@ -205,7 +210,8 @@ class Preprocessor:
                 [_safe_read_1(src)]
                 if src.count == 1
                 else [
-                    src.read(b).astype(__import__("numpy").float32) for b in range(1, src.count + 1)
+                    src.read(b).astype(__import__("numpy").float32)
+                    for b in range(1, src.count + 1)
                 ]
             )
             nodata = src.nodata
@@ -256,7 +262,9 @@ class Preprocessor:
                 valid = (cos_i > 0.01) & (band > 0)
                 if valid.sum() > 100:
                     x, y = cos_i[valid].ravel(), band[valid].ravel()
-                    c_val = float(np.polyfit(x, y, 1)[1]) / (float(np.polyfit(x, y, 1)[0]) + 1e-10)
+                    c_val = float(np.polyfit(x, y, 1)[1]) / (
+                        float(np.polyfit(x, y, 1)[0]) + 1e-10
+                    )
                 else:
                     c_val = 1.0
                 with np.errstate(divide="ignore", invalid="ignore"):
@@ -333,7 +341,8 @@ class Preprocessor:
                 [_safe_read_1(src)]
                 if src.count == 1
                 else [
-                    src.read(b).astype(__import__("numpy").float32) for b in range(1, src.count + 1)
+                    src.read(b).astype(__import__("numpy").float32)
+                    for b in range(1, src.count + 1)
                 ]
             )
             nodata_val = src.nodata if src.nodata is not None else 0.0
@@ -389,7 +398,9 @@ class Preprocessor:
                 green = data[1].astype(float)
                 swir1 = data[3].astype(float)
                 with np.errstate(divide="ignore", invalid="ignore"):
-                    ndsi = np.where(green + swir1 > 0, (green - swir1) / (green + swir1), 0)
+                    ndsi = np.where(
+                        green + swir1 > 0, (green - swir1) / (green + swir1), 0
+                    )
                 snow_mask = ndsi > 0.4
                 for b in range(data.shape[0]):
                     data[b] = np.where(snow_mask, nodata_val, data[b])
@@ -404,7 +415,9 @@ class Preprocessor:
             dst.write(data)
 
         masked_pct = 100 * np.mean(data[0] == nodata_val) if data.size > 0 else 0
-        logger.info(f"Cloud mask ({method}) masked {masked_pct:.1f}% pixels → {out_path}")
+        logger.info(
+            f"Cloud mask ({method}) masked {masked_pct:.1f}% pixels → {out_path}"
+        )
         return ProcessingResult(
             success=True,
             operation=f"cloud_mask:{method}",
@@ -451,7 +464,8 @@ class Preprocessor:
                 [_safe_read_1(src)]
                 if src.count == 1
                 else [
-                    src.read(b).astype(__import__("numpy").float32) for b in range(1, src.count + 1)
+                    src.read(b).astype(__import__("numpy").float32)
+                    for b in range(1, src.count + 1)
                 ]
             )
             nodata_val = src.nodata if src.nodata is not None else 0.0
@@ -728,7 +742,9 @@ class Preprocessor:
                     row_end = min(row + tile_size, h)
                     col_end = min(col + tile_size, w)
 
-                    window = rasterio.windows.Window(col, row, col_end - col, row_end - row)
+                    window = rasterio.windows.Window(
+                        col, row, col_end - col, row_end - row
+                    )
                     tile_data = src.read(window=window)
 
                     # Skip near-empty tiles
@@ -1060,7 +1076,9 @@ class Preprocessor:
                 if cm_path and i < len(stack):
                     with rasterio.open(Path(cm_path)) as cm_src:
                         cm = cm_src.read(
-                            1, out_shape=ref_shape[1:], resampling=rasterio.enums.Resampling.nearest
+                            1,
+                            out_shape=ref_shape[1:],
+                            resampling=rasterio.enums.Resampling.nearest,
                         ).astype(float)
                     cm = np.where(cm > 0, np.nan, 1.0)
                     arr[i] = arr[i] * cm[np.newaxis, :, :]

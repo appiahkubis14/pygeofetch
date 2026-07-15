@@ -14,11 +14,15 @@ from pygeofetch.providers.base import AbstractBaseProvider
 
 def _lazy_load_providers() -> dict[str, type[AbstractBaseProvider]]:
     from pygeofetch.providers.airbus_oneatlas import AirbusOneatlasProvider
-    from pygeofetch.providers.alaska_satellite_facility import AlaskaSatelliteFacilityProvider
+    from pygeofetch.providers.alaska_satellite_facility import (
+        AlaskaSatelliteFacilityProvider,
+    )
     from pygeofetch.providers.aws_earth import AWSEarthProvider
     from pygeofetch.providers.copernicus import CopernicusProvider
     from pygeofetch.providers.digitalglobe import DigitalglobeProvider
-    from pygeofetch.providers.earth_explorer_additional import EarthExplorerAdditionalProvider
+    from pygeofetch.providers.earth_explorer_additional import (
+        EarthExplorerAdditionalProvider,
+    )
     from pygeofetch.providers.element84 import Element84Provider
     from pygeofetch.providers.esa_scihub import EsaScihubProvider
     from pygeofetch.providers.geoserver_generic import GeoserverGenericProvider

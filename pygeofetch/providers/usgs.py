@@ -43,7 +43,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from pygeofetch.models.download_task import DownloadOptions, DownloadResult, DownloadStatus
+from pygeofetch.models.download_task import (
+    DownloadOptions,
+    DownloadResult,
+    DownloadStatus,
+)
 from pygeofetch.models.satellite_data import (
     DataFormat,
     ProcessingLevel,
@@ -159,7 +163,9 @@ class USGSProvider(AbstractBaseProvider):
                 expires_at=datetime.utcnow() + timedelta(hours=2),
             )
             self._session = session
-            self._logger.info(f"Authenticated with USGS M2M API as {credentials.username!r}")
+            self._logger.info(
+                f"Authenticated with USGS M2M API as {credentials.username!r}"
+            )
             return session
 
         except AuthenticationError:
@@ -195,7 +201,11 @@ class USGSProvider(AbstractBaseProvider):
                 f"Run: PyGeoFetch auth add usgs --username USER --password PASS"
             )
             raise AuthenticationError(msg)
-        if self.REQUIRES_AUTH and self._session is not None and not self._session.is_valid:
+        if (
+            self.REQUIRES_AUTH
+            and self._session is not None
+            and not self._session.is_valid
+        ):
             msg = "USGS session token expired. Re-run: PyGeoFetch auth add usgs"
             raise AuthenticationError(msg)
 
@@ -209,7 +219,9 @@ class USGSProvider(AbstractBaseProvider):
                 if len(results) >= query.max_results:
                     break
             except Exception as exc:
-                self._logger.warning(f"Search failed for dataset {dataset_name!r}: {exc}")
+                self._logger.warning(
+                    f"Search failed for dataset {dataset_name!r}: {exc}"
+                )
 
         return results[: query.max_results]
 
@@ -233,7 +245,9 @@ class USGSProvider(AbstractBaseProvider):
 
         return list(datasets)
 
-    def _search_dataset(self, dataset_name: str, query: SearchQuery) -> list[SatelliteData]:
+    def _search_dataset(
+        self, dataset_name: str, query: SearchQuery
+    ) -> list[SatelliteData]:
         """Search a specific USGS dataset."""
         import httpx
 
@@ -275,7 +289,9 @@ class USGSProvider(AbstractBaseProvider):
         )
         data = response.json()
         if response.status_code not in (200, 201):
-            msg = f"USGS scene-search HTTP {response.status_code}: {response.text[:200]}"
+            msg = (
+                f"USGS scene-search HTTP {response.status_code}: {response.text[:200]}"
+            )
             raise SearchError(msg)
         if data.get("errorCode"):
             msg = f"USGS search error [{data.get('errorCode')}]: {data.get('errorMessage')}"
@@ -418,7 +434,9 @@ class USGSProvider(AbstractBaseProvider):
                     self._handle_http_error(resp)
                     with open(output_file, "wb") as f:
                         f.writelines(
-                            resp.iter_bytes(chunk_size=int(options.chunk_size_mb * 1024 * 1024))
+                            resp.iter_bytes(
+                                chunk_size=int(options.chunk_size_mb * 1024 * 1024)
+                            )
                         )
                 output_paths.append(output_file)
 
@@ -474,7 +492,9 @@ class USGSProvider(AbstractBaseProvider):
         self.require_auth()
         return QuotaInfo(
             provider=self.PROVIDER_ID,
-            extra_info={"note": "USGS does not impose download quotas for most datasets"},
+            extra_info={
+                "note": "USGS does not impose download quotas for most datasets"
+            },
         )
 
     def list_datasets(self) -> list[dict[str, Any]]:

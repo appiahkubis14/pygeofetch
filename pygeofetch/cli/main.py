@@ -1,5 +1,5 @@
 """
-PyGeoFetch CLI v1.1.0 main entry point.
+PyGeoFetch CLI v1.0.0 main entry point.
 
 Full command reference:
   pygeofetch auth       — credential management
@@ -36,7 +36,9 @@ from pygeofetch.utils.logging_setup import setup_logging
 console = Console()
 
 
-@click.group(context_settings={"help_option_names": ["-h", "--help"], "max_content_width": 100})
+@click.group(
+    context_settings={"help_option_names": ["-h", "--help"], "max_content_width": 100}
+)
 @click.version_option(__version__, prog_name="pygeofetch")
 @click.option(
     "--log-level",
@@ -46,7 +48,9 @@ console = Console()
     show_default=True,
     help="Logging verbosity.",
 )
-@click.option("--log-file", default=None, type=click.Path(), help="Write logs to this file.")
+@click.option(
+    "--log-file", default=None, type=click.Path(), help="Write logs to this file."
+)
 @click.option(
     "--log-format",
     default="console",
@@ -67,7 +71,7 @@ def cli(
 ) -> None:
     """
     \b
-    PyGeoFetch v1.1.0 — Universal Satellite Data Pipeline
+    PyGeoFetch v1.0.0 — Universal Satellite Data Pipeline
     ===========================================================
     Unified access to 22+ satellite data providers.
 
@@ -265,7 +269,9 @@ def doctor() -> None:
     if cfg_dir.exists():
         console.print(f"  {ok} Config directory: {cfg_dir}")
     else:
-        console.print(f"  {warn} Config dir missing (will be created on first use): {cfg_dir}")
+        console.print(
+            f"  {warn} Config dir missing (will be created on first use): {cfg_dir}"
+        )
 
     # Keyring
     try:
@@ -315,7 +321,9 @@ def providers() -> None:
     default=None,
     help="Comma-separated capabilities: sar,optical,sub-meter,stac,direct-s3",
 )
-@click.option("--region", default=None, help="Filter by region (e.g. 'global', 'europe').")
+@click.option(
+    "--region", default=None, help="Filter by region (e.g. 'global', 'europe')."
+)
 @click.option("--satellite", default=None, help="Filter by satellite name substring.")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON.")
 def providers_list(auth, capabilities, region, satellite, as_json) -> None:
@@ -363,14 +371,18 @@ def providers_list(auth, capabilities, region, satellite, as_json) -> None:
     if satellite:
         sat_lower = satellite.lower()
         items = [
-            i for i in items if any(sat_lower in s.lower() for s in (i.get("satellites") or []))
+            i
+            for i in items
+            if any(sat_lower in s.lower() for s in (i.get("satellites") or []))
         ]
 
     if as_json:
         click.echo(_json.dumps(items, indent=2, default=str))
         return
 
-    table = Table(title=f"Providers ({len(items)})", header_style="bold blue", show_lines=False)
+    table = Table(
+        title=f"Providers ({len(items)})", header_style="bold blue", show_lines=False
+    )
     table.add_column("ID", style="cyan", no_wrap=True)
     table.add_column("Name")
     table.add_column("Auth", justify="center")
@@ -380,7 +392,9 @@ def providers_list(auth, capabilities, region, satellite, as_json) -> None:
     table.add_column("Satellites")
 
     for item in items:
-        auth_str = ("🔐 " + item.get("auth_type", "?")) if item["requires_auth"] else "🌐 open"
+        auth_str = (
+            ("🔐 " + item.get("auth_type", "?")) if item["requires_auth"] else "🌐 open"
+        )
         sats = ", ".join((item.get("satellites") or [])[:3])
         if len(item.get("satellites") or []) > 3:
             sats += f" +{len(item['satellites']) - 3}"
@@ -560,9 +574,14 @@ def cache_stats(as_json: bool) -> None:
 @cache.command(name="clear")
 @click.option("--provider", default=None, help="Clear only entries for this provider.")
 @click.option(
-    "--older-than", "older_than", default=None, help="Clear entries older than (e.g. 7d, 24h)."
+    "--older-than",
+    "older_than",
+    default=None,
+    help="Clear entries older than (e.g. 7d, 24h).",
 )
-@click.option("--dry-run", is_flag=True, help="Show what would be removed without deleting.")
+@click.option(
+    "--dry-run", is_flag=True, help="Show what would be removed without deleting."
+)
 @click.confirmation_option(prompt="Clear cache entries?")
 def cache_clear(provider: str, older_than: str, dry_run: bool) -> None:
     """
@@ -590,7 +609,9 @@ def cache_clear(provider: str, older_than: str, dry_run: bool) -> None:
         console.print(f"Would delete up to {stats['total']} entries.")
         return
 
-    count = mgr.clear_filtered(provider_filter=provider, max_age_seconds=max_age_seconds)
+    count = mgr.clear_filtered(
+        provider_filter=provider, max_age_seconds=max_age_seconds
+    )
     console.print(f"[green]Cleared {count} cache entries.[/]")
 
 
@@ -732,7 +753,11 @@ def pipeline_schedule(pipeline_file: str, name: str, cron: str) -> None:
     existing = {}
     if scheduled_file.exists():
         existing = json.loads(scheduled_file.read_text())
-    existing[p.name] = {"file": str(pipeline_file), "schedule": p.schedule, "name": p.name}
+    existing[p.name] = {
+        "file": str(pipeline_file),
+        "schedule": p.schedule,
+        "name": p.name,
+    }
     scheduled_file.write_text(json.dumps(existing, indent=2))
     console.print(
         f"[green]Scheduled {p.name!r}[/]"
@@ -804,7 +829,9 @@ def pipeline_logs(name: str, tail: int, follow: bool) -> None:
             ts = entry.get("timestamp", "")
             msg = entry.get("message", line)
             level = entry.get("level", "INFO")
-            color = {"ERROR": "red", "WARNING": "yellow", "INFO": "white"}.get(level, "white")
+            color = {"ERROR": "red", "WARNING": "yellow", "INFO": "white"}.get(
+                level, "white"
+            )
             console.print(f"[dim]{ts}[/] [{color}]{msg}[/]")
         except Exception:
             console.print(line)
@@ -850,7 +877,9 @@ def pipeline_history(limit: int, as_json: bool) -> None:
 @click.argument("run_id")
 def pipeline_retry(run_id: str) -> None:
     """Retry a failed pipeline run by its run ID."""
-    console.print(f"[yellow]Retry for run {run_id!r}: re-run the pipeline file directly.[/]")
+    console.print(
+        f"[yellow]Retry for run {run_id!r}: re-run the pipeline file directly.[/]"
+    )
     console.print("  pygeofetch pipeline run PIPELINE_FILE")
 
 

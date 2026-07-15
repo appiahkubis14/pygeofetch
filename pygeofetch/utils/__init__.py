@@ -48,7 +48,7 @@ __all__ = [
     "validate_provider_name",
     "validate_url",
 ]
-from pygeofetch.utils.gcp_recovery import (
+from pygeofetch.utils.gcp_recovery import (  # noqa: F401
     needs_recovery,
     recover_georeference,
     validate_georeference,

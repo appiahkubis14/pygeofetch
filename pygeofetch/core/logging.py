@@ -133,7 +133,9 @@ class _PGFFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         ts = self.formatTime(record, datefmt="%H:%M:%S")
-        style, badge = self._LEVEL_STYLE.get(record.levelname, ("", record.levelname[:4]))
+        style, badge = self._LEVEL_STYLE.get(
+            record.levelname, ("", record.levelname[:4])
+        )
         if self._use_colour:
             badge = _c(style, badge)
             ts = _cd(ts)
@@ -214,7 +216,9 @@ def print_search_header(
     """Print a clean search header box."""
     w = 72
     bbox_str = (
-        (f"[{bbox.min_lon:.3f}, {bbox.min_lat:.3f}, {bbox.max_lon:.3f}, {bbox.max_lat:.3f}]")
+        (
+            f"[{bbox.min_lon:.3f}, {bbox.min_lat:.3f}, {bbox.max_lon:.3f}, {bbox.max_lat:.3f}]"
+        )
         if bbox
         else "—"
     )
@@ -396,7 +400,9 @@ class DownloadProgress:
             self._spin_i = (self._spin_i + 1) % len(_SPINNER)
             self._render()
 
-    def complete_item(self, success: bool, bytes_total: int = 0, duration: float = 0.0) -> None:
+    def complete_item(
+        self, success: bool, bytes_total: int = 0, duration: float = 0.0
+    ) -> None:
         with self._lock:
             if success:
                 self._completed += 1
@@ -455,7 +461,9 @@ class DownloadProgress:
             bar_fill = f"{pct:.1f}%" if bytes_total > 0 else "0%"
             spd_str = f"<span style='color:#888'>{spd}</span>" if spd else ""
             size_str = (
-                (f"<span style='color:#888'>{self._fmt_size(bytes_done)} / {size}</span>")
+                (
+                    f"<span style='color:#888'>{self._fmt_size(bytes_done)} / {size}</span>"
+                )
                 if bytes_total
                 else ""
             )
@@ -510,7 +518,12 @@ class DownloadProgress:
         # Add in-progress row for current item
         if self._current_id:
             rows += self._jup_html_item(
-                self._current_id, None, self._bytes_total, 0, self._bytes_done, self._speed
+                self._current_id,
+                None,
+                self._bytes_total,
+                0,
+                self._bytes_done,
+                self._speed,
             )
 
         elapsed = time.time() - self._start
@@ -577,7 +590,9 @@ class DownloadProgress:
         sys.stdout.write("\r" + line + "  ")
         sys.stdout.flush()
 
-    def _print_item_done(self, success: bool, bytes_total: int, duration: float) -> None:
+    def _print_item_done(
+        self, success: bool, bytes_total: int, duration: float
+    ) -> None:
         """Finalise a completed item."""
         idx = self._completed + self._failed
         id_ = (self._current_id or "")[:42]
@@ -635,5 +650,11 @@ def _render_progress_bar(
     tot_gb = bytes_total / 1e9 if bytes_total else 0.0
     spd_mbs = speed_bps / 1e6
     name = filename[:40] + "…" if len(filename) > 40 else filename
-    size_str = f"{done_gb:.1f} GB / {tot_gb:.1f} GB" if bytes_total > 0 else f"{done_gb:.1f} GB"
-    return f"\r  [{bar}]  {completed}/{total}  {name:<42}  {size_str}  {spd_mbs:.1f} MB/s"
+    size_str = (
+        f"{done_gb:.1f} GB / {tot_gb:.1f} GB"
+        if bytes_total > 0
+        else f"{done_gb:.1f} GB"
+    )
+    return (
+        f"\r  [{bar}]  {completed}/{total}  {name:<42}  {size_str}  {spd_mbs:.1f} MB/s"
+    )

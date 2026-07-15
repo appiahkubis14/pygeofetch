@@ -36,7 +36,9 @@ def auth() -> None:
 @click.argument("provider")
 @click.option("--username", "-u", default=None, help="Username or email.")
 @click.option("--password", "-p", default=None, help="Password (prompted if omitted).")
-@click.option("--api-key", "-k", default=None, help="API key (alternative to username/password).")
+@click.option(
+    "--api-key", "-k", default=None, help="API key (alternative to username/password)."
+)
 @click.option("--client-id", default=None, help="OAuth2 client ID.")
 @click.option("--client-secret", default=None, help="OAuth2 client secret.")
 @click.option("--token", default=None, help="Bearer token.")
@@ -224,7 +226,9 @@ def auth_remove(provider: str, yes: bool) -> None:
 
 
 @auth.command(name="export")
-@click.option("--provider", default=None, help="Export only this provider (default: all).")
+@click.option(
+    "--provider", default=None, help="Export only this provider (default: all)."
+)
 @click.option(
     "--output",
     "-o",

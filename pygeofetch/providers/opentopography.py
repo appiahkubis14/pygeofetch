@@ -6,7 +6,11 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from pygeofetch.models.download_task import DownloadOptions, DownloadResult, DownloadStatus
+from pygeofetch.models.download_task import (
+    DownloadOptions,
+    DownloadResult,
+    DownloadStatus,
+)
 from pygeofetch.models.satellite_data import (
     DataFormat,
     ProviderCapabilities,
@@ -34,9 +38,7 @@ class OpentopographyProvider(AbstractBaseProvider):
     PROVIDER_ID = "opentopography"
     DISPLAY_NAME = "OpenTopography"
     REQUIRES_AUTH = True
-    DESCRIPTION = (
-        "Global DEM and LiDAR data: SRTM, Copernicus DEM, ALOS World 3D, NASADEM. API key required."
-    )
+    DESCRIPTION = "Global DEM and LiDAR data: SRTM, Copernicus DEM, ALOS World 3D, NASADEM. API key required."
     DATA_TYPES = ["DEM", "LiDAR", "SRTM", "Copernicus DEM"]
     SATELLITES = ["SRTM", "Copernicus", "ALOS", "ICESat"]
     BASE_URL = "https://portal.opentopography.org/API"
@@ -99,7 +101,10 @@ class OpentopographyProvider(AbstractBaseProvider):
                 cloud_cover=None,
                 assets={
                     "dem": SatelliteAsset(
-                        key="dem", href=asset_url, roles=["data"], media_type="image/tiff"
+                        key="dem",
+                        href=asset_url,
+                        roles=["data"],
+                        media_type="image/tiff",
                     )
                 },
                 properties={"dem_type": dem_type, "product": dem_key},
@@ -135,7 +140,9 @@ class OpentopographyProvider(AbstractBaseProvider):
                     self._handle_http_error(resp)
                     with open(out_file, "wb") as f:
                         f.writelines(
-                            resp.iter_bytes(chunk_size=int(options.chunk_size_mb * 1024 * 1024))
+                            resp.iter_bytes(
+                                chunk_size=int(options.chunk_size_mb * 1024 * 1024)
+                            )
                         )
                 output_paths.append(out_file)
                 total_bytes += out_file.stat().st_size
@@ -181,5 +188,7 @@ class OpentopographyProvider(AbstractBaseProvider):
     def get_quota_info(self) -> QuotaInfo:
         return QuotaInfo(
             provider=self.PROVIDER_ID,
-            extra_info={"note": "Free tier: 10 requests/day. Register for higher limits."},
+            extra_info={
+                "note": "Free tier: 10 requests/day. Register for higher limits."
+            },
         )

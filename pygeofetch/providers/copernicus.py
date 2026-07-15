@@ -44,7 +44,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from pygeofetch.models.download_task import DownloadOptions, DownloadResult, DownloadStatus
+from pygeofetch.models.download_task import (
+    DownloadOptions,
+    DownloadResult,
+    DownloadStatus,
+)
 from pygeofetch.models.satellite_data import (
     DataFormat,
     ProcessingLevel,
@@ -85,9 +89,7 @@ class CopernicusProvider(AbstractBaseProvider):
     )
     DATA_TYPES = ["Sentinel-1", "Sentinel-2", "Sentinel-3", "Sentinel-5P", "Sentinel-6"]
     BASE_URL = "https://catalogue.dataspace.copernicus.eu/odata/v1"
-    AUTH_URL = (
-        "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
-    )
+    AUTH_URL = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
     S3_ENDPOINT = "https://eodata.dataspace.copernicus.eu"
 
     # Map user-friendly satellite names to CDSE collection names
@@ -158,7 +160,8 @@ class CopernicusProvider(AbstractBaseProvider):
                 provider=self.PROVIDER_ID,
                 access_token=token_data["access_token"],
                 refresh_token=token_data.get("refresh_token"),
-                expires_at=datetime.utcnow() + timedelta(seconds=token_data.get("expires_in", 600)),
+                expires_at=datetime.utcnow()
+                + timedelta(seconds=token_data.get("expires_in", 600)),
                 session_data={"username": credentials.username},
             )
             self._session = session
@@ -234,7 +237,9 @@ class CopernicusProvider(AbstractBaseProvider):
                 if len(results) >= query.max_results:
                     break
             except Exception as exc:
-                self._logger.warning(f"Search failed for collection {collection!r}: {exc}")
+                self._logger.warning(
+                    f"Search failed for collection {collection!r}: {exc}"
+                )
 
         return results[: query.max_results]
 
@@ -349,7 +354,9 @@ class CopernicusProvider(AbstractBaseProvider):
 
         return " and ".join(filters)
 
-    def _search_collection(self, collection: str, query: SearchQuery) -> list[SatelliteData]:
+    def _search_collection(
+        self, collection: str, query: SearchQuery
+    ) -> list[SatelliteData]:
         """Perform OData search for a specific collection."""
         import httpx
 
@@ -374,7 +381,9 @@ class CopernicusProvider(AbstractBaseProvider):
         """Convert a Copernicus OData product dict to SatelliteData."""
         product_id = product.get("Id", "")
         name = product.get("Name", "")
-        collection = product.get("S3Path", "").split("/")[2] if product.get("S3Path") else ""
+        collection = (
+            product.get("S3Path", "").split("/")[2] if product.get("S3Path") else ""
+        )
 
         # Parse footprint
         bbox = None
@@ -382,7 +391,10 @@ class CopernicusProvider(AbstractBaseProvider):
         if "POLYGON" in footprint:
             try:
                 coords_str = footprint.split("((")[1].split("))")[0]
-                coords = [(float(p.split()[0]), float(p.split()[1])) for p in coords_str.split(",")]
+                coords = [
+                    (float(p.split()[0]), float(p.split()[1]))
+                    for p in coords_str.split(",")
+                ]
                 lons = [c[0] for c in coords]
                 lats = [c[1] for c in coords]
                 bbox = (min(lons), min(lats), max(lons), max(lats))
@@ -399,7 +411,9 @@ class CopernicusProvider(AbstractBaseProvider):
                 pass
 
         # Extract attributes
-        attributes = {a.get("Name"): a.get("Value") for a in (product.get("Attributes") or [])}
+        attributes = {
+            a.get("Name"): a.get("Value") for a in (product.get("Attributes") or [])
+        }
         cloud_cover = attributes.get("cloudCover")
         if cloud_cover is not None:
             try:
@@ -454,7 +468,9 @@ class CopernicusProvider(AbstractBaseProvider):
         except (ValueError, TypeError):
             abs_orbit = None
         try:
-            incidence_angle = float(incidence_angle) if incidence_angle is not None else None
+            incidence_angle = (
+                float(incidence_angle) if incidence_angle is not None else None
+            )
         except (ValueError, TypeError):
             incidence_angle = None
 
@@ -566,7 +582,9 @@ class CopernicusProvider(AbstractBaseProvider):
                 self._handle_http_error(resp)
                 with open(output_file, "wb") as f:
                     f.writelines(
-                        resp.iter_bytes(chunk_size=int(options.chunk_size_mb * 1024 * 1024))
+                        resp.iter_bytes(
+                            chunk_size=int(options.chunk_size_mb * 1024 * 1024)
+                        )
                     )
 
             duration = time.time() - start_time

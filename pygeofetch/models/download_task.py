@@ -73,9 +73,9 @@ class DownloadOptions(BaseModel):
     checksum_algorithm: ChecksumAlgorithm = ChecksumAlgorithm.SHA256
     on_failure: str = "skip"
     max_file_size_gb: Optional[float] = None
-    chunk_size_mb: float = 16.0          # download chunk size in MB
-    bandwidth_limit_mbps: Optional[float] = None   # speed cap (None = unlimited)
-    priority: int = 0                    # higher = higher priority
+    chunk_size_mb: float = 16.0  # download chunk size in MB
+    bandwidth_limit_mbps: Optional[float] = None  # speed cap (None = unlimited)
+    priority: int = 0  # higher = higher priority
     notify_webhook: Optional[str] = None
     notify_email: Optional[str] = None
     bands: Optional[List[str]] = None
@@ -97,7 +97,7 @@ class DownloadResult(BaseModel):
     bytes_downloaded: int = 0
     duration_seconds: float = 0.0
     error: Optional[str] = None
-    error_type: Optional[str] = None     # e.g. "network", "auth", "checksum"
+    error_type: Optional[str] = None  # e.g. "network", "auth", "checksum"
     retries_used: int = 0
     checksum_verified: bool = False
     post_process_completed: List[str] = Field(default_factory=list)

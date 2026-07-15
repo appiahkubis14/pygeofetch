@@ -144,7 +144,9 @@ class PipelineRunner:
         Returns:
             Dict with execution summary including step results and timing.
         """
-        logger.info(f"Starting pipeline: {pipeline.name!r} ({len(pipeline.steps)} steps)")
+        logger.info(
+            f"Starting pipeline: {pipeline.name!r} ({len(pipeline.steps)} steps)"
+        )
         start_time = datetime.utcnow()
         step_results: list[dict[str, Any]] = []
         context: dict[str, Any] = {}  # shared state passed between steps
@@ -153,11 +155,15 @@ class PipelineRunner:
             logger.info(f"  Step {i + 1}/{len(pipeline.steps)}: {step.step_type}")
             try:
                 result = self._run_step(step, context)
-                step_results.append({"step": step.step_type, "status": "ok", "result": result})
+                step_results.append(
+                    {"step": step.step_type, "status": "ok", "result": result}
+                )
                 context[step.step_type] = result
             except Exception as exc:
                 logger.error(f"  Step {step.step_type!r} failed: {exc}")
-                step_results.append({"step": step.step_type, "status": "error", "error": str(exc)})
+                step_results.append(
+                    {"step": step.step_type, "status": "error", "error": str(exc)}
+                )
                 break  # halt pipeline on step failure
 
         duration = (datetime.utcnow() - start_time).total_seconds()
@@ -257,7 +263,9 @@ class PipelineRunner:
     def _step_process(self, config: dict[str, Any], context: dict[str, Any]) -> Any:
         """Placeholder for processing actions (atmospheric correction, NDVI, etc.)."""
         actions = config if isinstance(config, list) else config.get("actions", [])
-        logger.info(f"    process: {len(actions)} actions (stub — integrate custom processors)")
+        logger.info(
+            f"    process: {len(actions)} actions (stub — integrate custom processors)"
+        )
         return {"actions": actions, "status": "stub"}
 
     def _step_export(self, config: dict[str, Any], context: dict[str, Any]) -> Any:
@@ -414,7 +422,9 @@ class PipelineScheduler:
         for pipeline in self._pipelines.values():
             if pipeline.schedule:
                 delay = self._next_run_delay(pipeline.schedule)
-                self._scheduler.enter(delay, 1, self._run_pipeline_and_reschedule, (pipeline,))
+                self._scheduler.enter(
+                    delay, 1, self._run_pipeline_and_reschedule, (pipeline,)
+                )
                 logger.info(
                     f"Scheduled {pipeline.name!r} to run in {delay:.0f}s "
                     f"(cron: {pipeline.schedule!r})"
@@ -431,7 +441,9 @@ class PipelineScheduler:
         finally:
             if self._running and pipeline.schedule:
                 delay = self._next_run_delay(pipeline.schedule)
-                self._scheduler.enter(delay, 1, self._run_pipeline_and_reschedule, (pipeline,))
+                self._scheduler.enter(
+                    delay, 1, self._run_pipeline_and_reschedule, (pipeline,)
+                )
 
     def _run_loop(self) -> None:
         """Blocking scheduler event loop."""
@@ -465,10 +477,14 @@ class PipelineScheduler:
             return max(delay, 1.0)
         except ImportError:
             # croniter not installed → fall back to a 1-hour default
-            logger.debug("croniter not installed; defaulting to 3600 s schedule interval")
+            logger.debug(
+                "croniter not installed; defaulting to 3600 s schedule interval"
+            )
             return 3600.0
         except Exception as exc:
-            logger.warning(f"Could not parse cron {cron_expr!r}: {exc}; defaulting to 3600 s")
+            logger.warning(
+                f"Could not parse cron {cron_expr!r}: {exc}; defaulting to 3600 s"
+            )
             return 3600.0
 
 

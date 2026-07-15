@@ -96,7 +96,9 @@ class CredentialStore:
             keyring.set_password(self.SERVICE_NAME, provider, json.dumps(credentials))
             logger.debug(f"Credentials for {provider!r} saved to system keyring")
         except ImportError:
-            logger.warning("keyring package not available; falling back to file storage")
+            logger.warning(
+                "keyring package not available; falling back to file storage"
+            )
             self._save_file(provider, credentials)
         except Exception as exc:
             logger.warning(f"Keyring save failed: {exc}; falling back to file storage")
@@ -156,7 +158,13 @@ class CredentialStore:
                 creds = {k: v for k, v in creds.items() if k != "__obfuscated"}
                 decoded = {}
                 for k, v in creds.items():
-                    if k in ("password", "api_key", "token", "secret_key", "client_secret"):
+                    if k in (
+                        "password",
+                        "api_key",
+                        "token",
+                        "secret_key",
+                        "client_secret",
+                    ):
                         try:
                             decoded[k] = base64.b64decode(v.encode()).decode()
                         except Exception:
@@ -317,7 +325,9 @@ class AuthManager:
                       Only non-None values are stored.
         """
         # Filter out None values and the redundant "provider" key
-        clean_creds = {k: v for k, v in creds.items() if k != "provider" and v is not None}
+        clean_creds = {
+            k: v for k, v in creds.items() if k != "provider" and v is not None
+        }
         if not clean_creds:
             logger.warning(f"No credentials provided for {provider!r} — skipping")
             return
@@ -445,7 +455,9 @@ class AuthManager:
             logger.info(f"Credentials removed for {provider!r}")
         return removed
 
-    def export_credentials(self, providers: builtins.list[str] | None = None) -> dict[str, Any]:
+    def export_credentials(
+        self, providers: builtins.list[str] | None = None
+    ) -> dict[str, Any]:
         """
         Export credentials for backup (passwords are obfuscated).
 

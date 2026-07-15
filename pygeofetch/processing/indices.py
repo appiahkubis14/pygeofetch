@@ -139,7 +139,9 @@ class SpectralIndices:
         nir_d, _, _ = self._read(nir, ref_shape=red_d.shape)
         denom = nir_d + red_d + L
         with np.errstate(divide="ignore", invalid="ignore"):
-            result = np.where(denom != 0, (nir_d - red_d) / denom * (1 + L), float("nan"))
+            result = np.where(
+                denom != 0, (nir_d - red_d) / denom * (1 + L), float("nan")
+            )
         out_path = _resolve_output(Path(red), output, "savi")
         self._save(result, profile, out_path)
         return ProcessingResult(
@@ -188,7 +190,10 @@ class SpectralIndices:
         out_path = _resolve_output(Path(green), output, "mndwi")
         self._save(result, profile, out_path)
         return ProcessingResult(
-            success=True, operation="mndwi", output_path=out_path, input_path=Path(green)
+            success=True,
+            operation="mndwi",
+            output_path=out_path,
+            input_path=Path(green),
         )
 
     # ── E6: NDBI ─────────────────────────────────────────────────────────
@@ -307,7 +312,10 @@ class SpectralIndices:
         out_path = _resolve_output(Path(pre_nir), output, "dnbr")
         self._save(result, profile, out_path)
         return ProcessingResult(
-            success=True, operation="dnbr", output_path=out_path, input_path=Path(pre_nir)
+            success=True,
+            operation="dnbr",
+            output_path=out_path,
+            input_path=Path(pre_nir),
         )
 
     # ── E11: TCT — Tasseled Cap Transformation ────────────────────────────
@@ -370,7 +378,10 @@ class SpectralIndices:
             success=True,
             operation="tct",
             output_path=out_path,
-            metadata={"sensor": sensor, "bands": ["Brightness", "Greenness", "Wetness"]},
+            metadata={
+                "sensor": sensor,
+                "bands": ["Brightness", "Greenness", "Wetness"],
+            },
         )
 
     # ── E12: PCA ─────────────────────────────────────────────────────────
@@ -486,7 +497,9 @@ class SpectralIndices:
         q = np.zeros_like(data, dtype=np.int32)
         if valid.any():
             d_min, d_max = data[valid].min(), data[valid].max()
-            q[valid] = ((data[valid] - d_min) / (d_max - d_min + 1e-10) * 63).astype(np.int32)
+            q[valid] = ((data[valid] - d_min) / (d_max - d_min + 1e-10) * 63).astype(
+                np.int32
+            )
 
         n_feats = len(features)
         h, w = data.shape
@@ -501,39 +514,47 @@ class SpectralIndices:
                 # Var of difference: E[(i-j)²] ≈ var of pixel - pixel+shift
                 shifted = np.roll(qf, 1, axis=1)
                 diff = (qf - shifted) ** 2
-                out_maps[fi] = ndimage.uniform_filter(diff.astype(np.float64), size=window).astype(
-                    np.float32
-                )
+                out_maps[fi] = ndimage.uniform_filter(
+                    diff.astype(np.float64), size=window
+                ).astype(np.float32)
 
             elif feat == "dissimilarity":
                 shifted = np.roll(qf, 1, axis=1)
                 diff = np.abs(qf - shifted)
-                out_maps[fi] = ndimage.uniform_filter(diff.astype(np.float64), size=window).astype(
-                    np.float32
-                )
+                out_maps[fi] = ndimage.uniform_filter(
+                    diff.astype(np.float64), size=window
+                ).astype(np.float32)
 
             elif feat == "homogeneity":
                 shifted = np.roll(qf, 1, axis=1)
                 diff_sq = (qf - shifted) ** 2
                 homo = 1.0 / (1.0 + diff_sq)
-                out_maps[fi] = ndimage.uniform_filter(homo.astype(np.float64), size=window).astype(
-                    np.float32
-                )
+                out_maps[fi] = ndimage.uniform_filter(
+                    homo.astype(np.float64), size=window
+                ).astype(np.float32)
 
             elif feat in ("energy", "ASM"):
                 # Local ASM ≈ 1/std² of local patch
                 local_mean = ndimage.uniform_filter(qf.astype(np.float64), size=window)
-                local_mean2 = ndimage.uniform_filter((qf**2).astype(np.float64), size=window)
+                local_mean2 = ndimage.uniform_filter(
+                    (qf**2).astype(np.float64), size=window
+                )
                 local_var = np.maximum(local_mean2 - local_mean**2, 0)
                 asm = 1.0 / (1.0 + local_var)
-                out_maps[fi] = (np.sqrt(asm) if feat == "energy" else asm).astype(np.float32)
+                out_maps[fi] = (np.sqrt(asm) if feat == "energy" else asm).astype(
+                    np.float32
+                )
 
             elif feat == "correlation":
                 local_mean = ndimage.uniform_filter(qf.astype(np.float64), size=window)
-                local_mean2 = ndimage.uniform_filter((qf**2).astype(np.float64), size=window)
+                local_mean2 = ndimage.uniform_filter(
+                    (qf**2).astype(np.float64), size=window
+                )
                 local_var = np.maximum(local_mean2 - local_mean**2, 1e-10)
                 shifted = np.roll(qf, 1, axis=1)
-                cross_mean = ndimage.uniform_filter((qf * shifted).astype(np.float64), size=window)
+                cross_mean = ndimage.uniform_filter(
+                    (qf * shifted).astype(np.float64), size=window
+                )
                 cov_xy = cross_mean - local_mean * local_mean
                 corr = np.clip(cov_xy / local_var, -1, 1)
                 out_maps[fi] = corr.astype(np.float32)

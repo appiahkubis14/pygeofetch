@@ -100,15 +100,21 @@ class BatchProcessor:
         logger.info(f"Batch processing {len(inputs)} files with {parallel} workers")
 
         with ThreadPoolExecutor(max_workers=parallel) as executor:
-            futures = {executor.submit(process_one, i, inp): i for i, inp in enumerate(inputs)}
+            futures = {
+                executor.submit(process_one, i, inp): i for i, inp in enumerate(inputs)
+            }
             for future in as_completed(futures):
                 idx = futures[future]
                 try:
                     results[idx] = future.result()
                     results[idx]
-                    logger.info(f"  ✓ [{idx + 1}/{len(inputs)}] {Path(inputs[idx]).name}")
+                    logger.info(
+                        f"  ✓ [{idx + 1}/{len(inputs)}] {Path(inputs[idx]).name}"
+                    )
                 except Exception as exc:
-                    logger.error(f"  ✗ [{idx + 1}/{len(inputs)}] {Path(inputs[idx]).name}: {exc}")
+                    logger.error(
+                        f"  ✗ [{idx + 1}/{len(inputs)}] {Path(inputs[idx]).name}: {exc}"
+                    )
                     if on_error == "abort":
                         raise
                     results[idx] = ProcessingResult(
@@ -154,7 +160,8 @@ class BatchProcessor:
 
         with ThreadPoolExecutor(max_workers=parallel) as executor:
             futures = {
-                executor.submit(func, inp, out_dir, **kwargs): i for i, inp in enumerate(inputs)
+                executor.submit(func, inp, out_dir, **kwargs): i
+                for i, inp in enumerate(inputs)
             }
             for future in as_completed(futures):
                 try:

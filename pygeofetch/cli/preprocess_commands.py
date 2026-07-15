@@ -51,7 +51,11 @@ def clip_cmd(input, bbox, geometry, output, all_touched):
         parts = [float(x) for x in bbox.split(",")]
         bbox_tuple = tuple(parts)
     r = e.preprocess.clip(
-        input, bbox=bbox_tuple, geometry=geometry, output=output, all_touched=all_touched
+        input,
+        bbox=bbox_tuple,
+        geometry=geometry,
+        output=output,
+        all_touched=all_touched,
     )
     _print_result(r, "clip")
 
@@ -79,10 +83,18 @@ def reproject_cmd(input, crs, resampling, resolution, output):
 @preprocess.command("resample")
 @click.argument("input", type=click.Path(exists=True))
 @click.option(
-    "--resolution", "-r", default=None, type=float, help="Target resolution in CRS units."
+    "--resolution",
+    "-r",
+    default=None,
+    type=float,
+    help="Target resolution in CRS units.",
 )
 @click.option(
-    "--scale", "-s", default=None, type=float, help="Scale factor (0.5=half, 2.0=double)."
+    "--scale",
+    "-s",
+    default=None,
+    type=float,
+    help="Scale factor (0.5=half, 2.0=double).",
 )
 @click.option(
     "--method",
@@ -128,7 +140,10 @@ def cloud_mask_cmd(input, method, scl_band, output):
 @click.argument("input", type=click.Path(exists=True))
 @click.argument("time_series", nargs=-1, type=click.Path(exists=True))
 @click.option(
-    "--method", "-m", default="interpolate", type=click.Choice(["interpolate", "nearest"])
+    "--method",
+    "-m",
+    default="interpolate",
+    type=click.Choice(["interpolate", "nearest"]),
 )
 @click.option("--output", "-o", default=None)
 def cloud_fill_cmd(input, time_series, method, output):
@@ -162,7 +177,10 @@ def atmos_cmd(input, method, output):
 @click.argument("input", type=click.Path(exists=True))
 @click.argument("dem", type=click.Path(exists=True))
 @click.option(
-    "--method", "-m", default="cosine", type=click.Choice(["cosine", "minnaert", "c_correction"])
+    "--method",
+    "-m",
+    default="cosine",
+    type=click.Choice(["cosine", "minnaert", "c_correction"]),
 )
 @click.option("--output", "-o", default=None)
 def topo_cmd(input, dem, method, output):
@@ -191,7 +209,12 @@ def pansharpen_cmd(pan, ms, method, output):
 
 @preprocess.command("mosaic")
 @click.argument("inputs", nargs=-1, type=click.Path(exists=True))
-@click.option("--method", "-m", default="first", type=click.Choice(["first", "last", "min", "max"]))
+@click.option(
+    "--method",
+    "-m",
+    default="first",
+    type=click.Choice(["first", "last", "min", "max"]),
+)
 @click.option("--output", "-o", default=None)
 def mosaic_cmd(inputs, method, output):
     """Merge multiple rasters into a seamless mosaic."""
@@ -240,4 +263,6 @@ def tile_cmd(input, tile_size, overlap, output_dir, min_coverage):
     )
     _print_result(r, "tile")
     if r.success:
-        console.print(f"  Created {r.metadata.get('tile_count', '?')} tiles in {r.output_path}")
+        console.print(
+            f"  Created {r.metadata.get('tile_count', '?')} tiles in {r.output_path}"
+        )

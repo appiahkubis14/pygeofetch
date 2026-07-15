@@ -75,7 +75,9 @@ class SARProcessor:
 
         data, profile, nodata = self._read(inp)
 
-        valid = np.isfinite(data) & (True if nodata is None else (data != float(nodata)))
+        valid = np.isfinite(data) & (
+            True if nodata is None else (data != float(nodata))
+        )
         work = np.where(valid, data, 0.0).astype(np.float64)
 
         if filter == "boxcar":
@@ -98,7 +100,9 @@ class SARProcessor:
                 cv_local <= cv_thresh,
                 0.0,
                 np.where(
-                    cv_local > 3 * cv_thresh, 1.0, (cv_local - cv_thresh) / (2 * cv_thresh + 1e-10)
+                    cv_local > 3 * cv_thresh,
+                    1.0,
+                    (cv_local - cv_thresh) / (2 * cv_thresh + 1e-10),
                 ),
             )
             result = (1 - weight) * mean + weight * work
@@ -196,8 +200,12 @@ class SARProcessor:
         if nodata is not None:
             calibrated = np.where(data == float(nodata), nd_fill, calibrated)
 
-        _safe_write_band(calibrated.astype(np.float32), profile, out_path, nodata=nd_fill)
-        logger.info("SAR calibration (%s, dB=%s) → %s", output_type, in_db, out_path.name)
+        _safe_write_band(
+            calibrated.astype(np.float32), profile, out_path, nodata=nd_fill
+        )
+        logger.info(
+            "SAR calibration (%s, dB=%s) → %s", output_type, in_db, out_path.name
+        )
         return ProcessingResult(
             success=True,
             operation=f"calibrate:{output_type}",
@@ -273,7 +281,10 @@ class SARProcessor:
             operation="flood_map",
             input_path=inp,
             output_path=out_path,
-            metadata={"threshold_db": threshold, "water_pct": round(float(water_pct), 2)},
+            metadata={
+                "threshold_db": threshold,
+                "water_pct": round(float(water_pct), 2),
+            },
         )
 
     # ── Coherence ────────────────────────────────────────────────────────

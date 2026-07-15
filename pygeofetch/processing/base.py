@@ -197,7 +197,9 @@ def _safe_read_band(
 
     with rasterio.open(p) as src:
         if band > src.count:
-            msg = f"Band {band} requested but file has only {src.count} band(s): {p.name}"
+            msg = (
+                f"Band {band} requested but file has only {src.count} band(s): {p.name}"
+            )
             raise ValueError(msg)
 
         nodata = src.nodata

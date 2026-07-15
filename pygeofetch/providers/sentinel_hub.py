@@ -19,7 +19,11 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from pygeofetch.models.download_task import DownloadOptions, DownloadResult, DownloadStatus
+from pygeofetch.models.download_task import (
+    DownloadOptions,
+    DownloadResult,
+    DownloadStatus,
+)
 from pygeofetch.models.satellite_data import (
     DataFormat,
     ProviderCapabilities,
@@ -27,7 +31,11 @@ from pygeofetch.models.satellite_data import (
     SatelliteData,
 )
 from pygeofetch.models.user_auth import AuthSession, Credentials
-from pygeofetch.providers.base import AbstractBaseProvider, AuthenticationError, SearchError
+from pygeofetch.providers.base import (
+    AbstractBaseProvider,
+    AuthenticationError,
+    SearchError,
+)
 
 if TYPE_CHECKING:
     from pygeofetch.models.search_query import SearchQuery
@@ -126,7 +134,9 @@ class SentinelHubProvider(AbstractBaseProvider):
         }
         if query.bbox:
             bb = query.bbox
-            payload["spatial"] = {"bbox": [bb.min_lon, bb.min_lat, bb.max_lon, bb.max_lat]}
+            payload["spatial"] = {
+                "bbox": [bb.min_lon, bb.min_lat, bb.max_lon, bb.max_lat]
+            }
         if query.start_date or query.end_date:
             payload["timeRange"] = {
                 "from": f"{query.start_date}T00:00:00Z"
@@ -140,7 +150,7 @@ class SentinelHubProvider(AbstractBaseProvider):
             payload["filter"] = {"maxCloudCoverage": query.cloud_cover_max}
         try:
             resp = httpx.post(
-                f"{self.BASE_URL}/api/v1/catalog/1.1.0/search",
+                f"{self.BASE_URL}/api/v1/catalog/1.0.0/search",
                 json=payload,
                 headers={
                     "Authorization": f"Bearer {self._session.access_token if self._session else ''}"  # noqa: E501
@@ -177,7 +187,9 @@ class SentinelHubProvider(AbstractBaseProvider):
         for key, asset in (data.data_assets or data.assets).items():
             if not asset.href or not asset.href.startswith("http"):
                 continue
-            out_file = destination / (asset.href.split("/")[-1] or f"{data.id}_{key}.tif")
+            out_file = destination / (
+                asset.href.split("/")[-1] or f"{data.id}_{key}.tif"
+            )
             try:
                 with httpx.stream(
                     "GET",
@@ -190,7 +202,9 @@ class SentinelHubProvider(AbstractBaseProvider):
                     self._handle_http_error(resp)
                     with open(out_file, "wb") as f:
                         f.writelines(
-                            resp.iter_bytes(chunk_size=int(options.chunk_size_mb * 1024 * 1024))
+                            resp.iter_bytes(
+                                chunk_size=int(options.chunk_size_mb * 1024 * 1024)
+                            )
                         )
                 output_paths.append(out_file)
                 total_bytes += out_file.stat().st_size

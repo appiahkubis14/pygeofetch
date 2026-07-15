@@ -33,12 +33,22 @@ def download() -> None:
     type=click.Path(exists=True),
     help="GeoJSON results file from `search run --output`.",
 )
-@click.option("--scene-ids", default=None, help="Comma-separated scene IDs to download.")
 @click.option(
-    "--output", "-o", default="./pygeofetch_data", show_default=True, help="Output directory."
+    "--scene-ids", default=None, help="Comma-separated scene IDs to download."
 )
-@click.option("--parallel", "-p", default=2, show_default=True, help="Parallel download workers.")
-@click.option("--retry", "-r", default=3, show_default=True, help="Retry attempts per file.")
+@click.option(
+    "--output",
+    "-o",
+    default="./pygeofetch_data",
+    show_default=True,
+    help="Output directory.",
+)
+@click.option(
+    "--parallel", "-p", default=2, show_default=True, help="Parallel download workers."
+)
+@click.option(
+    "--retry", "-r", default=3, show_default=True, help="Retry attempts per file."
+)
 @click.option(
     "--retry-delay",
     default=5.0,
@@ -52,7 +62,10 @@ def download() -> None:
     help="SHA256 checksum verification after download.",
 )
 @click.option(
-    "--resume", is_flag=True, default=True, help="Resume interrupted downloads (default on)."
+    "--resume",
+    is_flag=True,
+    default=True,
+    help="Resume interrupted downloads (default on).",
 )
 @click.option(
     "--bandwidth-limit",
@@ -86,9 +99,15 @@ def download() -> None:
     help="How to handle individual file failures.",
 )
 @click.option(
-    "--max-items", "-n", default=None, type=int, help="Limit number of items to download."
+    "--max-items",
+    "-n",
+    default=None,
+    type=int,
+    help="Limit number of items to download.",
 )
-@click.option("--overwrite", is_flag=True, default=False, help="Overwrite existing files.")
+@click.option(
+    "--overwrite", is_flag=True, default=False, help="Overwrite existing files."
+)
 @click.option(
     "--bands",
     default=None,
@@ -240,7 +259,11 @@ def download_run(
 
         def on_item_done(completed: int, total: int, result) -> None:
             status = "✓" if result.success else "✗"
-            mb = result.bytes_downloaded / (1024 * 1024) if result.bytes_downloaded else 0
+            mb = (
+                result.bytes_downloaded / (1024 * 1024)
+                if result.bytes_downloaded
+                else 0
+            )
             label = (
                 f"{status} {result.data_id[:28]}  {mb:.0f} MB  ({completed}/{total})"
                 if result.success
@@ -249,12 +272,16 @@ def download_run(
             progress.update(task, advance=1, description=label)
 
         # Use sb.download() with the already-sliced data_list (respects --max-items)
-        results = sb.download(data_list, Path(output), options, item_done_callback=on_item_done)
+        results = sb.download(
+            data_list, Path(output), options, item_done_callback=on_item_done
+        )
 
     succeeded = [r for r in results if r.success]
     failed = [r for r in results if not r.success]
     total_mb = sum(
-        r.bytes_downloaded / (1024 * 1024) for r in results if r.success and r.bytes_downloaded
+        r.bytes_downloaded / (1024 * 1024)
+        for r in results
+        if r.success and r.bytes_downloaded
     )
 
     # Fire notifications
@@ -299,8 +326,15 @@ def download_status_cmd(output_dir: str, as_json: bool) -> None:
     total = sum(f.stat().st_size for f in files)
 
     if as_json:
-        data = [{"file": str(f.relative_to(dest)), "size_bytes": f.stat().st_size} for f in files]
-        click.echo(json.dumps({"files": data, "total_bytes": total, "count": len(files)}, indent=2))
+        data = [
+            {"file": str(f.relative_to(dest)), "size_bytes": f.stat().st_size}
+            for f in files
+        ]
+        click.echo(
+            json.dumps(
+                {"files": data, "total_bytes": total, "count": len(files)}, indent=2
+            )
+        )
         return
 
     from rich.table import Table
@@ -318,7 +352,10 @@ def download_status_cmd(output_dir: str, as_json: bool) -> None:
 @download.command(name="history")
 @click.option("--limit", default=20, show_default=True)
 @click.option(
-    "--status", "filter_status", default=None, type=click.Choice(["success", "failed", "active"])
+    "--status",
+    "filter_status",
+    default=None,
+    type=click.Choice(["success", "failed", "active"]),
 )
 @click.option("--json", "as_json", is_flag=True)
 def download_history(limit: int, filter_status: str, as_json: bool) -> None:

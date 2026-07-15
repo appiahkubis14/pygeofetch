@@ -449,36 +449,6 @@ COMPLETION
   pygeofetch --install-completion bash|zsh|fish
 ```
 
----
-
-<!-- ## 🗂️ Project Structure
-
-```
-pygeofetch/
-├── pygeofetch/
-│   ├── core/                engine, authenticator, searcher, downloader, scheduler, cache
-│   ├── cli/                 11 CLI command modules
-│   ├── processing/          ← geospatial processing engine
-│   │   ├── preprocessor.py  atmospheric, cloud, geometric, resampling, compositing
-│   │   ├── indices.py       17 spectral indices + transformations
-│   │   ├── postprocessor.py vectorize, smooth, zonal stats, COG, compress
-│   │   ├── sar.py           despeckle, calibrate, flood map, coherence
-│   │   ├── pipeline.py      chainable builder + YAML loader + 6 templates
-│   │   └── batch.py         parallel batch processing
-│   ├── models/              Pydantic models (search, download, auth, satellite)
-│   ├── providers/           22 provider implementations
-│   ├── utils/               logging, retry, geo, file, validators
-│   └── config/              settings, defaults.yaml
-├── notebooks/               9 Jupyter notebooks (01–09)
-├── tests/                   60 unit + integration tests
-├── docs/assets/
-├── pyproject.toml
-├── Dockerfile · Makefile · .gitignore
-└── .github/workflows/tests.yml
-```
-
---- -->
-
 ## 📚 Notebooks
 
 | Notebook | Topics |
@@ -527,4 +497,4 @@ pytest tests/unit/ -v
 
 pygeofetch is free and open source software, licensed under the [MIT License](LICENSE).
 
-© 2025 pygeofetch Contributors. Part of the **PyGeoVision** platform — [pygeofetch](https://github.com/appiahkubis14/pygeofetch) (data + processing) + [GeoAI](https://opengeoai.org) (AI) = complete Earth observation pipeline.
+© 2026 pygeofetch Contributors. Part of the **PyGeoVision** platform — [pygeofetch](https://github.com/appiahkubis14/pygeofetch) (data + processing) + [GeoAI](https://opengeoai.org) (AI) = complete Earth observation pipeline.

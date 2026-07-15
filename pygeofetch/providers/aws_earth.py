@@ -33,7 +33,11 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from pygeofetch.models.download_task import DownloadOptions, DownloadResult, DownloadStatus
+from pygeofetch.models.download_task import (
+    DownloadOptions,
+    DownloadResult,
+    DownloadStatus,
+)
 from pygeofetch.models.satellite_data import (
     DataFormat,
     ProviderCapabilities,
@@ -87,9 +91,10 @@ class AWSEarthProvider(AbstractBaseProvider):
 
     def authenticate(self, credentials: Credentials) -> AuthSession:
         """No authentication needed; return empty session."""
-        session = AuthSession(provider=self.PROVIDER_ID,
-                access_token=None,
-            )
+        session = AuthSession(
+            provider=self.PROVIDER_ID,
+            access_token=None,
+        )
         self._session = session
         return session
 
@@ -145,7 +150,9 @@ class AWSEarthProvider(AbstractBaseProvider):
         for sat in query.satellites:
             sat_lower = sat.lower().replace(" ", "").replace("-", "")
             for key, col in self.COLLECTION_MAP.items():
-                if key.replace("-", "") in sat_lower or sat_lower in key.replace("-", ""):
+                if key.replace("-", "") in sat_lower or sat_lower in key.replace(
+                    "-", ""
+                ):
                     collections.add(col)
                     break
             else:
@@ -213,7 +220,9 @@ class AWSEarthProvider(AbstractBaseProvider):
                     self._handle_http_error(resp)
                     with open(output_file, "wb") as f:
                         f.writelines(
-                            resp.iter_bytes(chunk_size=int(options.chunk_size_mb * 1024 * 1024))
+                            resp.iter_bytes(
+                                chunk_size=int(options.chunk_size_mb * 1024 * 1024)
+                            )
                         )
                 output_paths.append(output_file)
                 total_bytes += output_file.stat().st_size

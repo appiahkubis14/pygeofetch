@@ -55,13 +55,17 @@ def sar() -> None:
 def despeckle_cmd(input, filter_name, window, looks, output):
     """SAR speckle filtering (Lee, Enhanced Lee, Frost, Gamma MAP, Boxcar)."""
     e = _engine()
-    r = e.sar.despeckle(input, filter=filter_name, window=window, num_looks=looks, output=output)
+    r = e.sar.despeckle(
+        input, filter=filter_name, window=window, num_looks=looks, output=output
+    )
     _pr(r, f"despeckle ({filter_name}, {window}×{window})")
 
 
 @sar.command("calibrate")
 @click.argument("input", type=click.Path(exists=True))
-@click.option("--output-type", default="sigma0", type=click.Choice(["sigma0", "gamma0", "beta0"]))
+@click.option(
+    "--output-type", default="sigma0", type=click.Choice(["sigma0", "gamma0", "beta0"])
+)
 @click.option("--db/--linear", "in_db", default=True, show_default=True)
 @click.option("--output", "-o", default=None)
 def calibrate_cmd(input, output_type, in_db, output):

@@ -140,7 +140,9 @@ class SatelliteAsset(BaseModel):
             "image/webp",
             "image/gif",
         )
-        if self.media_type and any(self.media_type.startswith(t) for t in NON_RASTER_TYPES):
+        if self.media_type and any(
+            self.media_type.startswith(t) for t in NON_RASTER_TYPES
+        ):
             return False
 
         # Exclude by key name patterns that are never rasters
@@ -159,7 +161,9 @@ class SatelliteAsset(BaseModel):
 
         # If href is a non-raster URL extension, skip
         href_lower = (self.href or "").lower().split("?")[0]
-        if href_lower.endswith((".jpg", ".jpeg", ".png", ".json", ".xml", ".html", ".txt")):
+        if href_lower.endswith(
+            (".jpg", ".jpeg", ".png", ".json", ".xml", ".html", ".txt")
+        ):
             return False
 
         # Accept: has "data" role, or has raster media type, or empty/unknown roles
@@ -178,7 +182,17 @@ class SatelliteAsset(BaseModel):
             return True
 
         # Accept if roles is empty (provider didn't set roles) AND href ends in raster extension
-        raster_exts = (".tif", ".tiff", ".img", ".jp2", ".nc", ".hdf", ".h5", ".zip", ".tar")
+        raster_exts = (
+            ".tif",
+            ".tiff",
+            ".img",
+            ".jp2",
+            ".nc",
+            ".hdf",
+            ".h5",
+            ".zip",
+            ".tar",
+        )
         if href_lower.endswith(raster_exts):
             return True
 
@@ -271,7 +285,9 @@ class SatelliteData(BaseModel):
             msg = f"Longitude values must be between -180 and 180, got {min_lon}, {max_lon}"
             raise ValueError(msg)
         if not (-90 <= min_lat <= 90 and -90 <= max_lat <= 90):
-            msg = f"Latitude values must be between -90 and 90, got {min_lat}, {max_lat}"
+            msg = (
+                f"Latitude values must be between -90 and 90, got {min_lat}, {max_lat}"
+            )
             raise ValueError(msg)
         if min_lon >= max_lon:
             msg = f"min_lon ({min_lon}) must be less than max_lon ({max_lon})"
@@ -314,7 +330,7 @@ class SatelliteData(BaseModel):
         """
         item: dict[str, Any] = {
             "type": "Feature",
-            "stac_version": "1.1.0",
+            "stac_version": "1.0.0",
             "stac_extensions": self.stac_extensions,
             "id": self.id,
             "geometry": self.geometry or self._bbox_to_geometry(),
@@ -417,7 +433,11 @@ class SatelliteData(BaseModel):
         except (TypeError, ValueError):
             incidence = None
 
-        gsd_raw = props.get("gsd") or props.get("resolution") or props.get("spatial_resolution")
+        gsd_raw = (
+            props.get("gsd")
+            or props.get("resolution")
+            or props.get("spatial_resolution")
+        )
         try:
             gsd = float(gsd_raw) if gsd_raw is not None else None
         except (TypeError, ValueError):
@@ -445,7 +465,8 @@ class SatelliteData(BaseModel):
                 or props.get("flightDirection", "")
             ).lower()
             or None,
-            relative_orbit=props.get("sat:relative_orbit") or props.get("relativeOrbitNumber"),
+            relative_orbit=props.get("sat:relative_orbit")
+            or props.get("relativeOrbitNumber"),
             orbit_number=props.get("sat:absolute_orbit") or props.get("orbitNumber"),
             incidence_angle=incidence,
             gsd_m=gsd,

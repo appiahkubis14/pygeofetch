@@ -28,7 +28,11 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from pygeofetch.models.download_task import DownloadOptions, DownloadResult, DownloadStatus
+from pygeofetch.models.download_task import (
+    DownloadOptions,
+    DownloadResult,
+    DownloadStatus,
+)
 from pygeofetch.models.satellite_data import (
     DataFormat,
     ProviderCapabilities,
@@ -62,7 +66,15 @@ class PlanetaryComputerProvider(AbstractBaseProvider):
         "Free STAC catalog from Microsoft with Sentinel-1/2, Landsat 8/9, "
         "MODIS, NAIP, ALOS DEM, and more. SAS-token authenticated downloads."
     )
-    DATA_TYPES = ["Sentinel-1", "Sentinel-2", "Landsat", "MODIS", "NAIP", "DEM", "Weather"]
+    DATA_TYPES = [
+        "Sentinel-1",
+        "Sentinel-2",
+        "Landsat",
+        "MODIS",
+        "NAIP",
+        "DEM",
+        "Weather",
+    ]
     SATELLITES = ["Sentinel-1", "Sentinel-2", "Landsat-8", "Landsat-9"]
     BASE_URL = "https://planetarycomputer.microsoft.com/api/stac/v1"
     SAS_URL = "https://planetarycomputer.microsoft.com/api/sas/v1/token"
@@ -84,9 +96,10 @@ class PlanetaryComputerProvider(AbstractBaseProvider):
 
     def authenticate(self, credentials: Credentials) -> AuthSession:
         """No login required — return empty session."""
-        session = AuthSession(provider=self.PROVIDER_ID,
-                access_token=None,
-            )
+        session = AuthSession(
+            provider=self.PROVIDER_ID,
+            access_token=None,
+        )
         self._session = session
         return session
 
@@ -130,7 +143,9 @@ class PlanetaryComputerProvider(AbstractBaseProvider):
                 self._handle_http_error(resp)
 
             features = resp.json().get("features", [])
-            results = [SatelliteData.from_stac_item(f, self.PROVIDER_ID) for f in features]
+            results = [
+                SatelliteData.from_stac_item(f, self.PROVIDER_ID) for f in features
+            ]
             self._logger.info(f"Planetary Computer: {len(results)} results")
             return results
 
@@ -244,12 +259,17 @@ class PlanetaryComputerProvider(AbstractBaseProvider):
             try:
                 self._logger.info(f"  Fetching asset {key!r} → {out_file.name}")
                 with httpx.stream(
-                    "GET", signed_url, timeout=options.timeout_seconds, follow_redirects=True
+                    "GET",
+                    signed_url,
+                    timeout=options.timeout_seconds,
+                    follow_redirects=True,
                 ) as resp:
                     self._handle_http_error(resp)
                     with open(out_file, "wb") as f:
                         f.writelines(
-                            resp.iter_bytes(chunk_size=int(options.chunk_size_mb * 1024 * 1024))
+                            resp.iter_bytes(
+                                chunk_size=int(options.chunk_size_mb * 1024 * 1024)
+                            )
                         )
                 output_paths.append(out_file)
                 total_bytes += out_file.stat().st_size
@@ -283,7 +303,14 @@ class PlanetaryComputerProvider(AbstractBaseProvider):
             name=self.DISPLAY_NAME,
             description=self.DESCRIPTION,
             auth_type="none",
-            satellites=["Sentinel-1", "Sentinel-2", "Landsat-8", "Landsat-9", "MODIS", "NAIP"],
+            satellites=[
+                "Sentinel-1",
+                "Sentinel-2",
+                "Landsat-8",
+                "Landsat-9",
+                "MODIS",
+                "NAIP",
+            ],
             search=True,
             download=True,
             streaming=True,
@@ -306,7 +333,9 @@ class PlanetaryComputerProvider(AbstractBaseProvider):
     def get_quota_info(self) -> QuotaInfo:
         return QuotaInfo(
             provider=self.PROVIDER_ID,
-            extra_info={"note": "Free, no quota limits. SAS tokens auto-generated per request."},
+            extra_info={
+                "note": "Free, no quota limits. SAS tokens auto-generated per request."
+            },
         )
 
     def list_collections(self) -> list[dict[str, Any]]:

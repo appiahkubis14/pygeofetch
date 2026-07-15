@@ -12,13 +12,13 @@ tags:
   - data pipeline
 
 authors:
-  - name: Kubis Appiah
+  - name: Samuel Appiah Kubi
     orcid: 0000-0000-0000-0000
     affiliation: "1"
 
 affiliations:
   - index: 1
-    name: Independent Researcher
+    name: EOCoreINT, Accra, Ghana
 
 date: 12 July 2026
 
@@ -28,8 +28,8 @@ bibliography: paper.bib
 # Summary
 
 PyGeoFetch is an open-source Python package that provides a unified interface for
-discovering, acquiring, and processing satellite Earth observation data from more than
-22 providers through a single, consistent API. Satellite imagery is increasingly central
+discovering, acquiring, and processing satellite Earth observation data from 22+
+providers through a single, consistent API. Satellite imagery is increasingly central
 to environmental science, climate monitoring, agriculture, disaster response, and urban
 planning. However, accessing this data requires navigating a fragmented landscape of
 provider-specific APIs, authentication schemes, data formats, and naming conventions—a
@@ -46,6 +46,11 @@ cloud masking, 17 spectral indices, SAR calibration, and Cloud Optimized GeoTIFF
 export. PyGeoFetch targets earth scientists, remote sensing practitioners, and
 geospatial engineers who need reliable, reproducible data pipelines without
 reimplementing provider-specific access logic for every project.
+
+PyGeoFetch serves as the data acquisition backbone for PyGeoVision
+[@appiahkubi2026pygeovision], a companion library for geospatial AI inference,
+and is released under the MIT License to maximise reuse across academic and
+operational contexts.
 
 # Statement of Need
 
@@ -64,10 +69,10 @@ frequently restrict their work to a single provider not because it has the best 
 but because they cannot afford the time to learn additional APIs [@baumann2021]. PyGeoFetch
 addresses this by providing: (1) a single `SearchQuery` object and `client.search()` call
 that queries any combination of supported providers simultaneously and returns a uniform
-`SatelliteData` list; (2) the first open library to expose Sentinel-1C and Sentinel-1D
-(the active constellation since May and April 2026 respectively) with SLC product type
-routing; (3) programmatic retrieval of ESA POEORB and RESORB orbit files with local
-caching—a prerequisite for millimetre-precision InSAR deformation mapping; (4) a 41-step
+`SatelliteData` list; (2) the first open-source library to expose Sentinel-1C and
+Sentinel-1D (the active constellation since May and April 2026 respectively) with SLC
+product type routing; (3) programmatic retrieval of ESA POEORB and RESORB orbit files with
+local caching—a prerequisite for millimetre-precision InSAR deformation mapping; (4) a 41-step
 processing pipeline returning consistent `ProcessingResult` objects; and (5) file-type-aware
 download validation preventing silent partial-download failures.
 
@@ -91,7 +96,9 @@ file retrieval, and built-in file validation preventing the silent corruption bu
 that costs significant researcher time when discovered late in a processing chain.
 PyGeoFetch's choice to process data locally rather than in-cloud enables reproducibility
 across funding cycles, HPC batch workflows, custom processing chains, and offline use in
-field environments with limited connectivity.
+field environments with limited connectivity. PyGeoFetch serves as the data acquisition
+backbone for PyGeoVision [@appiahkubi2026pygeovision], providing the foundation for
+end-to-end geospatial AI workflows.
 
 # Software Design
 
@@ -144,6 +151,9 @@ an async-first approach. Satellite scenes are typically 500 MB to 8 GB: at these
 network bandwidth dominates latency, and `ThreadPoolExecutor` achieves equivalent
 throughput with a simpler programming model suitable for research contexts.
 
+PyGeoFetch is released under the MIT License, enabling maximum reuse across academic,
+commercial, and operational contexts.
+
 # Research Impact Statement
 
 PyGeoFetch directly enables research workflows that were previously impractical without
@@ -190,3 +200,4 @@ pydantic [@pydantic], GDAL [@gdal], and pystac [@pystac], whose libraries underp
 PyGeoFetch implementation.
 
 # References
+

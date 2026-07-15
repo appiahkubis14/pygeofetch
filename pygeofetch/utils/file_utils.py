@@ -104,7 +104,11 @@ def safe_extract(
             return False
 
     suffix = archive_path.suffix.lower()
-    if archive_path.name.lower().endswith(".tar.gz") or suffix in (".gz", ".bz2", ".xz"):
+    if archive_path.name.lower().endswith(".tar.gz") or suffix in (
+        ".gz",
+        ".bz2",
+        ".xz",
+    ):
         with tarfile.open(archive_path) as tar:
             for member in tar.getmembers():
                 target = destination / member.name
@@ -195,7 +199,9 @@ def atomic_write(path: Path, content: bytes) -> None:
         content: Binary content to write.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(dir=path.parent, delete=False, suffix=".tmp") as tmp:
+    with tempfile.NamedTemporaryFile(
+        dir=path.parent, delete=False, suffix=".tmp"
+    ) as tmp:
         tmp_path = Path(tmp.name)
         try:
             tmp.write(content)
@@ -206,7 +212,9 @@ def atomic_write(path: Path, content: bytes) -> None:
     tmp_path.replace(path)
 
 
-def chunk_file_reader(path: Path, chunk_size: int = 1024 * 1024) -> Generator[bytes, None, None]:
+def chunk_file_reader(
+    path: Path, chunk_size: int = 1024 * 1024
+) -> Generator[bytes, None, None]:
     """
     Yield file content in chunks.
 
@@ -225,7 +233,9 @@ def chunk_file_reader(path: Path, chunk_size: int = 1024 * 1024) -> Generator[by
             yield chunk
 
 
-def find_files(directory: Path, pattern: str = "*", recursive: bool = True) -> list[Path]:
+def find_files(
+    directory: Path, pattern: str = "*", recursive: bool = True
+) -> list[Path]:
     """
     Find files matching a glob pattern in a directory.
 

@@ -228,12 +228,16 @@ class SearchQuery(BaseModel):
             sd = (
                 self.start_date
                 if isinstance(self.start_date, datetime)
-                else datetime(self.start_date.year, self.start_date.month, self.start_date.day)
+                else datetime(
+                    self.start_date.year, self.start_date.month, self.start_date.day
+                )
             )
             ed = (
                 self.end_date
                 if isinstance(self.end_date, datetime)
-                else datetime(self.end_date.year, self.end_date.month, self.end_date.day)
+                else datetime(
+                    self.end_date.year, self.end_date.month, self.end_date.day
+                )
             )
             if sd > ed:
                 msg = "start_date must be before or equal to end_date"
@@ -305,11 +309,17 @@ class SearchQuery(BaseModel):
 
         if self.cloud_cover_max < 100:
             cql2_args.append(
-                {"op": "<=", "args": [{"property": "eo:cloud_cover"}, self.cloud_cover_max]}
+                {
+                    "op": "<=",
+                    "args": [{"property": "eo:cloud_cover"}, self.cloud_cover_max],
+                }
             )
         if self.cloud_cover_min > 0:
             cql2_args.append(
-                {"op": ">=", "args": [{"property": "eo:cloud_cover"}, self.cloud_cover_min]}
+                {
+                    "op": ">=",
+                    "args": [{"property": "eo:cloud_cover"}, self.cloud_cover_min],
+                }
             )
 
         # Merge in any user-supplied CQL2 filter (accept dict or text string)

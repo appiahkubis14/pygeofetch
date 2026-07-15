@@ -9,9 +9,13 @@ from __future__ import annotations
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
-from pygeofetch.models.download_task import DownloadOptions, DownloadResult, DownloadStatus
+from pygeofetch.models.download_task import (
+    DownloadOptions,
+    DownloadResult,
+    DownloadStatus,
+)
 from pygeofetch.models.satellite_data import (
     DataFormat,
     ProviderCapabilities,
@@ -48,13 +52,20 @@ class MaxarGbdxProvider(AbstractBaseProvider):
     DISPLAY_NAME = "Maxar GBDX"
     REQUIRES_AUTH = True
     DESCRIPTION = "Very-high-resolution WorldView and GeoEye imagery. Requires Maxar subscription."
-    SATELLITES = ["WorldView-1", "WorldView-2", "WorldView-3", "WorldView-4", "GeoEye-1"]
+    SATELLITES = [
+        "WorldView-1",
+        "WorldView-2",
+        "WorldView-3",
+        "WorldView-4",
+        "GeoEye-1",
+    ]
     BASE_URL = "https://api.platform.maxar.com"
 
     def authenticate(self, credentials: Credentials) -> AuthSession:
-        from datetime import datetime, timedelta, timezone
 
-        token = credentials.api_key or credentials.password or credentials.access_key or ""
+        token = (
+            credentials.api_key or credentials.password or credentials.access_key or ""
+        )
         if self.REQUIRES_AUTH and not token and not credentials.username:
             msg = f"{self.DISPLAY_NAME} requires credentials. See: https://developers.maxar.com/"
             raise AuthenticationError(msg)
@@ -117,7 +128,9 @@ class MaxarGbdxProvider(AbstractBaseProvider):
                 self._logger.warning(f"{self.DISPLAY_NAME}: HTTP {resp.status_code}")
                 return []
             data = resp.json()
-            items = data.get("features", data.get("items", data if isinstance(data, list) else []))
+            items = data.get(
+                "features", data.get("items", data if isinstance(data, list) else [])
+            )
             return [self._parse_item(item) for item in items]
         except Exception as exc:
             self._logger.warning(f"{self.DISPLAY_NAME} search: {exc}")
@@ -140,7 +153,9 @@ class MaxarGbdxProvider(AbstractBaseProvider):
             satellite=item.get("satellite", item.get("mission", self.DISPLAY_NAME)),
             cloud_cover=float(cloud_raw) if cloud_raw is not None else None,
             bbox=bbox,
-            properties={k: v for k, v in item.items() if k not in ("id", "bbox", "assets")},
+            properties={
+                k: v for k, v in item.items() if k not in ("id", "bbox", "assets")
+            },
         )
 
     def download(
@@ -176,7 +191,9 @@ class MaxarGbdxProvider(AbstractBaseProvider):
                     self._handle_http_error(resp)
                     with open(out_file, "wb") as f:
                         f.writelines(
-                            resp.iter_bytes(chunk_size=int(options.chunk_size_mb * 1024 * 1024))
+                            resp.iter_bytes(
+                                chunk_size=int(options.chunk_size_mb * 1024 * 1024)
+                            )
                         )
                 output_paths.append(out_file)
                 total_bytes += out_file.stat().st_size
@@ -205,7 +222,13 @@ class MaxarGbdxProvider(AbstractBaseProvider):
             name=self.DISPLAY_NAME,
             description=self.DESCRIPTION,
             auth_type="token",
-            satellites=["WorldView-1", "WorldView-2", "WorldView-3", "WorldView-4", "GeoEye-1"],
+            satellites=[
+                "WorldView-1",
+                "WorldView-2",
+                "WorldView-3",
+                "WorldView-4",
+                "GeoEye-1",
+            ],
             search=True,
             download=True,
             supports_sar=False,
@@ -225,5 +248,6 @@ class MaxarGbdxProvider(AbstractBaseProvider):
 
     def get_quota_info(self) -> QuotaInfo:
         return QuotaInfo(
-            provider=self.PROVIDER_ID, extra_info={"note": "Quota depends on subscription."}
+            provider=self.PROVIDER_ID,
+            extra_info={"note": "Quota depends on subscription."},
         )

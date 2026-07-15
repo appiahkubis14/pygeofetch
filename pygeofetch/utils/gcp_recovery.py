@@ -43,7 +43,10 @@ def _is_identity_or_pixel_space(path: Path) -> Tuple[bool, str]:
                 and crs is not None
                 and crs.is_projected
             ):
-                return True, f"identity transform in projected CRS (a={t.a}, origin=({t.c},{t.f}))"
+                return (
+                    True,
+                    f"identity transform in projected CRS (a={t.a}, origin=({t.c},{t.f}))",
+                )
 
             # Case 2: transform is None or default
             if t.a == 1.0 and t.e == -1.0 and t.c == 0.0 and t.f == 0.0:
@@ -117,7 +120,6 @@ def recover_georeference(
             print("Recovery not possible — no GCPs or already georeferenced")
     """
     try:
-        import numpy as np
         import rasterio
         from rasterio.transform import from_gcps
 
@@ -133,7 +135,9 @@ def recover_georeference(
     # Check if recovery is needed
     corrupt, reason = _is_identity_or_pixel_space(src_path)
     if not corrupt:
-        logger.debug("%s does not need georef recovery (transform looks valid)", src_path.name)
+        logger.debug(
+            "%s does not need georef recovery (transform looks valid)", src_path.name
+        )
         return None
 
     logger.warning(
@@ -162,13 +166,13 @@ def recover_georeference(
             if not gcps or len(gcps) < 4:
                 logger.warning(
                     "%s has no embedded GCPs (found %d) — recovery not possible",
-                    src_path.name, len(gcps)
+                    src_path.name,
+                    len(gcps),
                 )
                 return None
 
             logger.info(
-                "Recovering georeference using %d GCPs (CRS: %s)",
-                len(gcps), gcp_crs
+                "Recovering georeference using %d GCPs (CRS: %s)", len(gcps), gcp_crs
             )
 
             # Derive affine transform from GCPs
@@ -197,18 +201,20 @@ def recover_georeference(
             out.unlink(missing_ok=True)
             logger.error(
                 "GCP recovery produced another bad transform for %s: %s",
-                src_path.name, reason2
+                src_path.name,
+                reason2,
             )
             return None
 
         logger.info(
-            "Georeference recovery successful: %s → %s",
-            src_path.name, out.name
+            "Georeference recovery successful: %s → %s", src_path.name, out.name
         )
         return out
 
     except Exception as exc:
-        logger.error("GCP recovery failed for %s: %s", src_path.name, exc, exc_info=True)
+        logger.error(
+            "GCP recovery failed for %s: %s", src_path.name, exc, exc_info=True
+        )
         if out.exists():
             out.unlink(missing_ok=True)
         return None
@@ -256,8 +262,13 @@ def validate_georeference(path: str | Path) -> dict:
             report = {
                 "valid": True,
                 "crs": str(crs) if crs else None,
-                "crs_type": ("geographic" if (crs and crs.is_geographic) else
-                              "projected" if (crs and crs.is_projected) else "unknown"),
+                "crs_type": (
+                    "geographic"
+                    if (crs and crs.is_geographic)
+                    else "projected"
+                    if (crs and crs.is_projected)
+                    else "unknown"
+                ),
                 "transform": t,
                 "pixel_size": (abs(t.a), abs(t.e)),
                 "origin": (t.c, t.f),
@@ -299,9 +310,7 @@ def validate_georeference(path: str | Path) -> dict:
             if crs and crs.is_geographic:
                 b = src.bounds
                 if not (-180 <= b.left <= 180 and -90 <= b.bottom <= 90):
-                    issues.append(
-                        f"Bounds outside valid geographic range: {b}"
-                    )
+                    issues.append(f"Bounds outside valid geographic range: {b}")
                     report["valid"] = False
 
             # Recovery potential

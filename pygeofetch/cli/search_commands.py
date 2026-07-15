@@ -36,7 +36,11 @@ def search() -> None:
     show_default=True,
     help='Cloud cover range "min-max" e.g. 0-20.',
 )
-@click.option("--resolution", default=None, help='Resolution range in metres "min-max" e.g. 10-30.')
+@click.option(
+    "--resolution",
+    default=None,
+    help='Resolution range in metres "min-max" e.g. 10-30.',
+)
 @click.option("--processing-level", default=None, help="Processing level e.g. L2A.")
 @click.option(
     "--providers",
@@ -45,7 +49,9 @@ def search() -> None:
     help="Comma-separated provider IDs e.g. usgs,copernicus,planetary_computer.",
 )
 @click.option(
-    "--satellites", default=None, help="Comma-separated satellite names e.g. Sentinel-2,Landsat-8."
+    "--satellites",
+    default=None,
+    help="Comma-separated satellite names e.g. Sentinel-2,Landsat-8.",
 )
 @click.option("--max-results", "-n", default=100, show_default=True)
 @click.option(
@@ -55,7 +61,12 @@ def search() -> None:
     show_default=True,
     help="Sort field.",
 )
-@click.option("--sort-order", default="desc", type=click.Choice(["asc", "desc"]), show_default=True)
+@click.option(
+    "--sort-order",
+    default="desc",
+    type=click.Choice(["asc", "desc"]),
+    show_default=True,
+)
 @click.option("--cql2", default=None, help="CQL2 filter expression.")
 @click.option("--output", "-o", default=None, help="Save results to this file.")
 @click.option(
@@ -73,7 +84,9 @@ def search() -> None:
     show_default=True,
     help="How to handle provider failures.",
 )
-@click.option("--timeout", default=60, show_default=True, help="Per-provider timeout in seconds.")
+@click.option(
+    "--timeout", default=60, show_default=True, help="Per-provider timeout in seconds."
+)
 @click.option("--no-cache", is_flag=True, default=False, help="Bypass result cache.")
 def search_run(
     bbox,
@@ -125,7 +138,9 @@ def search_run(
         cloud_min = float(parts[0])
         cloud_max = float(parts[1]) if len(parts) > 1 else 100.0
     except Exception:
-        console.print(f"[red]Invalid --cloud-cover: {cloud_cover!r} (expected min-max)[/]")
+        console.print(
+            f"[red]Invalid --cloud-cover: {cloud_cover!r} (expected min-max)[/]"
+        )
         sys.exit(1)
 
     # Parse resolution
@@ -156,12 +171,17 @@ def search_run(
         if geom and geom.get("type") == "Polygon":
             coords = [pt for ring in geom["coordinates"] for pt in ring]
         elif geom and geom.get("type") == "MultiPolygon":
-            coords = [pt for poly in geom["coordinates"] for ring in poly for pt in ring]
+            coords = [
+                pt for poly in geom["coordinates"] for ring in poly for pt in ring
+            ]
         if coords:
             lons = [c[0] for c in coords]
             lats = [c[1] for c in coords]
             bbox_obj = BoundingBox(
-                min_lon=min(lons), min_lat=min(lats), max_lon=max(lons), max_lat=max(lats)
+                min_lon=min(lons),
+                min_lat=min(lats),
+                max_lon=max(lons),
+                max_lat=max(lats),
             )
     elif bbox:
         try:
@@ -196,7 +216,9 @@ def search_run(
 
     sb = PyGeoFetch()
 
-    with console.status(f"[cyan]Searching {len(provider_list or [])} provider(s)...[/]"):
+    with console.status(
+        f"[cyan]Searching {len(provider_list or [])} provider(s)...[/]"
+    ):
         results = sb.search(query, providers=provider_list, use_cache=not no_cache)
 
     if not results:
@@ -218,7 +240,9 @@ def search_run(
     if fmt == "table":
         _display_table(results)
     elif fmt == "json":
-        click.echo(json.dumps([_item_to_dict(r) for r in results], indent=2, default=str))
+        click.echo(
+            json.dumps([_item_to_dict(r) for r in results], indent=2, default=str)
+        )
     elif fmt in ("stac", "geojson"):
         fc = sb.searcher.to_geojson(results)
         click.echo(json.dumps(fc, indent=2, default=str))
@@ -300,7 +324,10 @@ def _save_geoparquet(results, path: Path) -> None:
 
         path.with_suffix(".geojson").write_text(
             _json.dumps(
-                {"type": "FeatureCollection", "features": [_item_to_dict(r) for r in results]},
+                {
+                    "type": "FeatureCollection",
+                    "features": [_item_to_dict(r) for r in results],
+                },
                 indent=2,
                 default=str,
             )
@@ -313,7 +340,15 @@ def _save_csv(results, path: Path) -> None:
     with open(path, "w", newline="") as f:
         writer = csv_mod.DictWriter(
             f,
-            fieldnames=["id", "provider", "satellite", "datetime", "cloud_cover", "score", "bbox"],
+            fieldnames=[
+                "id",
+                "provider",
+                "satellite",
+                "datetime",
+                "cloud_cover",
+                "score",
+                "bbox",
+            ],
         )
         writer.writeheader()
         for r in results:

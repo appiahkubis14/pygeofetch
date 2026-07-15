@@ -43,8 +43,12 @@ def index() -> None:
 
 
 @index.command("ndvi")
-@click.option("--red", required=True, type=click.Path(exists=True), help="Red band (e.g. B04.tif)")
-@click.option("--nir", required=True, type=click.Path(exists=True), help="NIR band (e.g. B08.tif)")
+@click.option(
+    "--red", required=True, type=click.Path(exists=True), help="Red band (e.g. B04.tif)"
+)
+@click.option(
+    "--nir", required=True, type=click.Path(exists=True), help="NIR band (e.g. B08.tif)"
+)
 @click.option("--output", "-o", default=None)
 def ndvi_cmd(red, nir, output):
     """NDVI — Normalized Difference Vegetation Index. Range: -1 to +1. Vegetation > 0.3."""
@@ -169,7 +173,9 @@ def dnbr_cmd(pre_nir, pre_swir2, post_nir, post_swir2, output):
 @click.option("--nir", required=True, type=click.Path(exists=True))
 @click.option("--swir1", required=True, type=click.Path(exists=True))
 @click.option("--swir2", required=True, type=click.Path(exists=True))
-@click.option("--sensor", default="sentinel2", type=click.Choice(["sentinel2", "landsat8"]))
+@click.option(
+    "--sensor", default="sentinel2", type=click.Choice(["sentinel2", "landsat8"])
+)
 @click.option("--output", "-o", default=None)
 def tct_cmd(blue, green, red, nir, swir1, swir2, sensor, output):
     """Tasseled Cap Transformation — Brightness, Greenness, Wetness (3-band output)."""
@@ -221,18 +227,24 @@ def texture_cmd(input, window, features, output):
 @index.command("lst")
 @click.argument("thermal", type=click.Path(exists=True))
 @click.option("--emissivity", "-e", default=0.97, show_default=True, type=float)
-@click.option("--sensor", default="landsat8", type=click.Choice(["landsat8", "landsat9", "modis"]))
+@click.option(
+    "--sensor", default="landsat8", type=click.Choice(["landsat8", "landsat9", "modis"])
+)
 @click.option("--output", "-o", default=None)
 def lst_cmd(thermal, emissivity, sensor, output):
     """Land Surface Temperature from thermal band. Output: Band1=Kelvin, Band2=Celsius."""
     e = _engine()
-    r = e.indices.lst(thermal=thermal, emissivity=emissivity, sensor=sensor, output=output)
+    r = e.indices.lst(
+        thermal=thermal, emissivity=emissivity, sensor=sensor, output=output
+    )
     _pr(r, "LST")
 
 
 @index.command("albedo")
 @click.argument("inputs", nargs=-1, type=click.Path(exists=True))
-@click.option("--sensor", default="sentinel2", type=click.Choice(["sentinel2", "landsat8"]))
+@click.option(
+    "--sensor", default="sentinel2", type=click.Choice(["sentinel2", "landsat8"])
+)
 @click.option("--output", "-o", default=None)
 def albedo_cmd(inputs, sensor, output):
     """Surface albedo from narrowband to broadband conversion (Liang 2001)."""
@@ -246,7 +258,9 @@ def albedo_cmd(inputs, sensor, output):
 
 @index.command("band-math")
 @click.argument("inputs", nargs=-1, type=click.Path(exists=True))
-@click.option("--expr", "-e", required=True, help="Python expression. Bands as B[0], B[1], ...")
+@click.option(
+    "--expr", "-e", required=True, help="Python expression. Bands as B[0], B[1], ..."
+)
 @click.option("--output", "-o", default=None)
 def band_math_cmd(inputs, expr, output):
     """Arbitrary band arithmetic. Example: --expr '(B[1]-B[0])/(B[1]+B[0])'."""

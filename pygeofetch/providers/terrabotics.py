@@ -20,7 +20,11 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from pygeofetch.models.download_task import DownloadOptions, DownloadResult, DownloadStatus
+from pygeofetch.models.download_task import (
+    DownloadOptions,
+    DownloadResult,
+    DownloadStatus,
+)
 from pygeofetch.models.satellite_data import (
     DataFormat,
     ProviderCapabilities,
@@ -171,7 +175,9 @@ class TerraboticsProvider(AbstractBaseProvider):
                 # Endpoint may not exist yet — return empty
                 return []
             self._handle_http_error(resp)
-            items = resp.json().get("items", resp.json() if isinstance(resp.json(), list) else [])
+            items = resp.json().get(
+                "items", resp.json() if isinstance(resp.json(), list) else []
+            )
             results = [self._parse_item(item) for item in items]
             self._logger.info(f"TerraBotics: {len(results)} items found")
             return results
@@ -250,7 +256,9 @@ class TerraboticsProvider(AbstractBaseProvider):
                         self._handle_http_error(dl)
                         with open(out_file, "wb") as f:
                             f.writelines(
-                                dl.iter_bytes(chunk_size=int(options.chunk_size_mb * 1024 * 1024))
+                                dl.iter_bytes(
+                                    chunk_size=int(options.chunk_size_mb * 1024 * 1024)
+                                )
                             )
                     output_paths.append(out_file)
                     total_bytes += out_file.stat().st_size
@@ -262,7 +270,9 @@ class TerraboticsProvider(AbstractBaseProvider):
             for key, asset in (data.data_assets or data.assets).items():
                 if not asset.href or not asset.href.startswith("http"):
                     continue
-                out_file = destination / (asset.href.split("/")[-1] or f"{data.id}_{key}")
+                out_file = destination / (
+                    asset.href.split("/")[-1] or f"{data.id}_{key}"
+                )
                 try:
                     with httpx.stream(
                         "GET",
@@ -273,7 +283,9 @@ class TerraboticsProvider(AbstractBaseProvider):
                         self._handle_http_error(resp)
                         with open(out_file, "wb") as f:
                             f.writelines(
-                                resp.iter_bytes(chunk_size=int(options.chunk_size_mb * 1024 * 1024))
+                                resp.iter_bytes(
+                                    chunk_size=int(options.chunk_size_mb * 1024 * 1024)
+                                )
                             )
                     output_paths.append(out_file)
                     total_bytes += out_file.stat().st_size

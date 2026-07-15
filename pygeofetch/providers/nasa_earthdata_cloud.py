@@ -25,7 +25,11 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from pygeofetch.models.download_task import DownloadOptions, DownloadResult, DownloadStatus
+from pygeofetch.models.download_task import (
+    DownloadOptions,
+    DownloadResult,
+    DownloadStatus,
+)
 from pygeofetch.models.satellite_data import (
     ProviderCapabilities,
     QuotaInfo,
@@ -143,7 +147,9 @@ class NASAEarthdataCloudProvider(AbstractBaseProvider):
                     "aws_session_token": creds_data.get("sessionToken", ""),
                     "expiration": creds_data.get("expiration", ""),
                 }
-                self._logger.info("Obtained temporary S3 credentials for NASA Earthdata Cloud")
+                self._logger.info(
+                    "Obtained temporary S3 credentials for NASA Earthdata Cloud"
+                )
         except Exception as exc:
             self._logger.warning(
                 f"Could not obtain S3 credentials (will fall back to HTTPS): {exc}"
@@ -158,7 +164,9 @@ class NASAEarthdataCloudProvider(AbstractBaseProvider):
             session_data={"s3_credentials": s3_creds, "username": credentials.username},
         )
         self._session = session
-        self._logger.info(f"NASA Earthdata Cloud: authenticated as {credentials.username}")
+        self._logger.info(
+            f"NASA Earthdata Cloud: authenticated as {credentials.username}"
+        )
         return session
 
     def validate_credentials(self, credentials: Credentials) -> bool:
@@ -189,7 +197,9 @@ class NASAEarthdataCloudProvider(AbstractBaseProvider):
         # Spatial filter
         if query.bbox:
             bb = query.bbox
-            params["bounding_box"] = f"{bb.min_lon},{bb.min_lat},{bb.max_lon},{bb.max_lat}"
+            params["bounding_box"] = (
+                f"{bb.min_lon},{bb.min_lat},{bb.max_lon},{bb.max_lat}"
+            )
 
         # Temporal filter
         if query.start_date or query.end_date:
@@ -244,7 +254,9 @@ class NASAEarthdataCloudProvider(AbstractBaseProvider):
         for link in entry.get("links", []):
             href = link.get("href", "")
             link.get("rel", "")
-            if "s3://" in href or href.endswith((".nc", ".h5", ".hdf", ".tif", ".zarr")):
+            if "s3://" in href or href.endswith(
+                (".nc", ".h5", ".hdf", ".tif", ".zarr")
+            ):
                 key = f"data_{len(assets)}"
                 assets[key] = SatelliteAsset(
                     key=key,
@@ -292,7 +304,9 @@ class NASAEarthdataCloudProvider(AbstractBaseProvider):
         destination.mkdir(parents=True, exist_ok=True)
 
         s3_creds = (
-            (self._session.session_data if self._session else {}).get("s3_credentials", {})
+            (self._session.session_data if self._session else {}).get(
+                "s3_credentials", {}
+            )
             if (self._session.session_data if self._session else {})
             else {}
         )
@@ -360,7 +374,9 @@ class NASAEarthdataCloudProvider(AbstractBaseProvider):
             msg = "boto3 not installed. Install with: pip install boto3"
             raise DownloadError(msg)
 
-    def _download_https(self, url: str, out_file: Path, options: DownloadOptions) -> None:
+    def _download_https(
+        self, url: str, out_file: Path, options: DownloadOptions
+    ) -> None:
         """HTTPS fallback download with Bearer token auth."""
         import httpx
 
@@ -370,11 +386,17 @@ class NASAEarthdataCloudProvider(AbstractBaseProvider):
                 f"Bearer {(self._session.access_token if self._session else None)}"
             )
         with httpx.stream(
-            "GET", url, headers=headers, timeout=options.timeout_seconds, follow_redirects=True
+            "GET",
+            url,
+            headers=headers,
+            timeout=options.timeout_seconds,
+            follow_redirects=True,
         ) as resp:
             self._handle_http_error(resp)
             with open(out_file, "wb") as f:
-                f.writelines(resp.iter_bytes(chunk_size=int(options.chunk_size_mb * 1024 * 1024)))
+                f.writelines(
+                    resp.iter_bytes(chunk_size=int(options.chunk_size_mb * 1024 * 1024))
+                )
 
     def get_capabilities(self) -> ProviderCapabilities:
         return ProviderCapabilities(
@@ -399,5 +421,7 @@ class NASAEarthdataCloudProvider(AbstractBaseProvider):
     def get_quota_info(self) -> QuotaInfo:
         return QuotaInfo(
             provider=self.PROVIDER_ID,
-            extra_info={"note": "No download quota; data accessed directly from AWS S3."},
+            extra_info={
+                "note": "No download quota; data accessed directly from AWS S3."
+            },
         )

@@ -93,7 +93,9 @@ class AuthSession(BaseModel):
     """
 
     provider: str
-    access_token: Any | None  # str or SecretStr — use .get_secret_value() if SecretStr = None
+    access_token: (
+        Any | None
+    )  # str or SecretStr — use .get_secret_value() if SecretStr = None
     refresh_token: str | None = None
     expires_at: datetime | None = None
     session_data: dict[str, Any] = Field(default_factory=dict)

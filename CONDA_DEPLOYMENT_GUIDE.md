@@ -40,7 +40,7 @@ You need accounts at:
 ### 1a. Clean and verify
 
 ```bash
-cd PyGeoFetch-1.1.0-complete/pygeofetch
+cd PyGeoFetch-1.0.0-complete/pygeofetch
 
 # Remove old build artifacts
 rm -rf dist/ build/ *.egg-info/
@@ -59,7 +59,7 @@ Key fields that conda-forge checks:
 ```toml
 [project]
 name = "pygeofetch"          # must be lowercase for PyPI
-version = "1.1.0"            # must match git tag
+version = "1.0.0"            # must match git tag
 license = { file = "LICENSE" }
 requires-python = ">=3.9"
 ```
@@ -72,8 +72,8 @@ python -m build
 
 # You should see:
 # dist/
-#   pygeofetch-1.1.0.tar.gz      ← source distribution (conda uses this)
-#   pygeofetch-1.1.0-py3-none-any.whl  ← wheel
+#   pygeofetch-1.0.0.tar.gz      ← source distribution (conda uses this)
+#   pygeofetch-1.0.0-py3-none-any.whl  ← wheel
 ```
 
 ### 1d. Check the built package
@@ -83,8 +83,8 @@ python -m build
 twine check dist/*
 
 # Expected output:
-# Checking dist/pygeofetch-1.1.0.tar.gz: PASSED
-# Checking dist/pygeofetch-1.1.0-py3-none-any.whl: PASSED
+# Checking dist/pygeofetch-1.0.0.tar.gz: PASSED
+# Checking dist/pygeofetch-1.0.0-py3-none-any.whl: PASSED
 ```
 
 ---
@@ -104,7 +104,7 @@ twine upload --repository testpypi dist/*
 # Install from TestPyPI to verify
 pip install --index-url https://test.pypi.org/simple/ \
     --extra-index-url https://pypi.org/simple/ \
-    pygeofetch==1.1.0
+    pygeofetch==1.0.0
 
 # Quick smoke test
 python -c "from pygeofetch import PyGeoFetch; print('OK')"
@@ -128,11 +128,11 @@ After uploading, get the SHA256 of the source tarball — conda-forge needs it:
 
 ```bash
 # From the dist/ folder:
-sha256sum dist/pygeofetch-1.1.0.tar.gz
+sha256sum dist/pygeofetch-1.0.0.tar.gz
 
 # Or download from PyPI and hash it:
-pip download pygeofetch==1.1.0 --no-deps -d /tmp/pgf/
-sha256sum /tmp/pgf/pygeofetch-1.1.0.tar.gz
+pip download pygeofetch==1.0.0 --no-deps -d /tmp/pgf/
+sha256sum /tmp/pgf/pygeofetch-1.0.0.tar.gz
 ```
 
 Keep this hash — you'll paste it into meta.yaml in Step 3.
@@ -160,7 +160,7 @@ Open `conda-recipe/meta.yaml` and replace the placeholder:
 
 ```yaml
 source:
-  url: https://pypi.io/packages/source/p/pygeofetch/pygeofetch-1.1.0.tar.gz
+  url: https://pypi.io/packages/source/p/pygeofetch/pygeofetch-1.0.0.tar.gz
   sha256: PASTE_YOUR_REAL_SHA256_HERE   # ← replace this line
 ```
 
@@ -171,7 +171,7 @@ source:
 conda build conda-recipe/ -c conda-forge
 
 # If successful, you'll see:
-# anaconda upload /path/to/pygeofetch-1.1.0-py39_0.tar.bz2
+# anaconda upload /path/to/pygeofetch-1.0.0-py39_0.tar.bz2
 
 # Test install the local build
 conda install --use-local pygeofetch
@@ -250,7 +250,7 @@ anaconda login
 conda build conda-recipe/ -c conda-forge
 
 # Upload to your personal channel
-anaconda upload /path/to/pygeofetch-1.1.0-py39_0.tar.bz2
+anaconda upload /path/to/pygeofetch-1.0.0-py39_0.tar.bz2
 
 # Users can then install from your channel:
 conda install -c YOUR_ANACONDA_USERNAME pygeofetch
@@ -262,7 +262,7 @@ conda install -c YOUR_ANACONDA_USERNAME pygeofetch
 
 ```yaml
 {% set name = "pygeofetch" %}
-{% set version = "1.1.0" %}
+{% set version = "1.0.0" %}
 
 package:
   name: {{ name }}

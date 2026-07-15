@@ -86,7 +86,9 @@ class SearchCache:
             return None
         return results
 
-    def set(self, query: SearchQuery, provider: str, results: list[SatelliteData]) -> None:
+    def set(
+        self, query: SearchQuery, provider: str, results: list[SatelliteData]
+    ) -> None:
         """Cache results for a query/provider pair."""
         key = self._key(query, provider)
         self._cache[key] = (time.time(), results)
@@ -174,9 +176,13 @@ class FederatedSearcher:
         all_results: list[SatelliteData] = []
         provider_errors: dict[str, str] = {}
 
-        with ThreadPoolExecutor(max_workers=min(self.max_workers, len(providers))) as executor:
+        with ThreadPoolExecutor(
+            max_workers=min(self.max_workers, len(providers))
+        ) as executor:
             futures = {
-                executor.submit(self._search_provider, provider_id, query, use_cache): provider_id
+                executor.submit(
+                    self._search_provider, provider_id, query, use_cache
+                ): provider_id
                 for provider_id in providers
             }
 
@@ -215,7 +221,9 @@ class FederatedSearcher:
         if use_cache:
             cached = self.cache.get(query, provider_id)
             if cached is not None:
-                logger.debug(f"  {provider_id}: using cached results ({len(cached)} items)")
+                logger.debug(
+                    f"  {provider_id}: using cached results ({len(cached)} items)"
+                )
                 return cached
 
         provider = self._get_provider(provider_id)
@@ -361,7 +369,9 @@ class FederatedSearcher:
         results = []
         for feature in geojson.get("features", []):
             provider = (
-                (feature.get("properties") or {}).get("providers", [{}])[0].get("name", "unknown")
+                (feature.get("properties") or {})
+                .get("providers", [{}])[0]
+                .get("name", "unknown")
             )
             results.append(SatelliteData.from_stac_item(feature, provider))
         return results

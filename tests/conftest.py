@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
-from pygeofetch.models.download_task import DownloadOptions, DownloadResult, DownloadStatus
-from pygeofetch.models.satellite_data import SatelliteData, ProcessingLevel
+from pygeofetch.models.download_task import (
+    DownloadOptions,
+    DownloadResult,
+    DownloadStatus,
+)
+from pygeofetch.models.satellite_data import ProcessingLevel, SatelliteData
 from pygeofetch.models.search_query import BoundingBox, SearchQuery
 from pygeofetch.models.user_auth import AuthSession, Credentials
 

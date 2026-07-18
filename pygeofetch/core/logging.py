@@ -84,6 +84,14 @@ def _cr(text: str) -> str:
     return _c("red", text)
 
 
+def _cc(text: str) -> str:
+    return _c("cyan", text)
+
+
+def _cbl(text: str) -> str:
+    return _c("blue", text)
+
+
 # ── Credential redaction ──────────────────────────────────────────────────────
 
 _SENSITIVE_KEYS = frozenset(
@@ -112,6 +120,44 @@ def _redact(msg: str) -> str:
             msg,
         )
     return msg
+
+
+# ── Text alignment helper (ANSI-aware) ────────────────────────────────────────
+
+
+_ANSI_RE = re.compile(r"\033\[[\d;]*m")
+
+
+def _visible_len(text: str) -> int:
+    """Length of *text* ignoring ANSI escape codes."""
+    return len(_ANSI_RE.sub("", text))
+
+
+def _pad(text: str, width: int, align: str = "<") -> str:
+    """
+    Pad *text* to *width* using visible character count (strips ANSI codes first).
+    This ensures columns align correctly even when text contains colour escapes,
+    which Python's built-in ``:<N`` format spec does NOT handle correctly.
+    """
+    visible = _visible_len(text)
+    padding = max(0, width - visible)
+    if align == "<":
+        return text + " " * padding
+    if align == ">":
+        return " " * padding + text
+    # centre
+    left = padding // 2
+    right = padding - left
+    return " " * left + text + " " * right
+
+
+def _truncate(text: str, width: int) -> str:
+    """Truncate *text* to *width* visible characters, adding an ellipsis if cut."""
+    if _visible_len(text) <= width:
+        return text
+    if width <= 1:
+        return text[:width]
+    return text[: width - 1] + "…"
 
 
 # ── Log formatter ─────────────────────────────────────────────────────────────
@@ -204,6 +250,8 @@ def get_logger(name: str) -> logging.Logger:
 #  SEARCH RESULTS TABLE
 # ══════════════════════════════════════════════════════════════════════════════
 
+_BOX_WIDTH = 76  # total width of the search-parameters box, including borders
+
 
 def print_search_header(
     providers: list[str],
@@ -213,19 +261,25 @@ def print_search_header(
     cloud_max: float,
     product: str = "any",
 ) -> None:
-    """Print a clean search header box."""
-    w = 72
+    """Print a clean, bordered search-parameters header box."""
+    w = _BOX_WIDTH
+    inner = w - 4  # content width inside "│ " ... " │"
+
     bbox_str = (
-        (
-            f"[{bbox.min_lon:.3f}, {bbox.min_lat:.3f}, {bbox.max_lon:.3f}, {bbox.max_lat:.3f}]"
-        )
+        f"[{bbox.min_lon:.3f}, {bbox.min_lat:.3f}, "
+        f"{bbox.max_lon:.3f}, {bbox.max_lat:.3f}]"
         if bbox
         else "—"
     )
-    prov_str = ", ".join(providers)
+    prov_str = ", ".join(providers) if providers else "—"
+
+    title = " SEARCH PARAMETERS "
+    dashes = max(0, w - 2 - len(title))
+    print("┌" + title + "─" * dashes + "┐")
 
     def row(label: str, value: str) -> None:
-        w - 18
+        text = f"{_cc(f'{label:<11}')}: {_truncate(value, inner - 13)}"
+        print("│ " + _pad(text, inner) + " │")
 
     row("Providers", prov_str)
     row("BBox", bbox_str)
@@ -233,82 +287,85 @@ def print_search_header(
     row("Cloud max", f"{cloud_max}%")
     row("Product", product)
 
+    print("└" + "─" * (w - 2) + "┘")
+
 
 def print_provider_progress(
     provider: str, status: str, count: int = 0, duration: float = 0.0, error: str = ""
 ) -> None:
     """Print a single provider search result line."""
+    provider_str = _pad(_cb(provider), 28)
+
     if error:
         icon = _cr("✗")
-        f"  {icon}  {provider:<28}  {_cr(error[:45])}"
+        line = f"  {icon}  {provider_str}  {_cr(_truncate(error, 45))}"
     elif count == 0:
         icon = _cy("○")
-        f"  {icon}  {provider:<28}  {_cy('no results')}"
+        line = f"  {icon}  {provider_str}  {_cy('no results')}"
     else:
         icon = _cg("✓")
-        _cd(f"{duration:.1f}s")
-        _cb(_cg(f"{count:>4} scenes"))
+        dur_str = _cd(f"{duration:.1f}s")
+        count_str = _cb(_cg(f"{count:>4} scenes"))
+        line = f"  {icon}  {provider_str}  {count_str}   {dur_str}"
 
-
-def _pad(text: str, width: int, align: str = "<") -> str:
-    """
-    Pad *text* to *width* using visible character count (strips ANSI codes first).
-    This ensures columns align correctly even when text contains colour escapes.
-    """
-    ansi_re = re.compile(r"\033\[[\d;]*m")
-    visible = len(ansi_re.sub("", text))
-    padding = max(0, width - visible)
-    if align == "<":
-        return text + " " * padding
-    if align == ">":
-        return " " * padding + text
-    # centre
-    left = padding // 2
-    right = padding - left
-    return " " * left + text + " " * right
+    print(line)
 
 
 def print_search_results(results: list[Any], elapsed: float = 0.0) -> None:
-    """Print a perfectly aligned table of search results."""
+    """Print a perfectly aligned, bordered table of search results."""
     if not results:
+        print(_cy("  ○  No scenes matched the search criteria."))
         return
 
     n = len(results)
 
     # ── column definitions: (header, data_width) ─────────────────────────────
-    # data_width = max visible chars for that column's data
     COLS = [
         ("SCENE ID", 42),
         ("DATE", 10),
         ("SATELLITE", 14),
         ("CLOUD", 6),
         ("PRODUCT", 7),
-        ("POLARISATION", 11),
+        ("POLARISATION", 12),
         ("PASS", 11),
         ("ORBIT", 5),
         ("SCORE", 5),
-        ("PROVIDER", 22),
+        ("PROVIDER", 20),
     ]
 
-    # ── total table width ─────────────────────────────────────────────────────
-    # 2 leading spaces per col separator + 2 prefix for │
-    inner = sum(w for _, w in COLS) + len(COLS) * 2
-    "─" * inner
+    def hline(left: str, mid: str, right: str) -> str:
+        return left + mid.join("─" * (cw + 2) for _, cw in COLS) + right
+
+    def row_line(cells: list[str]) -> str:
+        parts = [" " + _pad(text, cw) + " " for text, (_, cw) in zip(cells, COLS)]
+        return "│" + "│".join(parts) + "│"
 
     # ── header ───────────────────────────────────────────────────────────────
-    "".join("  " + _pad(_cb(h), w) for h, w in COLS)
+    print(hline("┌", "┬", "┐"))
+    header_cells = [_cb(h) for h, _ in COLS]
+    print(
+        "│"
+        + "│".join(
+            " " + _pad(text, cw, align="^") + " "
+            for text, (_, cw) in zip(header_cells, COLS)
+        )
+        + "│"
+    )
+    print(hline("├", "┼", "┤"))
 
     # ── rows ─────────────────────────────────────────────────────────────────
     for r in results[:30]:
-        scene_id = (r.id or "—")[: COLS[0][1]]
+        scene_id = _truncate(r.id or "—", COLS[0][1])
         date = str(r.datetime)[:10] if r.datetime else "—"
-        sat = (r.satellite or "—")[: COLS[2][1]]
-        ptype = (r.product_type or "—")[: COLS[4][1]]
-        pol = (r.polarisation or "—")[: COLS[5][1]]
-        pdir = (r.pass_direction or "—")[: COLS[6][1]]
-        orbit = str(r.relative_orbit or "—")[: COLS[7][1]]
+        sat = _truncate(r.satellite or "—", COLS[2][1])
+        ptype = _truncate(r.product_type or "—", COLS[4][1])
+        pol = _truncate(r.polarisation or "—", COLS[5][1])
+        pdir = _truncate(r.pass_direction or "—", COLS[6][1])
+        orbit = _truncate(
+            str(r.relative_orbit) if r.relative_orbit else "—", COLS[7][1]
+        )
         score = f"{r.score:.2f}" if r.score else "—"
-        provider = (r.provider or "—")[: COLS[9][1]]
+        provider = _truncate(r.provider or "—", COLS[9][1])
 
         # Cloud cover with colour
         if r.cloud_cover is not None:
@@ -322,25 +379,28 @@ def print_search_results(results: list[Any], elapsed: float = 0.0) -> None:
         else:
             cloud = "—"
 
-        # Build each cell using _pad (ANSI-aware)
         cells = [
-            _pad(_cd(scene_id), COLS[0][1]),
-            _pad(date, COLS[1][1]),
-            _pad(_cb(sat), COLS[2][1]),
-            _pad(cloud, COLS[3][1]),
-            _pad(ptype, COLS[4][1]),
-            _pad(pol, COLS[5][1]),
-            _pad(pdir, COLS[6][1]),
-            _pad(orbit, COLS[7][1]),
-            _pad(score, COLS[8][1]),
-            _pad(_cd(provider), COLS[9][1]),
+            _cd(scene_id),
+            date,
+            _cb(sat),
+            cloud,
+            ptype,
+            pol,
+            pdir,
+            orbit,
+            score,
+            _cd(provider),
         ]
-        "".join("  " + c for c in cells)
+        print(row_line(cells))
+
+    print(hline("└", "┴", "┘"))
 
     # ── footer ────────────────────────────────────────────────────────────────
-    overflow = f"  (+{n - 30} more)" if n > 30 else ""
+    overflow = f"  (+{n - 30} more not shown)" if n > 30 else ""
     elapsed_str = f"  ·  {elapsed:.1f}s" if elapsed else ""
-    f"  {_cb(_cg(str(n)))} scene{'s' if n != 1 else ''} found{elapsed_str}{overflow}"
+    print(
+        f"  {_cb(_cg(str(n)))} scene{'s' if n != 1 else ''} found{elapsed_str}{overflow}"
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -349,13 +409,35 @@ def print_search_results(results: list[Any], elapsed: float = 0.0) -> None:
 
 _SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
+# ANSI "clear to end of line" — used instead of manual space-padding so a
+# shorter line never leaves stray characters from a previous, longer render.
+_CLEAR_EOL = "\033[K"
+
 
 class DownloadProgress:
     """
-    Live download progress — works in both terminal and Jupyter notebook.
+    Live download progress — real-time, works correctly in both terminals
+    and Jupyter notebooks, and correctly supports multiple CONCURRENT
+    downloads (parallel > 1) without state corruption between them.
 
-    In a terminal: spinner + in-place updating progress bar.
-    In Jupyter:    clean printed lines with IPython display updates.
+    Built on tqdm (tqdm.auto), the standard, battle-tested progress bar
+    library, which auto-detects the execution environment (real terminal
+    vs Jupyter/IPython kernel vs plain non-TTY stream) and renders
+    correctly in each — this is the single implementation that "works
+    everywhere" rather than hand-rolled ANSI/HTML dual-mode rendering.
+
+    Each concurrently-downloading item gets its own named progress bar
+    (terminal: stacked via cursor positioning; Jupyter: separate widgets),
+    identified by an explicit item_id passed to every call — this is what
+    makes it safe to call from multiple ThreadPoolExecutor worker threads
+    at once, unlike a design that tracks a single shared "current item".
+
+    Usage::
+
+        with DownloadProgress(total=3, destination="./downloads") as dp:
+            dp.start_item("scene_1", expected_bytes=2_000_000_000)
+            dp.update("scene_1", bytes_done=500_000_000, speed_bps=18_000_000)
+            dp.complete_item("scene_1", success=True, bytes_total=2_000_000_000, duration=17.8)
     """
 
     def __init__(self, total: int, destination: str = "") -> None:
@@ -365,51 +447,147 @@ class DownloadProgress:
         self._failed = 0
         self._start = time.time()
         self._lock = threading.Lock()
-        self._spin_i = 0
-        self._current_id = ""
-        self._bytes_done = 0
-        self._bytes_total = 0
-        self._speed = 0.0
-        # Jupyter display handle
-        self._jup_handle = None
+
+        self._bars: dict[str, Any] = {}  # item_id -> tqdm instance
+        self._positions: dict[str, int] = {}  # item_id -> stable position slot
+        self._next_position = 1  # 0 is reserved for the overall bar
+        self._overall_bar: Any = None
+        self._tqdm_cls: Any = None
 
     # ── context manager ──────────────────────────────────────────────────────
 
-    def __enter__(self):
-        self._print_header()
+    def __enter__(self) -> "DownloadProgress":
+        try:
+            from tqdm.auto import tqdm as tqdm_cls
+        except ImportError:
+            # tqdm is a core dependency; this only triggers on a stale
+            # install. Degrade gracefully to plain logging rather than
+            # crashing the whole download.
+            logging.getLogger("pygeofetch.core.logging").warning(
+                "tqdm not installed — falling back to plain log lines for "
+                "download progress. Run: pip install tqdm"
+            )
+            self._tqdm_cls = None
+            return self
+
+        self._tqdm_cls = tqdm_cls
+        dest = f"  →  {self.destination}" if self.destination else ""
+        self._overall_bar = tqdm_cls(
+            total=self.total,
+            position=0,
+            desc=f"⬇ {self.total} scene{'s' if self.total != 1 else ''}{dest}",
+            unit="scene",
+            dynamic_ncols=True,
+            leave=True,
+            bar_format="{desc}  {bar}  {n_fmt}/{total_fmt}  [{elapsed}]",
+        )
         return self
 
-    def __exit__(self, *_):
-        self._print_footer()
+    def __exit__(self, *_exc) -> None:
+        with self._lock:
+            for bar in list(self._bars.values()):
+                bar.close()
+            self._bars.clear()
+            if self._overall_bar is not None:
+                self._overall_bar.close()
+
+        if self._tqdm_cls is None:
+            elapsed = time.time() - self._start
+            if self._failed == 0:
+                print(f"✓ All {self._completed} scenes downloaded  ({elapsed:.1f}s)")
+            else:
+                print(
+                    f"✓ {self._completed} succeeded, ✗ {self._failed} failed  "
+                    f"({elapsed:.1f}s)"
+                )
 
     # ── public API ───────────────────────────────────────────────────────────
 
-    def start_item(self, scene_id: str, expected_bytes: int = 0) -> None:
-        with self._lock:
-            self._current_id = scene_id
-            self._bytes_done = 0
-            self._bytes_total = expected_bytes
-            self._speed = 0.0
-            self._spin_i = 0
-            self._render()
+    def start_item(self, item_id: str, expected_bytes: int = 0) -> None:
+        """Begin tracking a new download item. Safe to call concurrently
+        for different item_ids from multiple threads."""
+        if self._tqdm_cls is None:
+            logging.getLogger("pygeofetch.core.logging").info(
+                "Downloading %s", _truncate(item_id, 60)
+            )
+            return
 
-    def update(self, bytes_done: int, speed_bps: float = 0.0) -> None:
         with self._lock:
-            self._bytes_done = bytes_done
-            self._speed = speed_bps
-            self._spin_i = (self._spin_i + 1) % len(_SPINNER)
-            self._render()
+            existing = self._bars.get(item_id)
+            if existing is not None:
+                existing.close()
+
+            position = self._positions.get(item_id)
+            if position is None:
+                position = self._next_position
+                self._positions[item_id] = position
+                self._next_position += 1
+
+            bar = self._tqdm_cls(
+                total=expected_bytes or None,
+                position=position,
+                desc=_truncate(item_id, 45),
+                unit="B",
+                unit_scale=True,
+                unit_divisor=1024,
+                dynamic_ncols=True,
+                leave=False,
+            )
+            self._bars[item_id] = bar
+
+    def update(self, item_id: str, bytes_done: int, speed_bps: float = 0.0) -> None:
+        """
+        Report incremental progress for item_id. Call this repeatedly
+        (e.g. once per HTTP chunk) with the CUMULATIVE bytes downloaded so
+        far — this is what makes the bar move in real time rather than
+        jumping straight from 0% to 100% when the download finishes.
+        """
+        if self._tqdm_cls is None:
+            return
+
+        with self._lock:
+            bar = self._bars.get(item_id)
+            if bar is None:
+                return
+            delta = bytes_done - bar.n
+            if delta > 0:
+                bar.update(delta)
+            if speed_bps > 0:
+                bar.set_postfix_str(self._fmt_speed(speed_bps), refresh=False)
 
     def complete_item(
-        self, success: bool, bytes_total: int = 0, duration: float = 0.0
+        self, item_id: str, success: bool, bytes_total: int = 0, duration: float = 0.0
     ) -> None:
+        """Mark item_id as finished (success or failure)."""
         with self._lock:
             if success:
                 self._completed += 1
             else:
                 self._failed += 1
-            self._print_item_done(success, bytes_total, duration)
-            self._current_id = ""
+
+            if self._tqdm_cls is not None:
+                bar = self._bars.pop(item_id, None)
+                if bar is not None:
+                    if bytes_total and bar.total is None:
+                        bar.total = bytes_total
+                    if bytes_total and bar.n < bytes_total:
+                        bar.update(bytes_total - bar.n)
+                    icon = "✓" if success else "✗"
+                    bar.set_description_str(f"{icon} {_truncate(item_id, 43)}")
+                    bar.refresh()
+                    bar.close()
+                if self._overall_bar is not None:
+                    self._overall_bar.update(1)
+            else:
+                icon = "✓" if success else "✗"
+                size = self._fmt_size(bytes_total)
+                logging.getLogger("pygeofetch.core.logging").info(
+                    "  %s %-45s %10s  %5.1fs",
+                    icon,
+                    _truncate(item_id, 45),
+                    size,
+                    duration,
+                )
 
     # ── formatting helpers ────────────────────────────────────────────────────
 
@@ -429,212 +607,59 @@ class DownloadProgress:
             return f"{bps / 1024:.0f} KB/s"
         return f"{bps / 1048576:.1f} MB/s"
 
-    def _bar_ansi(self, pct: float, width: int = 28) -> str:
-        done = int(width * max(0.0, min(1.0, pct)))
-        return _cg("█" * done) + _cd("░" * (width - done))
 
-    def _bar_plain(self, pct: float, width: int = 28) -> str:
-        done = int(width * max(0.0, min(1.0, pct)))
-        return "█" * done + "░" * (width - done)
+# ══════════════════════════════════════════════════════════════════════════════
+#  PER-CHUNK PROGRESS BRIDGE (used by provider download() implementations)
+# ══════════════════════════════════════════════════════════════════════════════
 
-    # ── Jupyter rendering ────────────────────────────────────────────────────
+_progress_local = threading.local()
 
-    def _jup_html_item(
-        self,
-        scene_id: str,
-        success: bool | None,
-        bytes_total: int,
-        duration: float,
-        bytes_done: int = 0,
-        speed: float = 0,
-    ) -> str:
-        """Build an HTML row for a single download item."""
-        sid = (scene_id or "")[:50]
-        size = self._fmt_size(bytes_total or bytes_done)
-        dur = f"{duration:.1f}s" if duration else ""
-        spd = self._fmt_speed(speed)
 
-        if success is None:
-            # In-progress
-            pct = (bytes_done / bytes_total * 100) if bytes_total > 0 else 0
-            pct_str = f"{pct:.0f}%" if bytes_total > 0 else "…"
-            bar_fill = f"{pct:.1f}%" if bytes_total > 0 else "0%"
-            spd_str = f"<span style='color:#888'>{spd}</span>" if spd else ""
-            size_str = (
-                (
-                    f"<span style='color:#888'>{self._fmt_size(bytes_done)} / {size}</span>"
-                )
-                if bytes_total
-                else ""
-            )
-            return (
-                f"<div style='display:flex;align-items:center;gap:10px;"
-                f"padding:4px 0;font-family:monospace;font-size:13px'>"
-                f"<span style='color:#f0c040'>⟳</span>"
-                f"<span style='min-width:360px;color:#ddd'>{sid}</span>"
-                f"<div style='flex:1;background:#333;border-radius:4px;"
-                f"height:8px;min-width:140px'>"
-                f"<div style='background:#4caf50;width:{bar_fill};"
-                f"height:8px;border-radius:4px;transition:width 0.3s'></div>"
-                f"</div>"
-                f"<span style='min-width:60px;color:#aaa'>{pct_str}</span>"
-                f"{size_str} {spd_str}"
-                f"</div>"
-            )
-        if success:
-            return (
-                f"<div style='display:flex;align-items:center;gap:10px;"
-                f"padding:4px 0;font-family:monospace;font-size:13px'>"
-                f"<span style='color:#4caf50'>✓</span>"
-                f"<span style='min-width:360px;color:#eee'>{sid}</span>"
-                f"<span style='color:#4caf50;min-width:80px'>{size}</span>"
-                f"<span style='color:#888'>{dur}</span>"
-                f"</div>"
-            )
-        return (
-            f"<div style='display:flex;align-items:center;gap:10px;"
-            f"padding:4px 0;font-family:monospace;font-size:13px'>"
-            f"<span style='color:#f44336'>✗</span>"
-            f"<span style='min-width:360px;color:#f44336'>{sid}</span>"
-            f"<span style='color:#f44336'>FAILED</span>"
-            f"</div>"
-        )
+def _set_active_progress(
+    progress: "DownloadProgress | None", item_id: str | None
+) -> None:
+    """
+    Internal: called by AdaptiveDownloader around each provider.download()
+    call, so that provider code (running on its own worker thread) can
+    report real-time chunk progress back to the right bar via
+    report_download_progress() below, without every provider needing an
+    explicit progress-callback parameter threaded through its signature.
 
-    def _jup_render_full(self) -> None:
-        """Re-render the complete Jupyter progress widget."""
-        if not _JUPYTER:
-            return
-        try:
-            from IPython.display import HTML, display
-        except ImportError:
-            return
+    Uses thread-local storage — safe for ThreadPoolExecutor, since each
+    worker thread gets its own isolated (progress, item_id) pair and
+    parallel downloads never cross-report into each other's bars.
+    """
+    _progress_local.progress = progress
+    _progress_local.item_id = item_id
 
-        done = self._completed + self._failed
-        total = self.total
-        pct = done / total * 100 if total else 0
-        overall_bar = f"{pct:.0f}%"
 
-        rows = "".join(self._jup_rows)
-        # Add in-progress row for current item
-        if self._current_id:
-            rows += self._jup_html_item(
-                self._current_id,
-                None,
-                self._bytes_total,
-                0,
-                self._bytes_done,
-                self._speed,
-            )
+def report_download_progress(
+    bytes_done: int, bytes_total: int = 0, speed_bps: float = 0.0
+) -> None:
+    """
+    Call this from inside a provider's download() streaming loop — once
+    per chunk written — to drive real-time progress bar updates.
 
-        elapsed = time.time() - self._start
-        html = (
-            f"<div style='background:#1e1e2e;border-radius:8px;padding:16px 20px;"
-            f"font-family:monospace;margin:8px 0'>"
-            # Header
-            f"<div style='color:#7c7cff;font-weight:bold;font-size:14px;"
-            f"margin-bottom:12px'>⬇ DOWNLOADING  {total} scene{'s' if total != 1 else ''}"
-            f"{'  →  ' + self.destination if self.destination else ''}</div>"
-            # Overall progress bar
-            f"<div style='display:flex;align-items:center;gap:10px;margin-bottom:12px'>"
-            f"<span style='color:#888;font-size:12px'>{done}/{total}</span>"
-            f"<div style='flex:1;background:#333;border-radius:4px;height:10px'>"
-            f"<div style='background:linear-gradient(90deg,#4caf50,#81c784);"
-            f"width:{pct:.1f}%;height:10px;border-radius:4px;"
-            f"transition:width 0.3s'></div></div>"
-            f"<span style='color:#888;font-size:12px'>{overall_bar}</span>"
-            f"<span style='color:#555;font-size:12px'>{elapsed:.0f}s</span>"
-            f"</div>"
-            # Item rows
-            f"<div style='border-top:1px solid #333;padding-top:10px'>{rows}</div>"
-            f"</div>"
-        )
+    Safe to call unconditionally, including when there is no active
+    progress bar (e.g. provider.download() called directly outside
+    AdaptiveDownloader, or in a context where progress display is off):
+    becomes a no-op in that case rather than raising.
 
-        if self._jup_handle is None:
-            self._jup_handle = display(HTML(html), display_id=True)
-        else:
-            self._jup_handle.update(HTML(html))
+    Example (inside a provider's streaming download loop)::
 
-    # ── header / footer ──────────────────────────────────────────────────────
+        from pygeofetch.core.logging import report_download_progress
 
-    def _print_header(self) -> None:
-        self._jup_rows: list[str] = []
-
-        if _JUPYTER:
-            self._jup_render_full()
-            return
-
-    def _render(self) -> None:
-        """Live in-progress render — terminal spinner or Jupyter bar."""
-        if _JUPYTER:
-            self._jup_render_full()
-            return
-        if not _TTY:
-            return
-
-        spin = _cg(_SPINNER[self._spin_i])
-        idx = self._completed + self._failed + 1
-        id_ = (self._current_id or "")[:42]
-        pct = (self._bytes_done / self._bytes_total) if self._bytes_total > 0 else 0.0
-        bar = self._bar_ansi(pct)
-        done_ = self._fmt_size(self._bytes_done)
-        tot_ = self._fmt_size(self._bytes_total)
-        spd_ = self._fmt_speed(self._speed)
-        size_str = f"{done_} / {tot_}" if self._bytes_total > 0 else done_
-        spd_str = f"  {_cy(spd_)}" if spd_ else ""
-
-        line = (
-            f"  {spin}  [{_cd(f'{idx}/{self.total}')}]  "
-            f"{_cb(id_):<52}  [{bar}]  "
-            f"{_cd(size_str):<20}{spd_str}"
-        )
-        sys.stdout.write("\r" + line + "  ")
-        sys.stdout.flush()
-
-    def _print_item_done(
-        self, success: bool, bytes_total: int, duration: float
-    ) -> None:
-        """Finalise a completed item."""
-        idx = self._completed + self._failed
-        id_ = (self._current_id or "")[:42]
-        size_str = self._fmt_size(bytes_total)
-        dur_str = f"{duration:.1f}s"
-
-        if _JUPYTER:
-            row = self._jup_html_item(self._current_id, success, bytes_total, duration)
-            self._jup_rows.append(row)
-            self._jup_render_full()
-            return
-
-        # Terminal
-        if _TTY:
-            sys.stdout.write("\r" + " " * 120 + "\r")
-            sys.stdout.flush()
-
-        if success:
-            icon = _cg("✓")
-            (
-                f"  {icon}  [{_cd(f'{idx}/{self.total}')}]  "
-                f"{_cb(id_):<52}  {_cg(size_str):<12}  {_cd(dur_str)}"
-            )
-        else:
-            icon = _cr("✗")
-            f"  {icon}  [{_cd(f'{idx}/{self.total}')}]  {_cr(id_):<52}  {_cr('FAILED')}"
-
-    def _print_footer(self) -> None:
-        time.time() - self._start
-
-        if _JUPYTER:
-            self._jup_render_full()
-            return
-
-        if self._failed == 0:
-            _cg(_cb(f"✓  All {self._completed} scenes downloaded"))
-        else:
-            (
-                _cb(_cg(f"✓ {self._completed} succeeded"))
-                + "  "
-                + _cb(_cr(f"✗ {self._failed} failed"))
-            )
+        bytes_written = 0
+        with open(output_file, "wb") as f:
+            for chunk in response.iter_bytes(chunk_size=chunk_size):
+                f.write(chunk)
+                bytes_written += len(chunk)
+                report_download_progress(bytes_written, total_bytes)
+    """
+    progress = getattr(_progress_local, "progress", None)
+    item_id = getattr(_progress_local, "item_id", None)
+    if progress is not None and item_id is not None:
+        progress.update(item_id, bytes_done, speed_bps)
 
 
 # ── Backward compat ───────────────────────────────────────────────────────────

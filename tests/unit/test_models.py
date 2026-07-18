@@ -2,18 +2,21 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from pygeofetch.models.download_task import (
+    DownloadOptions,
+    DownloadResult,
+    DownloadStatus,
+    PostProcessAction,
+)
 from pygeofetch.models.satellite_data import (
-    DataFormat, ProcessingLevel, SatelliteAsset, SatelliteData,
+    SatelliteData,
 )
 from pygeofetch.models.search_query import BoundingBox, SearchQuery
-from pygeofetch.models.download_task import (
-    DownloadOptions, DownloadResult, DownloadStatus, PostProcessAction, RetryStrategy,
-)
-from pygeofetch.models.user_auth import AuthSession, AuthType, Credentials
+from pygeofetch.models.user_auth import AuthSession, Credentials
 
 
 class TestBoundingBox:

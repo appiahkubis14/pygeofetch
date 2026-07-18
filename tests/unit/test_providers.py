@@ -1,12 +1,11 @@
 """Unit tests for PyGeoFetch providers."""
 
 from __future__ import annotations
-from unittest.mock import MagicMock, patch
 
 import pytest
 
-from pygeofetch.providers import get_provider, list_providers, get_free_providers
 from pygeofetch.models.search_query import BoundingBox, SearchQuery
+from pygeofetch.providers import get_free_providers, get_provider, list_providers
 
 
 class TestProviderRegistry:

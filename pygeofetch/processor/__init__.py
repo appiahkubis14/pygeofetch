@@ -17,7 +17,14 @@ Usage::
 from __future__ import annotations
 
 from pygeofetch.processor.indices import SpectralIndex
+from pygeofetch.processor.landsat import LandsatExtractor, LandsatScene
 from pygeofetch.processor.loader import DataLoader
 from pygeofetch.processor.stacker import BandStacker
 
-__all__ = ["DataLoader", "SpectralIndex", "BandStacker"]
+__all__ = [
+    "DataLoader",
+    "SpectralIndex",
+    "BandStacker",
+    "LandsatExtractor",
+    "LandsatScene",
+]

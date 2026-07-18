@@ -36,6 +36,7 @@ dependencies = [
     "requests>=2.31",
     "anyio>=4.2",
     "numpy>=1.26",
+    "tqdm>=4.66",
 ]
 
 [project.optional-dependencies]
@@ -81,6 +82,29 @@ viz = [
     "leafmap>=0.30",
     "folium>=0.16",
     "matplotlib>=3.7",
+    "localtileserver>=1.0.0",
+    "ipysheet>=0.6.0",
+    "ipyleaflet>=0.17.0",
+    "ipywidgets>=8.0.0",
+    "ipyevents>=2.0.0",
+    "ipyfilechooser>=0.6.0",
+    "sidecar>=0.6.0",
+    "bokeh>=3.0.0",
+    "seaborn>=0.12.0",
+    "plotly>=5.14.0",
+    "whitebox>=2.3.0",
+    "whiteboxgui>=2.3.0",
+    "geemap>=0.28.0",
+    "osmnx>=1.7.0",
+    "contextily>=1.5.0",
+    "xyzservices>=2023.10.0",
+    "mapclassify>=2.5.0",
+    "geoplot>=0.5.0",
+    "mplleaflet>=0.0.5",
+    "branca>=0.6.0",
+    "plotly-geo>=1.0.0",
+    "keplergl>=0.3.0",
+    "streamlit>=1.28.0",
 ]
 
 # Cloud providers
@@ -111,6 +135,13 @@ dev = [
     "mypy>=1.8",
     "build>=1.0",
     "twine>=5.0",
+]
+
+insar-full = [
+    "snaphu>=0.1",
+    "scipy>=1.12",
+    "mintpy>=1.5",
+    "pyaps3>=0.3",
 ]
 
 # Everything

@@ -254,7 +254,12 @@ class AuthManager:
             access_key: AWS access key.
             secret_key: AWS secret key.
             auth_type: Override auth type string.
-            **extra: Additional provider-specific credentials.
+            **extra: Additional provider-specific credentials, stored under
+                     Credentials.extra and passed through to the provider's
+                     authenticate() method. For Copernicus accounts with
+                     Two-Factor Authentication enabled, pass the current
+                     6-digit code as totp="123456" — CDSE requires this on
+                     every login when 2FA is active on the account.
 
         Raises:
             ValueError: If no credentials are provided.
@@ -264,6 +269,9 @@ class AuthManager:
             auth.add("usgs", username="user", password="pass")
             auth.add("planet", api_key="pk.abc123")
             auth.add("copernicus", username="user@example.com", password="pass")
+            # Copernicus account with 2FA enabled:
+            auth.add("copernicus", username="user@example.com", password="pass",
+                     totp="123456")
         """
         cred_data: dict[str, Any] = {"provider": provider}
         if username:
@@ -284,7 +292,14 @@ class AuthManager:
             cred_data["secret_key"] = secret_key
         if auth_type:
             cred_data["auth_type"] = auth_type
-        cred_data.update(extra)
+        # IMPORTANT: nest remaining kwargs under the `extra` field rather than
+        # spreading them as top-level keys. Credentials does not declare
+        # arbitrary fields (pydantic default extra="ignore"), so anything
+        # passed here as a bare top-level key — e.g. totp="123456" for
+        # Copernicus 2FA-enabled accounts — would previously be silently
+        # dropped before ever reaching the provider's authenticate() call.
+        if extra:
+            cred_data["extra"] = extra
 
         if len(cred_data) <= 1:  # Only 'provider' key
             msg = f"No credentials provided for {provider!r}"

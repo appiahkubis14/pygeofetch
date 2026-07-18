@@ -91,12 +91,40 @@ class AdaptiveDownloader:
         destination.mkdir(parents=True, exist_ok=True)
 
         provider = self._get_provider(data.provider)
-        _item_start = __import__("time").time()
-        _dl_progress = globals().get("_active_progress")
-        if _dl_progress:
-            _dl_progress.start_item(str(data.id))
-        else:
-            logger.info("Downloading %s", str(data.id)[:60])
+
+        # Resume support: skip re-downloading if a valid file already exists.
+        # `options.resume` was previously a declared-but-unused field — this
+        # is the actual implementation. We can't call provider.download() to
+        # find out where it WOULD write (that IS the download), so instead
+        # we predict the likely output location using the same naming
+        # convention providers use (destination/provider/<name-or-id>.*)
+        # and validate anything we find there.
+        if options.resume:
+            existing = self._find_existing_download(data, destination)
+            if existing is not None:
+                is_valid, err_msg = self._validate_downloaded_file(existing)
+                if is_valid:
+                    logger.info(
+                        "  ↷ %-45s already downloaded, skipping (resume=True)",
+                        str(data.id)[:45],
+                    )
+                    return DownloadResult(
+                        status=DownloadStatus.COMPLETED,
+                        data_id=data.id,
+                        provider=data.provider,
+                        output_path=existing,
+                        output_paths=[existing],
+                        bytes_downloaded=existing.stat().st_size,
+                        from_cache=True,
+                    )
+                logger.info(
+                    "  Found existing file for %s but it failed validation "
+                    "(%s) — re-downloading.",
+                    str(data.id)[:45],
+                    err_msg,
+                )
+
+        logger.debug("Starting download: %s", str(data.id)[:60])
 
         for attempt in range(options.retry_attempts + 1):
             try:
@@ -206,12 +234,23 @@ class AdaptiveDownloader:
             """Download one item and return (idx, result, bytes, duration)."""
             import time as _it
 
+            from pygeofetch.core.logging import _set_active_progress
+
+            item_id = str(data.id)
             t0 = _it.time()
-            dp.start_item(str(data.id))
+            dp.start_item(item_id)
+            # Make this DownloadProgress instance + item_id visible to
+            # report_download_progress() calls made from inside
+            # provider.download()'s streaming loop, via thread-local
+            # storage — each worker thread gets its own isolated context,
+            # so concurrent downloads never cross-report into each
+            # other's bars.
+            _set_active_progress(dp, item_id)
             try:
                 result = self.download(data, destination / data.provider, options)
                 dur = _it.time() - t0
                 dp.complete_item(
+                    item_id,
                     success=result.success,
                     bytes_total=result.bytes_downloaded or 0,
                     duration=dur,
@@ -225,8 +264,10 @@ class AdaptiveDownloader:
                     provider=data.provider,
                     error=str(exc),
                 )
-                dp.complete_item(success=False, duration=dur)
+                dp.complete_item(item_id, success=False, duration=dur)
                 return idx, result
+            finally:
+                _set_active_progress(None, None)
 
         with ThreadPoolExecutor(max_workers=options.parallel) as executor:
             futures = {
@@ -618,6 +659,63 @@ class AdaptiveDownloader:
                 logger.warning("rasterio not installed; skipping merge action")
 
         return result
+
+    def _find_existing_download(
+        self, data: "SatelliteData", destination: Path
+    ) -> Path | None:
+        """
+        Look for a file that was already downloaded for this scene, so
+        `download()` can skip re-downloading it when `options.resume=True`.
+
+        We don't know in advance exactly what path/filename a provider's
+        download() would use (that's provider-specific — e.g. Copernicus
+        writes destination/copernicus/<SAFE-name>.zip), so this searches:
+
+          1. destination/<provider>/  — the standard per-provider subfolder
+             every provider is routed through by download_many()
+          2. destination/  — flat, in case this scene was downloaded
+             directly via provider.download() without the subfolder routing
+
+        matching on a distinctive substring of the scene's name/id, across
+        common satellite data extensions. This deliberately does NOT try to
+        be exact — any plausible match is handed to _validate_downloaded_file()
+        afterwards, which is the actual authority on whether the file is
+        usable, so a false-positive glob match just falls through to
+        re-downloading rather than silently reusing a wrong file.
+        """
+        name = data.properties.get("name") if data.properties else None
+        candidates_dirs = [destination / data.provider, destination]
+
+        # Try the exact expected filename patterns first (fast path, no glob)
+        if name:
+            for d in candidates_dirs:
+                for ext in (".zip", ".tif", ".tiff", ".nc", ".SAFE.zip"):
+                    p = d / f"{name}{ext}"
+                    if p.exists() and p.is_file():
+                        return p
+
+        # Fall back to a substring glob match — use a distinguishing chunk
+        # of the name (or id) rather than the whole string, since providers
+        # sometimes sanitise/truncate filenames.
+        chunk = None
+        if name:
+            # Last underscore-separated segment is usually a unique product
+            # identifier (e.g. "...4D5F" in a Sentinel-1 SAFE name)
+            parts = name.replace(".SAFE", "").split("_")
+            chunk = parts[-1] if parts else None
+        if not chunk and data.id:
+            chunk = str(data.id)[:8]
+        if not chunk:
+            return None
+
+        for d in candidates_dirs:
+            if not d.exists():
+                continue
+            matches = [p for p in d.iterdir() if p.is_file() and chunk in p.name]
+            if matches:
+                return matches[0]
+
+        return None
 
     def _validate_downloaded_file(self, path) -> tuple:
         """

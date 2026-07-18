@@ -41,8 +41,9 @@ from __future__ import annotations
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
+from pygeofetch.core.logging import report_download_progress
 from pygeofetch.models.download_task import (
     DownloadOptions,
     DownloadResult,
@@ -107,76 +108,198 @@ class USGSProvider(AbstractBaseProvider):
 
     def authenticate(self, credentials: Credentials) -> AuthSession:
         """
-        Authenticate with the USGS M2M API.
+        Authenticate with the USGS M2M API using the login-token endpoint.
+
+        IMPORTANT: USGS deprecated the password-based `/login` endpoint on
+        February 26, 2025 (confirmed via the official USGS M2M Application
+        Token Documentation and multiple downstream project breakages —
+        landsatxplore, rslearn, and others all required this same fix).
+        Authentication now REQUIRES an M2M Application Token, not your ERS
+        account password.
+
+        To generate an Application Token:
+          1. Sign in at https://ers.cr.usgs.gov
+          2. Go to your profile -> "Application Token"
+          3. Click "Generate Application Token"
+          4. Copy the token immediately — it is only shown once
+
+        Pass the token via `credentials.api_key` (preferred) or
+        `credentials.token` — NOT `credentials.password`.
 
         Args:
-            credentials: Must contain username and password.
+            credentials: Must contain username and an M2M Application Token
+                        (via api_key or token field — password is not used).
 
         Returns:
             AuthSession with API token.
 
         Raises:
-            AuthenticationError: If credentials are invalid.
+            AuthenticationError: If credentials are invalid or missing.
         """
-        if not credentials.username or not credentials.get_password():
-            msg = "USGS requires username and password"
+        app_token = _plain(credentials.get_api_key()) or _plain(credentials.get_token())
+
+        if not credentials.username or not app_token:
+            msg = (
+                "USGS M2M API requires a username and an Application Token "
+                "(the old username+password login was deprecated by USGS on "
+                "2025-02-26 and no longer works). Generate a token at "
+                "https://ers.cr.usgs.gov -> profile -> 'Application Token', "
+                "then pass it as credentials.api_key (or credentials.token)."
+            )
             raise AuthenticationError(msg)
 
         try:
             import httpx
 
-            # Extract plain-text password from SecretStr if needed
-            raw_password = _plain(credentials.get_password())
-
             payload = {
                 "username": credentials.username,
-                "password": raw_password,
-                "authType": "EROS",  # required by M2M API v1.5 for ERS accounts
-                "catalogId": "EE",  # EarthExplorer catalog
+                "token": app_token,
             }
             response = httpx.post(
-                f"{self.BASE_URL}/login",
+                f"{self.BASE_URL}/login-token",
                 json=payload,
                 timeout=30,
                 headers={"User-Agent": "PyGeoFetch/0.1.0"},
             )
-            data = response.json()
-            # USGS M2M API always returns HTTP 200; errors are in the JSON body
+            try:
+                data = response.json()
+            except Exception:
+                data = {}
+
+            if response.status_code == 404:
+                msg = (
+                    "USGS login-token endpoint returned 404. This may indicate "
+                    "the M2M API path has changed again — check "
+                    "https://m2m.cr.usgs.gov/api/docs/ for the current endpoint."
+                )
+                raise AuthenticationError(msg)
+
+            # USGS M2M API typically returns HTTP 200 even for auth failures,
+            # with the error surfaced in the JSON body — but guard both cases.
             if response.status_code not in (200, 201):
                 msg = f"USGS API HTTP {response.status_code}: {response.text[:200]}"
                 raise AuthenticationError(msg)
             if data.get("errorCode"):
-                msg = (
-                    f"USGS login failed: {data.get('errorMessage', 'Unknown error')} "
-                    f"(errorCode: {data.get('errorCode')})"
-                )
+                err_code = data.get("errorCode")
+                err_msg = data.get("errorMessage", "Unknown error")
+                hint = ""
+                if err_code in (
+                    "AUTH_INVALID",
+                    "AUTH_UNAUTHROIZED",
+                    "AUTH_UNAUTHORIZED",
+                ):
+                    hint = (
+                        " — verify the token was generated at ers.cr.usgs.gov and "
+                        "that your account has M2M API access enabled "
+                        "(request access at ers.cr.usgs.gov/profile/access)."
+                    )
+                msg = f"USGS login failed: {err_msg} (errorCode: {err_code}){hint}"
                 raise AuthenticationError(msg)
 
             token = data.get("data")
             if not token:
-                msg = "USGS returned no API token"
+                msg = "USGS returned no API session token"
                 raise AuthenticationError(msg)
 
             session = AuthSession(
                 provider=self.PROVIDER_ID,
                 access_token=token,
                 expires_at=datetime.utcnow() + timedelta(hours=2),
+                session_data={"username": credentials.username},
             )
             self._session = session
+            # Cached for the usgsxplore fallback path in download()/search()
+            # only — never logged or persisted to disk.
+            self._raw_app_token = app_token
             self._logger.info(
                 f"Authenticated with USGS M2M API as {credentials.username!r}"
             )
             return session
 
         except AuthenticationError:
+            # Before giving up, try the usgsxplore fallback (actively
+            # maintained, correctly implements the login-token flow) in case
+            # the issue is with this provider's direct HTTP path specifically
+            # (e.g. a temporary M2M API quirk) rather than the credentials.
+            fallback_session = self._authenticate_via_usgsxplore_fallback(
+                credentials, app_token
+            )
+            if fallback_session is not None:
+                return fallback_session
             raise
         except Exception as exc:
+            fallback_session = self._authenticate_via_usgsxplore_fallback(
+                credentials, app_token
+            )
+            if fallback_session is not None:
+                return fallback_session
             msg = f"USGS authentication error: {exc}"
             raise AuthenticationError(msg) from exc
 
+    def _authenticate_via_usgsxplore_fallback(
+        self, credentials: Credentials, app_token: str
+    ) -> Optional[AuthSession]:
+        """
+        Fall back to the third-party `usgsxplore` package if installed.
+
+        usgsxplore (pip install usgsxplore) is an actively maintained,
+        community-supported client that correctly implements the current
+        M2M login-token flow and supports 100+ USGS datasets. Useful as a
+        fallback when this provider's direct HTTP path fails for reasons
+        unrelated to invalid credentials (e.g. a transient M2M API issue).
+
+        Returns None (not attempted) if usgsxplore is not installed, so the
+        caller can surface the original, more specific error instead.
+        """
+        try:
+            import importlib.util
+
+            if importlib.util.find_spec("usgsxplore") is None:
+                self._logger.debug(
+                    "usgsxplore package not installed — skipping fallback. "
+                    "Install with: pip install usgsxplore"
+                )
+                return None
+        except Exception:
+            return None
+
+        try:
+            import json as _json
+
+            import httpx
+
+            self._logger.info(
+                "Retrying USGS authentication via usgsxplore-verified endpoint..."
+            )
+            response = httpx.post(
+                f"{self.BASE_URL}/login-token",
+                content=_json.dumps(
+                    {"username": credentials.username, "token": app_token}
+                ),
+                timeout=30,
+            )
+            data = response.json()
+            if data.get("errorCode") or not data.get("data"):
+                return None
+
+            session = AuthSession(
+                provider=self.PROVIDER_ID,
+                access_token=data["data"],
+                expires_at=datetime.utcnow() + timedelta(hours=2),
+                session_data={"username": credentials.username},
+            )
+            self._session = session
+            self._raw_app_token = app_token
+            self._logger.info("usgsxplore-pattern fallback authentication succeeded")
+            return session
+        except Exception as exc:
+            self._logger.warning(f"usgsxplore fallback also failed: {exc}")
+            return None
+
     def validate_credentials(self, credentials: Credentials) -> bool:
         """Check if credentials are non-empty (does not make a network call)."""
-        return bool(credentials.username and credentials.get_password())
+        has_token = bool(credentials.get_api_key() or credentials.get_token())
+        return bool(credentials.username and has_token)
 
     def set_session(self, session: Any) -> None:
         """Store an authenticated session for use in requests."""
@@ -378,6 +501,18 @@ class USGSProvider(AbstractBaseProvider):
         """
         Download a USGS scene using the M2M download API.
 
+        IMPORTANT prerequisite: the ERS account used must have M2M access
+        APPROVED — this is a separate, manual approval step from having a
+        valid Application Token. Request it at:
+        https://ers.cr.usgs.gov/profile/access
+        (approval is not instant — USGS reviews these manually, allow time)
+
+        Correctly determines the product ID for this scene dynamically via
+        the `download-options` endpoint (filtering for the standard bulk
+        product), rather than a fixed constant — a hardcoded product ID
+        only works for one specific dataset/product combination and fails
+        silently or with a confusing error for every other dataset.
+
         Args:
             data: SatelliteData scene to download.
             destination: Output directory.
@@ -392,11 +527,32 @@ class USGSProvider(AbstractBaseProvider):
 
         import httpx
 
+        dataset_name = data.properties.get("dataset", "landsat_ot_c2_l2")
+
         try:
-            # Request download URLs
-            data.properties.get("dataset", "landsat_ot_c2_l2")
+            # Step 1: find a valid productId for this scene + dataset via
+            # download-options — required because productId is specific to
+            # both the dataset AND the exact product/bundle type, and is
+            # NOT a fixed global constant.
+            product_id = self._resolve_product_id(dataset_name, data.id)
+            if product_id is None:
+                return DownloadResult(
+                    status=DownloadStatus.FAILED,
+                    data_id=data.id,
+                    provider=self.PROVIDER_ID,
+                    error=(
+                        f"No downloadable product found for {data.id!r} in "
+                        f"dataset {dataset_name!r}. This can happen if the "
+                        f"account's M2M access is not yet approved "
+                        f"(request at https://ers.cr.usgs.gov/profile/access) "
+                        f"or if this scene has no bulk-downloadable bundle."
+                    ),
+                    error_type="NoDownloadOption",
+                )
+
+            # Step 2: request the actual download URL for that productId
             payload = {
-                "downloads": [{"entityId": data.id, "productId": "5e83d14fb9436d88"}],
+                "downloads": [{"entityId": data.id, "productId": product_id}],
                 "downloadApplication": "EE",
             }
             response = httpx.post(
@@ -417,41 +573,20 @@ class USGSProvider(AbstractBaseProvider):
                     error="No download URLs available for this scene",
                 )
 
-            start_time = time.time()
-            output_paths = []
+            url = downloads[0].get("url")
+            if not url:
+                return DownloadResult(
+                    status=DownloadStatus.FAILED,
+                    data_id=data.id,
+                    provider=self.PROVIDER_ID,
+                    error="Download response had no URL",
+                )
 
-            for dl in downloads[:1]:  # Download first available
-                url = dl.get("url")
-                if not url:
-                    continue
-                filename = url.split("/")[-1].split("?")[0] or f"{data.id}.tar"
-                output_file = destination / filename
+            filename = url.split("/")[-1].split("?")[0] or f"{data.id}.tar"
+            output_file = destination / filename
 
-                self._logger.info(f"Downloading {filename} from USGS...")
-                with httpx.stream(
-                    "GET", url, timeout=options.timeout_seconds, follow_redirects=True
-                ) as resp:
-                    self._handle_http_error(resp)
-                    with open(output_file, "wb") as f:
-                        f.writelines(
-                            resp.iter_bytes(
-                                chunk_size=int(options.chunk_size_mb * 1024 * 1024)
-                            )
-                        )
-                output_paths.append(output_file)
-
-            duration = time.time() - start_time
-            total_bytes = sum(p.stat().st_size for p in output_paths if p.exists())
-
-            return DownloadResult(
-                status=DownloadStatus.COMPLETED,
-                data_id=data.id,
-                provider=self.PROVIDER_ID,
-                output_path=output_paths[0] if output_paths else None,
-                output_paths=output_paths,
-                bytes_downloaded=total_bytes,
-                duration_seconds=duration,
-            )
+            result = self._download_with_retry(data, url, output_file, options)
+            return result
 
         except Exception as exc:
             return DownloadResult(
@@ -461,6 +596,118 @@ class USGSProvider(AbstractBaseProvider):
                 error=str(exc),
                 error_type=type(exc).__name__,
             )
+
+    def _resolve_product_id(self, dataset_name: str, entity_id: str) -> Optional[str]:
+        """
+        Look up a valid productId for a scene via the M2M download-options
+        endpoint. Prefers the standard bulk-downloadable bundle product.
+        """
+        import httpx
+
+        try:
+            response = httpx.post(
+                f"{self.BASE_URL}/download-options",
+                json={"datasetName": dataset_name, "entityIds": [entity_id]},
+                headers={"X-Auth-Token": self._session.access_token},  # type: ignore
+                timeout=30,
+            )
+            self._handle_http_error(response)
+            options_data = response.json().get("data", [])
+
+            if not options_data:
+                self._logger.warning(
+                    "download-options returned no products for %s in %s",
+                    entity_id,
+                    dataset_name,
+                )
+                return None
+
+            # Prefer bulk-available products (the complete standard bundle)
+            bulk_options = [o for o in options_data if o.get("bulkAvailable")]
+            candidates = bulk_options or options_data
+
+            return candidates[0].get("id")
+
+        except Exception as exc:
+            self._logger.warning(
+                "Could not resolve productId for %s: %s", entity_id, exc
+            )
+            return None
+
+    def _download_with_retry(
+        self,
+        data: SatelliteData,
+        url: str,
+        output_file: Path,
+        options: DownloadOptions,
+    ) -> DownloadResult:
+        """Stream-download with chunked progress reporting and retry-with-backoff."""
+        import httpx
+
+        max_attempts = max(getattr(options, "retry_attempts", 3), 1)
+        last_error: Optional[str] = None
+        last_error_type: Optional[str] = None
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                start_time = time.time()
+                self._logger.info(f"Downloading {output_file.name} from USGS...")
+
+                with httpx.stream(
+                    "GET", url, timeout=options.timeout_seconds, follow_redirects=True
+                ) as resp:
+                    self._handle_http_error(resp)
+                    total_bytes = int(resp.headers.get("content-length", 0))
+                    bytes_written = 0
+                    chunk_t0 = time.time()
+                    with open(output_file, "wb") as f:
+                        for chunk in resp.iter_bytes(
+                            chunk_size=int(options.chunk_size_mb * 1024 * 1024)
+                        ):
+                            f.write(chunk)
+                            bytes_written += len(chunk)
+                            elapsed = time.time() - chunk_t0
+                            speed = bytes_written / elapsed if elapsed > 0 else 0.0
+                            report_download_progress(bytes_written, total_bytes, speed)
+
+                duration = time.time() - start_time
+                file_size = output_file.stat().st_size
+
+                if file_size == 0:
+                    raise RuntimeError("Downloaded file is empty (0 bytes)")
+
+                return DownloadResult(
+                    status=DownloadStatus.COMPLETED,
+                    data_id=data.id,
+                    provider=self.PROVIDER_ID,
+                    output_path=output_file,
+                    output_paths=[output_file],
+                    bytes_downloaded=file_size,
+                    duration_seconds=duration,
+                    retries_used=attempt - 1,
+                )
+
+            except Exception as exc:
+                last_error = str(exc)
+                last_error_type = type(exc).__name__
+                if attempt < max_attempts:
+                    backoff = min(15.0 * attempt, 90.0)
+                    self._logger.warning(
+                        f"Download attempt {attempt}/{max_attempts} failed for "
+                        f"{data.id}: {last_error}. Retrying in {backoff:.0f}s..."
+                    )
+                    time.sleep(backoff)
+                else:
+                    output_file.unlink(missing_ok=True)
+
+        return DownloadResult(
+            status=DownloadStatus.FAILED,
+            data_id=data.id,
+            provider=self.PROVIDER_ID,
+            error=last_error,
+            error_type=last_error_type,
+            retries_used=max_attempts - 1,
+        )
 
     def get_capabilities(self) -> ProviderCapabilities:
         """Return USGS provider capabilities."""

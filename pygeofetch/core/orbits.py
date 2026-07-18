@@ -127,7 +127,9 @@ def fetch_orbit_file(
             )
             return None
 
-        download_url = f"{listing_url}{orbit_filename}"
+        # orbit_filename is the .EOF name (used for validity-window
+        # matching); the server actually serves it zipped as .EOF.zip
+        download_url = f"{listing_url}{orbit_filename}.zip"
         output_path = out_dir / orbit_filename
 
         logger.info("Downloading orbit file: %s", orbit_filename)
@@ -232,22 +234,63 @@ def _orbit_covers_datetime(filename: str, acq_dt: datetime) -> bool:
 
 
 def _find_matching_orbit_file(listing_html: str, acq_dt: datetime) -> str | None:
-    """Parse an HTML directory listing and find the orbit file covering acq_dt."""
-    pattern = r'href="(S1[ABCD]_OPER_AUX_(?:POEORB|RESORB)_[^"]+[.]EOF)"'
+    """
+    Parse an HTML directory listing and find the orbit file covering acq_dt.
+
+    ESA's step.esa.int listing serves orbit files as ZIPPED .EOF.zip
+    archives, not raw .EOF files — confirmed against the live directory
+    listing (e.g. S1A_OPER_AUX_POEORB_OPOD_..._V<start>_<end>.EOF.zip).
+    An earlier version of this regex required the match to end exactly at
+    ".EOF" before the closing quote, which never matched any real file
+    (all of them have ".zip" appended after ".EOF") — this caused every
+    orbit file lookup to silently report "not found" regardless of
+    whether a matching file actually existed on the server.
+    """
+    pattern = r'href="(S1[ABCD]_OPER_AUX_(?:POEORB|RESORB)_[^"]+\.EOF)\.zip"'
     filenames = re.findall(pattern, listing_html)
     for fname in filenames:
+        # fname here is the .EOF name (without .zip) for validity-window
+        # matching, matching what _orbit_covers_datetime expects
         if _orbit_covers_datetime(fname, acq_dt):
             return fname
     return None
 
 
 def _download_file(url: str, output_path: Path, timeout: int = 60) -> None:
-    """Stream-download a file to disk with progress logging."""
+    """
+    Stream-download a file to disk with progress logging.
+
+    If the downloaded content is a zip archive (as ESA's orbit files are —
+    served as .EOF.zip), it is extracted automatically and output_path is
+    overwritten with the extracted .EOF file's content, so callers always
+    get a usable, directly-readable orbit file on disk rather than a zip
+    they'd need to extract themselves.
+    """
+    import zipfile
+
+    zip_path = output_path.with_suffix(output_path.suffix + ".zip")
+
     with requests.get(url, stream=True, timeout=timeout) as r:
         r.raise_for_status()
         total_bytes = 0
-        with open(output_path, "wb") as f:
+        with open(zip_path, "wb") as f:
             for chunk in r.iter_content(chunk_size=1024 * 1024):  # 1 MB chunks
                 f.write(chunk)
                 total_bytes += len(chunk)
-        logger.debug("Downloaded %d bytes to %s", total_bytes, output_path)
+        logger.debug("Downloaded %d bytes to %s", total_bytes, zip_path)
+
+    try:
+        with zipfile.ZipFile(zip_path) as zf:
+            members = [m for m in zf.namelist() if m.endswith(".EOF")]
+            if not members:
+                # Not actually a zip, or doesn't contain an .EOF — treat
+                # the downloaded content as the orbit file directly
+                zip_path.rename(output_path)
+                return
+            with zf.open(members[0]) as src, open(output_path, "wb") as dst:
+                dst.write(src.read())
+        zip_path.unlink(missing_ok=True)
+    except zipfile.BadZipFile:
+        # Server returned a non-zip response (e.g. plain .EOF, or an
+        # error page) — use it as-is rather than failing outright
+        zip_path.rename(output_path)

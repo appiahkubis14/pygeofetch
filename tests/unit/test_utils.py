@@ -2,22 +2,32 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-import json
-
 import pytest
 
-from pygeofetch.utils.geo_utils import (
-    bbox_area_km2, bbox_intersects, bbox_to_geojson, bbox_to_wkt,
-    format_bbox_string, haversine_km, parse_bbox, point_in_bbox,
-)
 from pygeofetch.utils.file_utils import (
-    compute_checksum, ensure_directory, get_file_size, human_readable_size,
-    write_json, read_json,
+    compute_checksum,
+    ensure_directory,
+    get_file_size,
+    human_readable_size,
+    read_json,
+    write_json,
+)
+from pygeofetch.utils.geo_utils import (
+    bbox_area_km2,
+    bbox_intersects,
+    bbox_to_geojson,
+    bbox_to_wkt,
+    format_bbox_string,
+    haversine_km,
+    parse_bbox,
+    point_in_bbox,
 )
 from pygeofetch.utils.validators import (
-    validate_bbox_string, validate_cloud_cover_string,
-    validate_date_string, validate_provider_name, validate_url,
+    validate_bbox_string,
+    validate_cloud_cover_string,
+    validate_date_string,
+    validate_provider_name,
+    validate_url,
 )
 
 
@@ -105,9 +115,9 @@ class TestFileUtils:
         path = tmp_path / "data.json"
         data = {"key": "value", "number": 42}
         # write_json signature: write_json(path, data) OR write_json(data, path)
-        import inspect
-        sig = inspect.signature(write_json)
-        params = list(sig.parameters.keys())
+        # import inspect
+        # sig = inspect.signature(write_json)
+        # params = list(sig.parameters.keys())
         # call appropriately
         try:
             write_json(path, data)

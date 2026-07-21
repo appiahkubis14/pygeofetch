@@ -119,7 +119,7 @@ Register for a free ORCID at https://orcid.org/register
 |-------|-------|
 | Repository URL | `https://github.com/YOUR_USERNAME/PyGeoFetch` |
 | Branch | `main` |
-| Software version | `v1.0.0` |
+| Software version | `v1.3.0` |
 | Programming language | `Python` |
 | Software categories | `Earth Sciences, Remote Sensing, Geospatial` |
 | Submission type | `Original Software Publication` |
@@ -157,7 +157,7 @@ JOSS reviews are **open and public** on GitHub.
   ```
   @editorialbot check references
   @editorialbot generate pdf
-  @editorialbot set v1.0.0 as version
+  @editorialbot set v1.3.0 as version
   ```
 
 ---

@@ -21,7 +21,7 @@ def _lazy_load_providers() -> dict[str, type[AbstractBaseProvider]]:
     from pygeofetch.providers.copernicus import CopernicusProvider
     from pygeofetch.providers.digitalglobe import DigitalglobeProvider
     from pygeofetch.providers.earth_explorer_additional import (
-        EarthExplorerAdditionalProvider
+        EarthExplorerAdditionalProvider,
     )
     from pygeofetch.providers.element84 import Element84Provider
     from pygeofetch.providers.esa_scihub import EsaScihubProvider

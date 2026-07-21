@@ -374,7 +374,7 @@ class AdaptiveDownloader:
             if r and r.success and r.bytes_downloaded
         )
         # summary printed by DownloadProgress footer
-        return results  # noqa: RETURNVALUE
+        return results
 
     def _get_provider(self, provider_id: str) -> Any:
         """Get a provider instance with a fresh authenticated session."""
@@ -1268,7 +1268,8 @@ class AdaptiveDownloader:
             return
         # Emit lightweight progress update (counts only)
         n_done = sum(1 for r in results if r is not None)
-        _ = n_done  # noqa: USED as progress signal to callback
+        # n_done computed for the progress signal below, not used directly here
+        _ = n_done
         progress = DownloadProgress(total=len(results), destination="")
         try:
             self.progress_callback(progress)

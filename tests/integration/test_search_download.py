@@ -98,7 +98,7 @@ class TestDownloadFlow:
     #     mock_result.output_paths = []
 
     #     with patch.object(engine.downloader, "download_many", return_value=[mock_result]) as mock_dl:
-            
+
     #         call_args = mock_dl.call_args
     #         data_arg = call_args[0][0]
     #         assert isinstance(data_arg, list)

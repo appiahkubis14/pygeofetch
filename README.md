@@ -470,6 +470,25 @@ jupyter lab
 
 ---
 
+<p align="center">
+  <img src="docs/images/trend_map.png" width="48%" />
+  <img src="docs/images/trend_classification.png" width="48%" />
+</p>
+<p align="center"><em>NDVI trend (2018–2024) and severity classification for the Obuasi Municipal District, computed end-to-end with PyGeoFetch — real USGS Landsat data, boundary-clipped before processing.</em></p>
+
+32.0% of the Obuasi Municipal District shows measurable vegetation decline over 2018–2024 (9.2% strong decline + 22.8% moderate decline), against 57.5% stable and 10.5% showing an increasing trend.
+
+That headline number matters less than where it's concentrated. The decline isn't scattered randomly across the district — it forms a clear, spatially coherent cluster in the western portion of the AOI (roughly west of -1.70° longitude), visible as a dense, contiguous red-and-orange zone in both the trend map and the classification map. Real land degradation signals tend to look like this — clustered along mining concessions, roads, or river corridors — whereas sensor noise or processing artifacts tend to scatter more randomly across the whole scene. The fact that this pattern holds together spatially is a reasonable indicator that it reflects something real on the ground, not just pixel-level noise.
+
+That said, an NDVI trend map on its own can't distinguish why vegetation declined — illegal small-scale mining (galamsey), selective logging, agricultural land clearing, and urban expansion can all produce a similar signature. Given Obuasi's well-documented galamsey activity specifically concentrated in this district, the spatial pattern here is consistent with mining-driven clearance — but confirming that specific cause would need either higher-resolution imagery, ground verification, or cross-referencing against known concession boundaries, not this analysis alone.
+
+Two things worth flagging honestly rather than glossing over:
+
+The scattered dark-blue linear and blob features running through the map (most visibly the river-like feature crossing the upper-central area) are very likely water bodies, not vegetation gain. NDVI trend over open water isn't a meaningful signal — surface reflectance there is driven by turbidity and water level, not plant health — so those features should be excluded from the "increasing" interpretation, not read as reforestation.
+The small white gaps scattered through the trend map (several distinct circular patches) are nodata — pixels that didn't have enough valid, cloud-free observations across all six dates to fit a reliable trend. Worth being upfront that the 32%/57.5%/10.5% breakdown is computed over the valid pixels only, not the full district area including these gaps.
+
+The eastern two-thirds of the district, by contrast, is overwhelmingly stable (dominant green in the classification map), which is itself a useful negative result — it suggests the decline is genuinely localized to a specific area rather than reflecting a district-wide drought or seasonal artifact that would show up everywhere.
+
 ## 📋 Documentation
 
 Full documentation: **https://appiahkubis14.github.io/pygeofetch-docs/**

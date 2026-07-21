@@ -471,8 +471,8 @@ jupyter lab
 ---
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/EOCoreINT/pygeofetch/refs/heads/main/docs/images/trend_map.png?token=GHSAT0AAAAAAD4555HVK7XABUW65FV6B3N22S7TNMA" width="48%" />
-  <img src="https://raw.githubusercontent.com/EOCoreINT/pygeofetch/refs/heads/main/docs/images/trend_classification.png?token=GHSAT0AAAAAAD4555HVX7RLHLSCQSBSGCIY2S7TMFQ" width="48%" />
+  <img src="docs/images/trend_map.png" width="48%" />
+  <img src="docs/images/trend_classification.png" width="48%" />
 </p>
 <p align="center"><em>NDVI trend (2018–2024) and severity classification for the Obuasi Municipal District, computed end-to-end with PyGeoFetch — real USGS Landsat data, boundary-clipped before processing.</em></p>
 

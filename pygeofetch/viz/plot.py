@@ -53,62 +53,256 @@ class Plotter:
 
     def plot_raster(
         self,
-        path: Union[str, Path],
+        data: Union[str, Path, Any],
         title: str = "",
         colormap: str = "viridis",
         vmin: Optional[float] = None,
         vmax: Optional[float] = None,
         output: Optional[Union[str, Path]] = None,
         band: int = 1,
+        extent: Optional[Tuple[float, float, float, float]] = None,
+        colorbar_label: Optional[str] = None,
     ) -> Any:
         """
-        Plot a single-band raster.
+        Plot a single-band raster — from a file path OR directly from an
+        in-memory numpy array, so results from LandsatExtractor,
+        SpectralIndex, SBASTimeSeries, etc. can be plotted straight away
+        without a round-trip through disk first.
 
         Args:
-            path:     Path to GeoTIFF.
-            title:    Plot title.
-            colormap: Matplotlib colormap.
+            data:      Path to a GeoTIFF, OR a 2D numpy array.
+            title:     Plot title.
+            colormap:  Matplotlib colormap.
             vmin/vmax: Color scale range (auto if None).
-            output:   Save path (.png/.pdf/.svg). Show in notebook if None.
-            band:     1-based band index.
+            output:    Save path (.png/.pdf/.svg). Show in notebook if None.
+            band:      1-based band index (only used when `data` is a path).
+            extent:    (min_lon, max_lon, min_lat, max_lat) — required for
+                       correct axis labelling when passing an array
+                       directly; ignored (derived from the file) when
+                       `data` is a path.
+            colorbar_label: Label for the colorbar (e.g. "NDVI", "m/year").
         """
         import numpy as np
 
         plt = _require_matplotlib()
 
-        try:
-            import rasterio
+        if isinstance(data, (str, Path)):
+            try:
+                import rasterio
 
-            with rasterio.open(path) as src:
-                data = src.read(band).astype(np.float32)
-                nodata = src.nodata
-                if nodata is not None:
-                    data = np.where(data == nodata, np.nan, data)
-                extent = [
-                    src.bounds.left,
-                    src.bounds.right,
-                    src.bounds.bottom,
-                    src.bounds.top,
-                ]
-        except ImportError:
-            raise ImportError('rasterio required: pip install "pygeofetch[geo]"')
+                with rasterio.open(data) as src:
+                    arr = src.read(band).astype(np.float32)
+                    nodata = src.nodata
+                    if nodata is not None:
+                        arr = np.where(arr == nodata, np.nan, arr)
+                    plot_extent = [
+                        src.bounds.left,
+                        src.bounds.right,
+                        src.bounds.bottom,
+                        src.bounds.top,
+                    ]
+            except ImportError:
+                raise ImportError('rasterio required: pip install "pygeofetch[geo]"')
+            default_title = Path(data).stem
+        else:
+            arr = np.asarray(data, dtype=np.float32)
+            plot_extent = list(extent) if extent is not None else None
+            default_title = title or "Raster"
 
         fig, ax = plt.subplots(1, 1, figsize=self._figsize)
         im = ax.imshow(
-            data,
+            arr,
             cmap=colormap,
             vmin=vmin,
             vmax=vmax,
-            extent=extent,
+            extent=plot_extent,
             origin="upper",
             aspect="auto",
         )
-        plt.colorbar(im, ax=ax, fraction=0.03)
-        ax.set_title(title or Path(path).stem, fontsize=13)
-        ax.set_xlabel("Longitude" if extent[0] < 360 else "Easting")
-        ax.set_ylabel("Latitude" if extent[2] < 90 else "Northing")
+        cbar = plt.colorbar(im, ax=ax, fraction=0.03)
+        if colorbar_label:
+            cbar.set_label(colorbar_label)
+        ax.set_title(title or default_title, fontsize=13)
+        if plot_extent is not None:
+            ax.set_xlabel("Longitude" if plot_extent[0] < 360 else "Easting")
+            ax.set_ylabel("Latitude" if plot_extent[2] < 90 else "Northing")
         plt.tight_layout()
 
+        return self._save_or_show(fig, output)
+
+    def plot_comparison(
+        self,
+        panels: dict,
+        suptitle: str = "",
+        colormap: str = "RdYlGn",
+        vmin: Optional[float] = None,
+        vmax: Optional[float] = None,
+        output: Optional[Union[str, Path]] = None,
+        extent: Optional[Tuple[float, float, float, float]] = None,
+        colorbar_label: Optional[str] = None,
+        per_panel_cmap: Optional[dict] = None,
+        per_panel_range: Optional[dict] = None,
+    ) -> Any:
+        """
+        Side-by-side comparison plot — e.g. before / after / change — the
+        standard layout for any change-detection result (NDVI change,
+        flood extent change, deformation time steps).
+
+        Args:
+            panels:    Ordered dict of {panel_title: array_or_path}.
+            suptitle:  Overall figure title.
+            colormap:  Default colormap applied to every panel.
+            vmin/vmax: Default shared color scale (auto per-panel if None).
+            output:    Save path.
+            extent:    Shared (min_lon, max_lon, min_lat, max_lat) for
+                       array inputs (ignored for path inputs, which carry
+                       their own georeferencing).
+            colorbar_label: Shared colorbar label.
+            per_panel_cmap:  Optional {panel_title: colormap} override —
+                       e.g. a diverging colormap just for a "Change" panel
+                       while other panels use a sequential one.
+            per_panel_range: Optional {panel_title: (vmin, vmax)} override.
+
+        Example::
+
+            pl.plot_comparison({
+                "Baseline (2016)": ndvi_before,
+                "Recent (2024)": ndvi_after,
+                "Change": ndvi_change,
+            }, per_panel_cmap={"Change": "RdBu"}, per_panel_range={"Change": (-0.5, 0.5)})
+        """
+        import numpy as np
+
+        plt = _require_matplotlib()
+        per_panel_cmap = per_panel_cmap or {}
+        per_panel_range = per_panel_range or {}
+
+        n = len(panels)
+        fig, axes = plt.subplots(
+            1, n, figsize=(self._figsize[0] * n / 2, self._figsize[1] * 0.75)
+        )
+        if n == 1:
+            axes = [axes]
+
+        for ax, (panel_title, item) in zip(axes, panels.items()):
+            if isinstance(item, (str, Path)):
+                try:
+                    import rasterio
+
+                    with rasterio.open(item) as src:
+                        arr = src.read(1).astype(np.float32)
+                        nodata = src.nodata
+                        if nodata is not None:
+                            arr = np.where(arr == nodata, np.nan, arr)
+                        panel_extent = [
+                            src.bounds.left,
+                            src.bounds.right,
+                            src.bounds.bottom,
+                            src.bounds.top,
+                        ]
+                except ImportError:
+                    raise ImportError(
+                        'rasterio required: pip install "pygeofetch[geo]"'
+                    )
+            else:
+                arr = np.asarray(item, dtype=np.float32)
+                panel_extent = list(extent) if extent is not None else None
+
+            cmap = per_panel_cmap.get(panel_title, colormap)
+            pv = per_panel_range.get(panel_title, (vmin, vmax))
+            im = ax.imshow(
+                arr,
+                cmap=cmap,
+                vmin=pv[0],
+                vmax=pv[1],
+                extent=panel_extent,
+                origin="upper",
+                aspect="auto",
+            )
+            ax.set_title(panel_title, fontsize=12)
+            cbar = plt.colorbar(im, ax=ax, fraction=0.046)
+            if colorbar_label:
+                cbar.set_label(colorbar_label, fontsize=9)
+
+        if suptitle:
+            fig.suptitle(suptitle, fontsize=14, y=1.02)
+        plt.tight_layout()
+        return self._save_or_show(fig, output)
+
+    def plot_classification(
+        self,
+        data: Any,
+        class_labels: dict,
+        class_colors: dict,
+        title: str = "",
+        output: Optional[Union[str, Path]] = None,
+        extent: Optional[Tuple[float, float, float, float]] = None,
+        show_percentages: bool = True,
+    ) -> Any:
+        """
+        Plot a categorical/classified map with a discrete legend — for
+        severity classification (e.g. NDVI change classes) or extent
+        classification (e.g. flood / no-flood).
+
+        Args:
+            data:         2D array of integer class codes, OR a string
+                          array already containing class labels directly.
+            class_labels: {class_code: display_label}.
+            class_colors: {class_code: matplotlib color}.
+            title:        Plot title.
+            output:       Save path.
+            extent:       (min_lon, max_lon, min_lat, max_lat) for axis labels.
+            show_percentages: Annotate the legend with the % of the scene
+                          in each class.
+
+        Example::
+
+            pl.plot_classification(
+                classified_array,
+                class_labels={0: "Stable", 1: "Moderate decline", 2: "Severe decline"},
+                class_colors={0: "#2ecc71", 1: "#f39c12", 2: "#e74c3c"},
+                title="Land Degradation Severity",
+            )
+        """
+        import numpy as np
+        from matplotlib.colors import BoundaryNorm, ListedColormap
+        from matplotlib.patches import Patch
+
+        plt = _require_matplotlib()
+
+        arr = np.asarray(data)
+        codes = sorted(class_labels.keys())
+        colors = [class_colors[c] for c in codes]
+        cmap = ListedColormap(colors)
+        bounds = codes + [codes[-1] + 1]
+        norm = BoundaryNorm(bounds, cmap.N)
+
+        fig, ax = plt.subplots(1, 1, figsize=self._figsize)
+        ax.imshow(
+            arr, cmap=cmap, norm=norm, extent=extent, origin="upper", aspect="auto"
+        )
+        ax.set_title(title, fontsize=13)
+        if extent is not None:
+            ax.set_xlabel("Longitude" if extent[0] < 360 else "Easting")
+            ax.set_ylabel("Latitude" if extent[2] < 90 else "Northing")
+
+        total = arr.size
+        legend_handles = []
+        for c in codes:
+            label = class_labels[c]
+            if show_percentages:
+                pct = 100 * np.sum(arr == c) / total
+                label = f"{label} ({pct:.1f}%)"
+            legend_handles.append(Patch(facecolor=class_colors[c], label=label))
+        ax.legend(
+            handles=legend_handles,
+            loc="upper left",
+            bbox_to_anchor=(1.02, 1.0),
+            fontsize=10,
+            frameon=True,
+        )
+
+        plt.tight_layout()
         return self._save_or_show(fig, output)
 
     def plot_rgb(
@@ -225,6 +419,230 @@ class Plotter:
         ax.set_ylabel("Count")
         plt.tight_layout()
         return self._save_or_show(fig, output)
+
+    def quicklook(
+        self,
+        source: Union[str, Path, Any],
+        title: str = "",
+        output: Optional[Union[str, Path]] = None,
+        mode: Optional[str] = None,
+        colormap: Optional[str] = None,
+        vmin: Optional[float] = None,
+        vmax: Optional[float] = None,
+        band: int = 1,
+    ) -> Any:
+        """
+        One call that visualizes almost anything PyGeoFetch can produce —
+        a Landsat band, a Sentinel-1 backscatter raster, an NDVI array, a
+        classification map, an RGB composite — without you needing to
+        know which specific plot_*() method or colormap fits.
+
+        Inspects the data and picks a sensible visualization:
+
+        - **Multi-band raster (3+ bands)** → RGB composite (first 3 bands,
+          percentile-stretched). This is a best-effort default, not
+          guaranteed band-order correctness — for a specific sensor's
+          true RGB bands, use plot_rgb() directly with named bands.
+        - **Few distinct values relative to pixel count** (e.g. a
+          classification/severity/flood mask) → categorical display with
+          an auto-generated legend.
+        - **Values mostly negative, roughly -40 to +10** → treated as SAR
+          backscatter in dB → grayscale.
+        - **Values roughly within [-1, 1]** → treated as a spectral index
+          (NDVI, NDWI, etc.) → diverging colormap centered at zero.
+        - **Everything else** → continuous data, percentile-stretched,
+          default colormap.
+
+        These are heuristics based on typical value ranges, not format
+        detection — they can guess wrong for unusual data. Override with
+        `mode=` ("rgb", "categorical", "sar", "index", "continuous"),
+        or fall back to plot_raster()/plot_rgb()/plot_classification()
+        directly when you know exactly what you have.
+
+        Args:
+            source:   Path to a raster, a numpy array, or a DownloadResult
+                     (uses .output_path).
+            title:    Plot title.
+            output:   Save path. Shown inline if None.
+            mode:     Force a specific interpretation instead of
+                     auto-detecting (see above).
+            colormap: Override the auto-selected colormap.
+            vmin/vmax: Override the auto-selected value range.
+            band:     Which band to read as the "single band" case, if
+                     `source` is a multi-band file being forced into a
+                     non-RGB mode.
+
+        Example::
+
+            pl = Plotter()
+            pl.quicklook(ndvi_array)                    # -> index mode, RdYlGn
+            pl.quicklook("sentinel1_sigma0_db.tif")      # -> SAR mode, grayscale
+            pl.quicklook(flood_mask)                     # -> categorical mode
+            pl.quicklook("landsat_multiband.tif")        # -> RGB composite
+            pl.quicklook(download_result)                # DownloadResult resolved automatically
+        """
+        import numpy as np
+
+        _require_matplotlib()
+
+        # Resolve DownloadResult-like objects to a path first
+        if hasattr(source, "output_path") and not isinstance(source, (str, Path)):
+            resolved = getattr(source, "output_path", None)
+            if resolved is None:
+                raise ValueError(
+                    "source has no output_path to visualize (download may have failed)"
+                )
+            source = resolved
+
+        band_count = 1
+        if isinstance(source, (str, Path)):
+            try:
+                import rasterio
+
+                with rasterio.open(source) as src:
+                    band_count = src.count
+            except ImportError:
+                raise ImportError('rasterio required: pip install "pygeofetch[geo]"')
+
+        effective_mode = mode
+        if effective_mode is None and band_count >= 3:
+            effective_mode = "rgb"
+
+        if effective_mode == "rgb":
+            import rasterio
+
+            with rasterio.open(source) as src:
+                band_paths_or_arrays = [src.read(i) for i in (1, 2, 3)]
+            # plot_rgb expects paths OR we replicate its array-stretch logic here
+            r, g, b = band_paths_or_arrays
+            stacked = np.stack(
+                [self._percentile_stretch(a) for a in (r, g, b)], axis=-1
+            )
+            plt = _require_matplotlib()
+            fig, ax = plt.subplots(1, 1, figsize=self._figsize)
+            ax.imshow(stacked, origin="upper", aspect="auto")
+            ax.set_title(
+                title or "RGB composite (first 3 bands, auto-stretched)", fontsize=13
+            )
+            plt.tight_layout()
+            return self._save_or_show(fig, output)
+
+        # Single-band path: load the array to inspect its value distribution
+        if isinstance(source, (str, Path)):
+            import rasterio
+
+            with rasterio.open(source) as src:
+                arr = src.read(band).astype(np.float32)
+                nodata = src.nodata
+                if nodata is not None:
+                    arr = np.where(arr == nodata, np.nan, arr)
+                extent = [
+                    src.bounds.left,
+                    src.bounds.right,
+                    src.bounds.bottom,
+                    src.bounds.top,
+                ]
+        else:
+            arr = np.asarray(source, dtype=np.float32)
+            extent = None
+
+        finite = arr[np.isfinite(arr)]
+        if finite.size == 0:
+            raise ValueError("Data has no finite values to plot.")
+
+        if effective_mode is None:
+            n_unique = len(np.unique(finite))
+            frac_unique = n_unique / finite.size
+            if n_unique <= 12 and frac_unique < 0.01:
+                effective_mode = "categorical"
+            elif (
+                np.nanmean(finite) < -3
+                and np.nanmin(finite) > -60
+                and np.nanmax(finite) < 15
+            ):
+                effective_mode = "sar"
+            elif np.nanmin(finite) >= -1.05 and np.nanmax(finite) <= 1.05:
+                effective_mode = "index"
+            else:
+                effective_mode = "continuous"
+
+        logger.debug("quicklook: auto-detected mode=%r", effective_mode)
+
+        if effective_mode == "categorical":
+            codes = sorted(int(c) for c in np.unique(finite))
+            import matplotlib.cm as cm
+
+            palette = cm.get_cmap("tab10" if len(codes) <= 10 else "tab20")
+            class_labels = {c: f"Class {c}" for c in codes}
+            class_colors = {
+                c: palette(i / max(len(codes) - 1, 1)) for i, c in enumerate(codes)
+            }
+            return self.plot_classification(
+                arr,
+                class_labels=class_labels,
+                class_colors=class_colors,
+                title=title or "Classification (auto-detected)",
+                output=output,
+                extent=extent,
+            )
+
+        if effective_mode == "sar":
+            cmap = colormap or "gray"
+            lo, hi = (
+                (vmin, vmax)
+                if vmin is not None and vmax is not None
+                else np.nanpercentile(finite, [2, 98])
+            )
+            return self.plot_raster(
+                arr,
+                title=title or "SAR backscatter (dB, auto-detected)",
+                colormap=cmap,
+                vmin=lo,
+                vmax=hi,
+                output=output,
+                extent=extent,
+                colorbar_label="dB",
+            )
+
+        if effective_mode == "index":
+            cmap = colormap or "RdYlGn"
+            lo = vmin if vmin is not None else -1.0
+            hi = vmax if vmax is not None else 1.0
+            return self.plot_raster(
+                arr,
+                title=title or "Spectral index (auto-detected)",
+                colormap=cmap,
+                vmin=lo,
+                vmax=hi,
+                output=output,
+                extent=extent,
+            )
+
+        # continuous
+        cmap = colormap or "viridis"
+        lo, hi = (
+            (vmin, vmax)
+            if vmin is not None and vmax is not None
+            else np.nanpercentile(finite, [2, 98])
+        )
+        return self.plot_raster(
+            arr,
+            title=title or "Raster (auto-detected)",
+            colormap=cmap,
+            vmin=lo,
+            vmax=hi,
+            output=output,
+            extent=extent,
+        )
+
+    def _percentile_stretch(
+        self, arr: Any, percentile: Tuple[float, float] = (2, 98)
+    ) -> Any:
+        import numpy as np
+
+        arr = arr.astype(np.float32)
+        lo, hi = np.nanpercentile(arr, percentile)
+        return np.clip((arr - lo) / (hi - lo + 1e-10), 0, 1)
 
     def _save_or_show(self, fig: Any, output: Optional[Union[str, Path]]) -> Any:
         import matplotlib.pyplot as plt

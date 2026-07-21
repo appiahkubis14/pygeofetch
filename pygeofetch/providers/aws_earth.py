@@ -46,7 +46,7 @@ from pygeofetch.models.satellite_data import (
     resolve_band_keys,
 )
 from pygeofetch.models.user_auth import AuthSession, Credentials
-from pygeofetch.providers.base import AbstractBaseProvider, SearchError
+from pygeofetch.providers.base import AbstractBaseProvider, ProviderError, SearchError
 
 if TYPE_CHECKING:
     from pygeofetch.models.search_query import SearchQuery
@@ -187,6 +187,7 @@ class AWSEarthProvider(AbstractBaseProvider):
         start_time = time.time()
         output_paths = []
         total_bytes = 0
+        asset_errors: list[str] = []
 
         # Download data assets (bands), skip thumbnails/metadata
         data_assets = data.data_assets
@@ -218,25 +219,52 @@ class AWSEarthProvider(AbstractBaseProvider):
                     follow_redirects=True,
                 ) as resp:
                     self._handle_http_error(resp)
+                    content_length = resp.headers.get("content-length")
+                    bytes_written = 0
                     with open(output_file, "wb") as f:
-                        f.writelines(
-                            resp.iter_bytes(
-                                chunk_size=int(options.chunk_size_mb * 1024 * 1024)
-                            )
-                        )
+                        for chunk in resp.iter_bytes(
+                            chunk_size=int(options.chunk_size_mb * 1024 * 1024)
+                        ):
+                            f.write(chunk)
+                            bytes_written += len(chunk)
+
+                if bytes_written == 0:
+                    # A 200 OK with a genuinely empty body — _handle_http_error()
+                    # only inspects the status code, so this passes through
+                    # as an apparent "success" with nothing written. Without
+                    # this check, an empty file gets kept on disk and this
+                    # asset silently ends up in output_paths, only to be
+                    # caught later by the separate, generic file-integrity
+                    # validation in core/downloader.py ("File is empty (0
+                    # bytes)") — which works, but gives no indication this
+                    # happened at the HTTP layer specifically, and wastes a
+                    # full write-to-disk + later re-open-to-validate cycle
+                    # on a file that was never going to be usable.
+                    output_file.unlink(missing_ok=True)
+                    raise ProviderError(
+                        f"Asset {key!r} returned an empty response body "
+                        f"(HTTP {resp.status_code}, Content-Length: "
+                        f"{content_length or 'not sent'}). The asset may not "
+                        f"exist for this scene, or this may be a transient "
+                        f"upstream issue — will retry per configured "
+                        f"retry_attempts."
+                    )
+
                 output_paths.append(output_file)
-                total_bytes += output_file.stat().st_size
+                total_bytes += bytes_written
             except Exception as exc:
                 self._logger.warning(f"Failed to download asset {key!r}: {exc}")
+                asset_errors.append(f"{key}: {exc}")
 
         duration = time.time() - start_time
 
         if not output_paths:
+            detail = "; ".join(asset_errors) if asset_errors else "unknown reason"
             return DownloadResult(
                 status=DownloadStatus.FAILED,
                 data_id=data.id,
                 provider=self.PROVIDER_ID,
-                error="No assets were successfully downloaded",
+                error=f"No assets were successfully downloaded: {detail}",
             )
 
         return DownloadResult(

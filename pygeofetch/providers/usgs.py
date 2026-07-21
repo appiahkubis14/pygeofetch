@@ -388,7 +388,32 @@ class USGSProvider(AbstractBaseProvider):
             if query.end_date:
                 payload["temporalFilter"]["end"] = str(query.end_date)
 
-        if query.bbox:
+        # Prefer a real polygon spatial filter over a bounding-box
+        # approximation when a geometry is given — USGS's M2M API natively
+        # supports geoJson-type spatial filters (filterType: "geoJson"),
+        # not just MBR/bbox. Previously query.geometry was never checked
+        # here at all: only query.bbox was handled, so searching with a
+        # polygon AOI (and no separate bbox) sent NO spatial filter
+        # whatsoever — USGS would search its entire global archive for the
+        # date range, which is consistent with the multi-minute timeouts
+        # and "does not support multiple requests at a time" errors this
+        # caused: an unconstrained global query is dramatically slower,
+        # and a still-processing prior request collides with the next one.
+        geometry = getattr(query, "geometry", None)
+        if geometry:
+            geom_type = geometry.get("type", "Polygon")
+            coordinates = geometry.get("coordinates")
+            if coordinates:
+                payload["spatialFilter"] = {
+                    # "geojson" — lowercase. Confirmed against usgsxplore's
+                    # actual working implementation of this same API; the
+                    # official docs page itself requires an ERS login to
+                    # view directly, so this was cross-checked against a
+                    # real, actively-maintained client rather than assumed.
+                    "filterType": "geojson",
+                    "geoJson": {"type": geom_type, "coordinates": coordinates},
+                }
+        elif query.bbox:
             bbox = query.bbox
             payload["spatialFilter"] = {
                 "filterType": "mbr",

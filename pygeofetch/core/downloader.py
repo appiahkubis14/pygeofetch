@@ -25,7 +25,7 @@ import hashlib
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any, Callable, Dict
 
 from pygeofetch.core.logging import DownloadProgress, get_logger
 from pygeofetch.models.download_task import (
@@ -39,6 +39,43 @@ if TYPE_CHECKING:
     from pygeofetch.models.satellite_data import SatelliteData
 
 logger = get_logger(__name__)
+
+
+# Required common-band-name inputs for each single-date spectral index
+# supported by pygeofetch.processor.SpectralIndex's built-in (non-spyndex)
+# formulae. Matches _BUILTIN in pygeofetch/processor/indices.py exactly —
+# keep these in sync if that dict changes. dNBR is deliberately excluded:
+# it needs paired pre/post-event bands, which a single downloaded scene
+# can't supply (handled as an explicit error instead, see _apply_action).
+_SINGLE_DATE_INDEX_BANDS: dict = {
+    "EVI": ("NIR", "RED", "BLUE"),
+    "SAVI": ("NIR", "RED"),
+    "NDWI": ("GREEN", "NIR"),
+    "MNDWI": ("GREEN", "SWIR1"),
+    "NDBI": ("SWIR1", "NIR"),
+    "NDSI": ("GREEN", "SWIR1"),
+    "NDMI": ("NIR", "SWIR1"),
+    "NBR": ("NIR", "SWIR2"),
+    "BSI": ("SWIR1", "RED", "NIR", "BLUE"),
+    "ARVI": ("NIR", "RED", "BLUE"),
+    "GNDVI": ("NIR", "GREEN"),
+    "RVI": ("NIR", "RED"),
+    "VCI": ("NIR", "RED", "BLUE"),
+    "CRI1": ("BLUE", "GREEN"),
+    "PSRI": ("RED", "BLUE", "NIR"),
+}
+
+# Common band name -> substrings to look for in a downloaded filename.
+# Covers Sentinel-2 band codes and generic common names, matching the
+# pattern already used by the hardcoded ndvi handler ("B04"/"red").
+_BAND_FILENAME_PATTERNS: dict = {
+    "BLUE": ("B02", "blue"),
+    "GREEN": ("B03", "green"),
+    "RED": ("B04", "red"),
+    "NIR": ("B08", "nir"),
+    "SWIR1": ("B11", "swir1"),
+    "SWIR2": ("B12", "swir2"),
+}
 
 
 class AdaptiveDownloader:
@@ -154,26 +191,59 @@ class AdaptiveDownloader:
                                     f"File validation failed for {data.id!r}: {err_msg}"
                                 )
                                 break
-                    if result.success:
-                        if options.verify_checksum:
-                            result = self._verify_checksums(result, data, options)
-                        if options.post_process:
-                            result = self._run_post_process(result, options)
+
+                # Check result.success ONCE here, AFTER validation may have
+                # changed it — not nested inside the now-stale `if
+                # result.success:` above. Previously the success-logging
+                # and `return result` sat unconditionally inside that outer
+                # block, so a validation failure that flipped success to
+                # False partway through still fell through to logging "✓
+                # success" and returning immediately — never retrying, and
+                # misreporting a detected truncated download as if it had
+                # worked.
+                if result.success:
+                    if options.verify_checksum:
+                        result = self._verify_checksums(result, data, options)
+                    if options.post_process:
+                        result = self._run_post_process(result, options)
                     size_mb = (
                         result.bytes_downloaded / (1024 * 1024)
                         if result.bytes_downloaded
                         else 0
                     )
-                    (
-                        size_mb / result.duration_seconds
-                    ) if result.duration_seconds > 0 else 0
                     logger.info(
                         "  ✓ %-45s %6.0f MB  %5.1fs",
                         str(data.id)[:45],
                         size_mb,
                         result.duration_seconds,
                     )
-                return result
+                    return result
+
+                # result.success is False here — either the provider itself
+                # reported failure, or file validation caught a corrupt/
+                # truncated download above. Previously this fell through to
+                # an unconditional `return result` regardless of success,
+                # meaning a detected truncated download gave up immediately
+                # on attempt 1 and never used retry_attempts at all — the
+                # exact case a retry is most likely to actually fix, since
+                # network truncation is typically transient. Route through
+                # the same backoff-and-retry path a raised exception would
+                # take, instead of returning early.
+                if attempt < options.retry_attempts:
+                    delay = self._backoff(attempt, options)
+                    logger.warning(
+                        f"Download attempt {attempt + 1}/{options.retry_attempts + 1} "
+                        f"for {data.id!r} failed validation: {result.error}. "
+                        f"Retrying in {delay:.1f}s..."
+                    )
+                    time.sleep(delay)
+                    continue
+                else:
+                    logger.error(
+                        f"Download failed validation after "
+                        f"{options.retry_attempts + 1} attempts: {result.error}"
+                    )
+                    return result
             except Exception as exc:
                 if attempt < options.retry_attempts:
                     delay = self._backoff(attempt, options)
@@ -362,7 +432,23 @@ class AdaptiveDownloader:
             try:
                 result = self._apply_action(result, action)
             except Exception as exc:
-                logger.warning(f"Post-process action {action.action!r} failed: {exc}")
+                # Rasterio/GDAL errors frequently say "see previous
+                # exception for details" — that previous exception is
+                # exc.__cause__/__context__, which str(exc) alone does NOT
+                # include. Logging only str(exc) (the previous behavior)
+                # made that message actively misleading: it points at
+                # information the log line doesn't actually contain.
+                detail = ""
+                cause = exc.__cause__ or exc.__context__
+                if cause is not None and str(cause) != str(exc):
+                    detail = f" | caused by: {type(cause).__name__}: {cause}"
+                logger.warning(
+                    f"Post-process action {action.action!r} failed: {exc}{detail}"
+                )
+                logger.debug(
+                    f"Post-process action {action.action!r} full traceback:",
+                    exc_info=exc,
+                )
         result.post_process_completed.append("completed")
         return result
 
@@ -382,6 +468,57 @@ class AdaptiveDownloader:
             if new_paths:
                 result.output_path = new_paths[0]
 
+        elif action.action == "cloud_mask":
+            try:
+                from pygeofetch.processing.preprocessor import Preprocessor
+
+                method = action.params.get("method", "scl")
+                cloud_classes = action.params.get("cloud_classes")
+
+                scl_path = None
+                if method == "scl":
+                    scl_path = next(
+                        (p for p in result.output_paths if "scl" in p.name.lower()),
+                        None,
+                    )
+                    if scl_path is None:
+                        raise ValueError(
+                            "cloud_mask (method=scl) requires an SCL band to be "
+                            'downloaded alongside your other bands — add "SCL" '
+                            'to --bands, e.g. --bands "B04,B08,SCL"'
+                        )
+
+                pp = Preprocessor()
+                new_paths = []
+                for path in result.output_paths:
+                    if path == scl_path:
+                        # Keep the SCL band itself untouched — it's the mask
+                        # SOURCE, not something to mask against itself.
+                        new_paths.append(path)
+                        continue
+                    if path.suffix.lower() in (".tif", ".tiff"):
+                        masked = pp.cloud_mask(
+                            path,
+                            method=method,
+                            scl_band=scl_path,
+                            cloud_classes=cloud_classes,
+                        )
+                        if masked.success and masked.output_path:
+                            new_paths.append(masked.output_path)
+                        else:
+                            logger.warning(
+                                f"cloud_mask failed for {path.name}, keeping "
+                                f"original: {masked.error}"
+                            )
+                            new_paths.append(path)
+                    else:
+                        new_paths.append(path)
+                result.output_paths = new_paths
+            except ImportError:
+                logger.warning(
+                    "processing extras not installed; skipping cloud_mask action"
+                )
+
         elif action.action == "reproject":
             # Requires rasterio - skip if not available
             target_crs = action.params.get("value", "EPSG:4326")
@@ -390,16 +527,37 @@ class AdaptiveDownloader:
                 from rasterio.warp import Resampling, reproject  # noqa: F401
 
                 new_paths = []
+                any_failed = False
                 for path in result.output_paths:
                     if path.suffix.lower() in (".tif", ".tiff"):
                         out_path = path.with_stem(
                             f"{path.stem}_{target_crs.replace(':', '_')}"
                         )
-                        self._reproject_with_validation(path, out_path, target_crs)
-                        new_paths.append(out_path)
+                        try:
+                            self._reproject_with_validation(path, out_path, target_crs)
+                            new_paths.append(out_path)
+                        except Exception as exc:
+                            # A single file failing must not discard the
+                            # other files' successful reprojections — keep
+                            # the ORIGINAL for this one file, not the
+                            # (already-deleted) failed output, and continue.
+                            logger.warning(
+                                f"Reproject failed for {path.name}, keeping "
+                                f"original: {exc}"
+                            )
+                            new_paths.append(path)
+                            any_failed = True
                     else:
                         new_paths.append(path)
                 result.output_paths = new_paths
+                if any_failed:
+                    # Ensure downstream log context makes clear this scene's
+                    # reproject step was only partially successful, rather
+                    # than looking identical to a fully clean run.
+                    logger.warning(
+                        "reproject: one or more files kept their original "
+                        "CRS after a per-file failure — see warnings above."
+                    )
             except ImportError:
                 logger.warning("rasterio not installed; skipping reproject action")
 
@@ -599,6 +757,7 @@ class AdaptiveDownloader:
                 if red_path and nir_path:
                     with rasterio.open(red_path) as rs:
                         red = rs.read(1).astype(np.float32)
+                        red_nodata = rs.nodata
                         profile = rs.profile.copy()
                     with rasterio.open(nir_path) as ns:
                         nir = ns.read(
@@ -606,14 +765,30 @@ class AdaptiveDownloader:
                             out_shape=red.shape,
                             resampling=rasterio.enums.Resampling.bilinear,
                         ).astype(np.float32)
+                        nir_nodata = ns.nodata
+
+                    # Respect each source band's own nodata flag (e.g. a
+                    # cloud_mask step earlier in the chain, or a provider's
+                    # native fill value) — without this, masked/fill pixels
+                    # get computed as if they were real reflectance values
+                    # instead of correctly propagating as "no data" through
+                    # to the NDVI output. Previously neither red nor nir
+                    # nodata was checked at all here.
+                    if red_nodata is not None:
+                        red = np.where(red == red_nodata, np.nan, red)
+                    if nir_nodata is not None:
+                        nir = np.where(nir == nir_nodata, np.nan, nir)
+
                     with np.errstate(divide="ignore", invalid="ignore"):
                         ndvi = np.where(
-                            nir + red > 0, (nir - red) / (nir + red), -9999.0
+                            nir + red > 0, (nir - red) / (nir + red), np.nan
                         )
+                    ndvi = np.where(np.isnan(red) | np.isnan(nir), np.nan, ndvi)
                     ndvi_path = red_path.parent / "ndvi.tif"
                     profile.update(count=1, dtype="float32", nodata=-9999.0)
+                    ndvi_write = np.where(np.isnan(ndvi), -9999.0, ndvi)
                     with rasterio.open(ndvi_path, "w", **profile) as dst:
-                        dst.write(ndvi[np.newaxis, :, :])
+                        dst.write(ndvi_write[np.newaxis, :, :])
                     (result.output_paths or []).append(ndvi_path)
                     result.output_path = ndvi_path
                     logger.info(f"NDVI computed → {ndvi_path}")
@@ -658,7 +833,123 @@ class AdaptiveDownloader:
             except ImportError:
                 logger.warning("rasterio not installed; skipping merge action")
 
+        elif action.action.upper() in _SINGLE_DATE_INDEX_BANDS:
+            # Generic handler for any single-date spectral index beyond the
+            # hardcoded "ndvi" branch above (EVI, SAVI, NDWI, MNDWI, NDBI,
+            # NDSI, NDMI, NBR, BSI, ARVI, GNDVI, RVI, VCI, CRI1, PSRI).
+            #
+            # Previously, requesting any of these via --post-process fell
+            # through every branch with no match and hit `return result`
+            # unconditionally — a completely silent no-op. The user's
+            # download "succeeded" with the requested index never computed
+            # and zero indication anything was wrong. This handler and the
+            # explicit fallback error below close that gap: every index
+            # documented as supported now either actually runs, or fails
+            # with a clear, actionable message — never silently.
+            result = self._compute_single_date_index(result, action.action.upper())
+
+        elif action.action.upper() == "DNBR":
+            # dNBR needs two dates (pre/post) — the single-scene download
+            # post-process chain has no second scene to pair with, so this
+            # cannot be silently auto-wired the way the single-date indices
+            # above are. Fail clearly rather than either silently no-op or
+            # guess at pairing unrelated scenes.
+            raise ValueError(
+                "dNBR requires paired pre-event/post-event imagery and can't "
+                "run as a single-scene --post-process step. Use "
+                "pygeofetch.processor.SpectralIndex.compute('dNBR', "
+                "NIR_PRE=..., SWIR2_PRE=..., NIR_POST=..., SWIR2_POST=...) "
+                "directly with both dates' bands instead."
+            )
+
+        else:
+            known_actions = (
+                "unzip, reproject, compress, cog, clip, resample, merge, "
+                "ndvi, " + ", ".join(sorted(_SINGLE_DATE_INDEX_BANDS)).lower()
+            )
+            raise ValueError(
+                f"Unknown --post-process action {action.action!r}. "
+                f"Supported actions: {known_actions}."
+            )
+
         return result
+
+    def _compute_single_date_index(
+        self, result: DownloadResult, index_name: str
+    ) -> DownloadResult:
+        """
+        Compute any single-date spectral index (beyond the hardcoded NDVI
+        branch) using pygeofetch.processor.SpectralIndex, matching required
+        bands to downloaded files the same way the ndvi branch does.
+        """
+        import numpy as np
+        import rasterio
+
+        try:
+            from pygeofetch.processor import SpectralIndex
+        except ImportError as exc:
+            raise ImportError(
+                f'{index_name} requires the processor extra: '
+                f'pip install "pygeofetch[processor]"'
+            ) from exc
+
+        required_bands = _SINGLE_DATE_INDEX_BANDS[index_name]
+        band_arrays: Dict[str, Any] = {}
+        profile = None
+        ref_shape = None
+
+        for band_name in required_bands:
+            patterns = _BAND_FILENAME_PATTERNS[band_name]
+            path = next(
+                (
+                    p
+                    for p in result.output_paths
+                    if any(pat in p.name or pat.lower() in p.name.lower() for pat in patterns)
+                ),
+                None,
+            )
+            if path is None:
+                raise ValueError(
+                    f"{index_name}: could not find a downloaded band matching "
+                    f"{band_name} (looked for {patterns} in filenames)"
+                )
+            with rasterio.open(path) as src:
+                arr = src.read(1, out_shape=ref_shape, resampling=rasterio.enums.Resampling.bilinear) \
+                    if ref_shape else src.read(1)
+                if ref_shape is None:
+                    ref_shape = arr.shape
+                    profile = src.profile.copy()
+                arr = arr.astype(np.float32)
+                # Respect this band's own nodata flag — see the matching
+                # fix in the ndvi handler above for why this matters (a
+                # cloud_mask step earlier in the chain, or a provider's
+                # native fill value, must correctly propagate as "no data"
+                # rather than being computed as if it were a real value).
+                if src.nodata is not None:
+                    arr = np.where(arr == src.nodata, np.nan, arr)
+            band_arrays[band_name] = arr
+
+        si = SpectralIndex(prefer_spyndex=False)
+        index_arr = np.asarray(si.compute(index_name, **band_arrays), dtype=np.float32)
+        # Any band being NaN at a pixel must make the index NaN there too,
+        # even if the formula's arithmetic happens to produce a finite
+        # result from a NaN input for some index shapes.
+        any_nan = np.zeros(ref_shape, dtype=bool)
+        for arr in band_arrays.values():
+            any_nan |= np.isnan(arr)
+        index_arr = np.where(any_nan, np.nan, index_arr)
+
+        out_path = result.output_paths[0].parent / f"{index_name.lower()}.tif"
+        profile.update(count=1, dtype="float32", nodata=-9999.0)
+        index_write = np.where(np.isnan(index_arr), -9999.0, index_arr)
+        with rasterio.open(out_path, "w", **profile) as dst:
+            dst.write(index_write[np.newaxis, :, :])
+
+        result.output_paths = list(result.output_paths) + [out_path]
+        result.output_path = out_path
+        logger.info(f"{index_name} computed → {out_path}")
+        return result
+
 
     def _find_existing_download(
         self, data: "SatelliteData", destination: Path
@@ -816,13 +1107,42 @@ class AdaptiveDownloader:
                             False,
                             f"Raster has zero dimensions: {src.width}x{src.height}",
                         )
-                    # Read one small tile to confirm data is accessible
+                    # Read multiple tiles spread across the file, not just
+                    # the first one. A truncated/incomplete download (a
+                    # dropped connection mid-stream, the single most common
+                    # real-world download corruption) cuts a file off from
+                    # the END — the header, TIFF directory, and early tiles
+                    # are almost always intact, while later tiles are
+                    # missing. Sampling only the first tile (the previous
+                    # behavior) is therefore nearly blind to exactly the
+                    # corruption pattern most likely to occur in practice:
+                    # confirmed by direct reproduction — an 80%-truncated
+                    # file opens fine, its dimensions read correctly, and
+                    # its first tile reads fine, but its last tile fails
+                    # with the same RasterioIOError downstream processing
+                    # (reproject/ndvi/cog) would hit minutes later.
                     windows = list(src.block_windows(1))
                     if windows:
-                        _, window = windows[0]
-                        sample = src.read(1, window=window)
-                        if sample is None or sample.size == 0:
-                            return False, "First tile read returned empty array"
+                        sample_indices = sorted(
+                            {0, len(windows) // 2, len(windows) - 1}
+                        )
+                        for idx in sample_indices:
+                            _, window = windows[idx]
+                            try:
+                                sample = src.read(1, window=window)
+                            except Exception as exc:
+                                return (
+                                    False,
+                                    f"Tile {idx + 1}/{len(windows)} read failed "
+                                    f"(likely a truncated/incomplete download): "
+                                    f"{exc}",
+                                )
+                            if sample is None or sample.size == 0:
+                                return (
+                                    False,
+                                    f"Tile {idx + 1}/{len(windows)} read returned "
+                                    f"an empty array",
+                                )
                 return True, ""
             except ImportError:
                 # rasterio not installed — size check already passed
@@ -861,48 +1181,71 @@ class AdaptiveDownloader:
         """
         Reproject source to target CRS and validate the output transform.
         Raises RuntimeError if reprojection produces an identity transform.
+
+        On ANY failure, the partially-written target file is deleted rather
+        than left on disk — a previous version left corrupt/incomplete
+        output files behind on failure, which downstream post-process
+        actions (e.g. cog) would then silently pick up and fail on with a
+        confusing, disconnected error, since nothing recorded that this
+        file was the product of a failed operation.
         """
         import rasterio
         from rasterio.enums import Resampling as RS
         from rasterio.warp import calculate_default_transform, reproject
 
-        with rasterio.open(str(source_path)) as src:
-            src_crs = src.crs
-            src_transform = src.transform
-            src_width = src.width
-            src_height = src.height
+        try:
+            with rasterio.open(str(source_path)) as src:
+                src_crs = src.crs
+                src_transform = src.transform
+                src_width = src.width
+                src_height = src.height
 
-            dst_transform, dst_width, dst_height = calculate_default_transform(
-                src_crs, target_crs, src_width, src_height, *src.bounds
-            )
-            kwargs = src.meta.copy()
-            kwargs.update(
-                {
-                    "crs": target_crs,
-                    "transform": dst_transform,
-                    "width": dst_width,
-                    "height": dst_height,
-                }
-            )
-            with rasterio.open(str(target_path), "w", **kwargs) as dst:
-                for band_idx in range(1, src.count + 1):
-                    reproject(
-                        source=rasterio.band(src, band_idx),
-                        destination=rasterio.band(dst, band_idx),
-                        src_transform=src_transform,
-                        src_crs=src_crs,
-                        dst_transform=dst_transform,
-                        dst_crs=target_crs,
-                        resampling=RS.bilinear,
-                    )
+                dst_transform, dst_width, dst_height = calculate_default_transform(
+                    src_crs, target_crs, src_width, src_height, *src.bounds
+                )
+                kwargs = src.meta.copy()
+                kwargs.update(
+                    {
+                        "crs": target_crs,
+                        "transform": dst_transform,
+                        "width": dst_width,
+                        "height": dst_height,
+                    }
+                )
+                with rasterio.open(str(target_path), "w", **kwargs) as dst:
+                    for band_idx in range(1, src.count + 1):
+                        reproject(
+                            source=rasterio.band(src, band_idx),
+                            destination=rasterio.band(dst, band_idx),
+                            src_transform=src_transform,
+                            src_crs=src_crs,
+                            dst_transform=dst_transform,
+                            dst_crs=target_crs,
+                            resampling=RS.bilinear,
+                        )
+        except Exception as exc:
+            # Surface the REAL underlying error (GDAL's own message is
+            # normally far more specific than a generic wrapper like
+            # "Chunk and warp failed" suggests) rather than losing it —
+            # previously this propagated up to be logged only as
+            # "Post-process action 'reproject' failed: <str(exc)>", which
+            # is exactly this message, but the caller's log line gave no
+            # indication of *which* file/CRS/band was involved.
+            target_path.unlink(missing_ok=True)
+            raise RuntimeError(
+                f"Reprojection failed for {source_path.name} -> {target_crs}: "
+                f"{type(exc).__name__}: {exc}"
+            ) from exc
 
         if self._has_identity_transform(target_path):
+            target_path.unlink(missing_ok=True)
             msg = (
-                f"Reprojection produced identity transform in {target_path}. "
-                f"Source: {source_path}, Target CRS: {target_crs}. "
+                f"Reprojection produced identity transform in {target_path.name} "
+                f"(deleted). Source: {source_path.name}, Target CRS: {target_crs}. "
                 "This is a known rasterio/GDAL edge case with certain input CRS."
             )
             raise RuntimeError(msg)
+
 
     def _backoff(self, attempt: int, options: DownloadOptions) -> float:
         """Calculate retry delay based on strategy."""

@@ -155,21 +155,42 @@ class LandsatExtractor:
 
         Returns:
             LandsatScene with scaled, optionally cloud-masked band arrays.
+
+        Note on individual-file downloads:
+            Not every provider delivers Landsat data as a single .tar
+            bundle. Planetary Computer, for instance, downloads each band
+            as its own separate asset file (SR_B4.TIF, SR_B5.TIF,
+            QA_PIXEL.TIF, etc., each fetched individually) rather than one
+            archive — DownloadResult.output_paths then holds many files,
+            not one. process_scene() detects this automatically and uses
+            those files directly, skipping the tar-extraction step
+            entirely, so the same call works regardless of which delivery
+            style the provider used.
         """
-        bundle_path = self._resolve_path(source)
-        if bundle_path is None:
-            logger.error("Could not resolve a usable file path for this scene.")
-            return LandsatScene()
+        individual_files = self._resolve_individual_files(source)
 
-        output_dir = Path(output_dir)
-        extract_dir = output_dir / (f"extracted_{label}" if label else "extracted")
+        if individual_files is not None:
+            extracted = individual_files
+            # Use the first file's name for sensor detection — any band
+            # file's product-ID prefix works equally well for this.
+            sensor_hint_name = next(iter(extracted.keys()), "")
+            output_dir = Path(output_dir)
+        else:
+            bundle_path = self._resolve_path(source)
+            if bundle_path is None:
+                logger.error("Could not resolve a usable file path for this scene.")
+                return LandsatScene()
 
-        extracted = self.extract_bundle(bundle_path, extract_dir)
-        if not extracted:
-            logger.error("No .TIF files found in %s", bundle_path.name)
-            return LandsatScene()
+            output_dir = Path(output_dir)
+            extract_dir = output_dir / (f"extracted_{label}" if label else "extracted")
 
-        sensor = self._detect_sensor(bundle_path.name)
+            extracted = self.extract_bundle(bundle_path, extract_dir)
+            if not extracted:
+                logger.error("No .TIF files found in %s", bundle_path.name)
+                return LandsatScene()
+            sensor_hint_name = bundle_path.name
+
+        sensor = self._detect_sensor(sensor_hint_name)
         band_map = _OLI_BAND_MAP if sensor == "OLI" else _TM_BAND_MAP
 
         requested = bands or ["blue", "green", "red", "nir", "swir1", "swir2"]
@@ -237,7 +258,7 @@ class LandsatExtractor:
         logger.info(
             "Processed %s scene (%s): %d bands loaded%s",
             sensor,
-            bundle_path.name,
+            sensor_hint_name,
             len(scene.bands),
             f", {cloud_pct:.1f}% cloud-masked" if cloud_pct is not None else "",
         )
@@ -355,6 +376,44 @@ class LandsatExtractor:
             filename,
         )
         return "OLI"
+
+    def _resolve_individual_files(
+        self, source: Union["DownloadResult", str, Path]
+    ) -> Optional[Dict[str, Path]]:
+        """
+        Detect whether `source` is already a set of individual band files
+        (as delivered by providers like Planetary Computer, which download
+        each asset — SR_B4.TIF, SR_B5.TIF, QA_PIXEL.TIF, etc. — separately
+        rather than as one archive) rather than a single bundle to extract.
+
+        Returns a dict shaped like extract_bundle()'s return value
+        ({filename: path}) if this looks like the individual-files case,
+        or None if `source` should instead go through the normal
+        archive-extraction path.
+        """
+        output_paths = getattr(source, "output_paths", None)
+        if not output_paths or len(output_paths) < 2:
+            # A single file (or no output_paths attribute at all, e.g. a
+            # plain path/string) — not the individual-files case.
+            return None
+
+        archive_exts = (".tar", ".tar.gz", ".tgz", ".zip")
+        paths = [Path(p) for p in output_paths]
+        if any(str(p).lower().endswith(archive_exts) for p in paths):
+            # At least one entry is itself an archive — treat this as the
+            # normal bundle case (resolved via _resolve_path instead).
+            return None
+
+        existing = {p.name: p for p in paths if p.exists()}
+        if not existing:
+            return None
+
+        logger.info(
+            "Detected %d individual band file(s) already on disk (no "
+            "archive to extract) — using them directly.",
+            len(existing),
+        )
+        return existing
 
     def _resolve_path(
         self, source: Union["DownloadResult", str, Path]

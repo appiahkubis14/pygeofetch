@@ -30,7 +30,7 @@ BBox = tuple[float, float, float, float]  # minx, miny, maxx, maxy
 def _safe_read_1(src, path=None):
     """Read band 1 safely with block fallback."""
     try:
-        return _safe_read_1(src)
+        return src.read(1)
     except Exception:
         if path is None:
             raise

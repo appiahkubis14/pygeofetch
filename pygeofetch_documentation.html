@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>PyGeoFetch — Documentation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+:root{--accent:#e9660e;--accent-dim:#e0f2fe;--accent-hover:#c76102;--green:#059669;--green-dim:#d1fae5;--amber:#d97706;--amber-dim:#fef3c7;--red:#dc2626;--red-dim:#fee2e2;--bg-page:#f8f9fa;--bg-surface:#ffffff;--bg-raised:#f1f3f5;--bg-code:#f6f8fa;--border:#e2e8f0;--border-strong:#cbd5e1;--text-primary:#0f172a;--text-secondary:#475569;--text-muted:#94a3b8;--text-code:#1e293b;--nav-bg:rgba(255,255,255,0.95);--nav-border:#e2e8f0;--sidebar-w:262px;--radius-sm:4px;--radius-md:6px;--radius-lg:10px;--mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;}
+[data-theme="dark"]{--accent:#f89e38;--accent-dim:#0c2d3f;--accent-hover:#7dd3fc;--green:#34d399;--green-dim:#063620;--amber:#fbbf24;--amber-dim:#291800;--red:#f87171;--red-dim:#3f1414;--bg-page:#0d1117;--bg-surface:#161b22;--bg-raised:#21262d;--bg-code:#1c2128;--border:#30363d;--border-strong:#484f58;--text-primary:#e6edf3;--text-secondary:#8b949e;--text-muted:#6e7681;--text-code:#cdd9e5;--nav-bg:rgba(22,27,34,0.97);--nav-border:#30363d;}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+body{font-family:var(--sans);background:var(--bg-page);color:var(--text-primary);line-height:1.65;transition:background .2s,color .2s;overflow-x:hidden;}
+a{color:var(--accent);text-decoration:none;}a:hover{text-decoration:underline;}
+nav{position:fixed;top:0;left:0;right:0;z-index:300;background:var(--nav-bg);border-bottom:1px solid var(--nav-border);backdrop-filter:blur(14px);}
+.nav-inner{max-width:1400px;margin:0 auto;padding:0 24px;height:56px;display:flex;align-items:center;gap:8px;}
+.nav-logo{font-size:15px;font-weight:600;color:var(--text-primary);display:flex;align-items:center;gap:8px;white-space:nowrap;margin-right:16px;}
+.nav-logo span{color:var(--accent);}
+.nav-links{display:flex;align-items:center;gap:2px;flex:1;overflow-x:auto;}
+.nav-links a{font-size:13.5px;color:var(--text-secondary);padding:5px 11px;border-radius:var(--radius-md);transition:color .15s,background .15s;white-space:nowrap;}
+.nav-links a:hover{color:var(--text-primary);background:var(--bg-raised);text-decoration:none;}
+.nav-right{display:flex;align-items:center;gap:8px;margin-left:auto;}
+.nav-gh{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-secondary);padding:5px 10px;border-radius:var(--radius-md);border:1px solid var(--border);background:var(--bg-surface);transition:all .15s;}
+.nav-gh:hover{color:var(--text-primary);border-color:var(--border-strong);text-decoration:none;}
+.nav-btn{font-size:13px;font-weight:500;padding:5px 14px;background:var(--accent);color:#fff;border-radius:var(--radius-md);transition:background .15s;}
+.nav-btn:hover{background:var(--accent-hover);text-decoration:none;}
+.theme-toggle{width:34px;height:34px;border-radius:var(--radius-md);border:1px solid var(--border);background:var(--bg-surface);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:all .15s;}
+.theme-toggle:hover{border-color:var(--border-strong);background:var(--bg-raised);}
+.version-badge{font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:10px;background:var(--green-dim);color:var(--green);border:1px solid var(--green-dim);}
+.docs-layout{display:flex;padding-top:56px;min-height:100vh;}
+.sidebar{width:var(--sidebar-w);flex-shrink:0;position:fixed;top:56px;left:0;bottom:0;overflow-y:auto;background:var(--bg-surface);border-right:1px solid var(--border);padding:20px 0;z-index:200;}
+.sidebar::-webkit-scrollbar{width:4px;}.sidebar::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:4px;}
+.sb-section{padding:0 16px;margin-bottom:20px;}
+.sb-title{font-family:var(--mono);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-muted);font-weight:500;margin-bottom:6px;padding:0 4px;}
+.sb-link{display:block;font-size:13px;color:var(--text-secondary);padding:5px 8px;border-radius:var(--radius-sm);transition:all .12s;line-height:1.4;}
+.sb-link:hover{color:var(--text-primary);background:var(--bg-raised);text-decoration:none;}
+.sb-link.active{color:var(--accent);background:var(--accent-dim);font-weight:500;}
+.sb-link.sub{padding-left:18px;font-size:12.5px;}
+.docs-main{margin-left:var(--sidebar-w);flex:1;min-width:0;}
+.hero{padding:72px 64px 56px;background:var(--bg-surface);border-bottom:1px solid var(--border);}
+.badge{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11.5px;padding:3px 10px;border-radius:20px;border:1px solid var(--border);color:var(--text-secondary);background:var(--bg-raised);margin-bottom:20px;}
+.badge-dot{width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0;animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+.hero-title{font-size:clamp(28px,4vw,44px);font-weight:600;line-height:1.12;letter-spacing:-1.5px;margin-bottom:16px;}
+.hero-title strong{color:var(--accent);}
+.hero-sub{font-size:16px;color:var(--text-secondary);line-height:1.7;max-width:680px;margin-bottom:28px;}
+.hero-actions{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:36px;}
+.btn-primary{display:inline-flex;align-items:center;gap:7px;background:var(--accent);color:#fff;padding:9px 20px;border-radius:var(--radius-md);font-size:14px;font-weight:500;transition:background .15s;}
+.btn-primary:hover{background:var(--accent-hover);text-decoration:none;}
+.btn-outline{display:inline-flex;align-items:center;gap:7px;background:var(--bg-surface);color:var(--text-primary);padding:9px 20px;border-radius:var(--radius-md);font-size:14px;font-weight:500;border:1px solid var(--border);transition:all .15s;}
+.btn-outline:hover{border-color:var(--border-strong);background:var(--bg-raised);text-decoration:none;}
+.hero-stats{display:inline-flex;border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;background:var(--bg-surface);}
+.hstat{padding:12px 24px;text-align:center;border-right:1px solid var(--border);}
+.hstat:last-child{border-right:none;}
+.hstat-val{font-size:20px;font-weight:600;letter-spacing:-0.5px;line-height:1;}
+.hstat-label{font-size:11px;color:var(--text-muted);margin-top:3px;}
+.install-bar{background:var(--bg-page);border-bottom:1px solid var(--border);padding:12px 64px;}
+.install-inner{display:flex;align-items:center;gap:12px;flex-wrap:wrap;max-width:900px;}
+.install-label{font-size:12px;color:var(--text-muted);white-space:nowrap;font-family:var(--mono);}
+.install-tabs{display:flex;gap:2px;flex-wrap:wrap;}
+.itab{font-family:var(--mono);font-size:11.5px;padding:4px 10px;border-radius:var(--radius-sm);cursor:pointer;border:1px solid transparent;color:var(--text-secondary);background:transparent;transition:all .12s;}
+.itab.active{background:var(--bg-surface);border-color:var(--border);color:var(--text-primary);}
+.install-box{flex:1;display:flex;align-items:center;gap:10px;background:var(--bg-code);border:1px solid var(--border);border-radius:var(--radius-md);padding:7px 14px;min-width:240px;max-width:460px;}
+.install-cmd{font-family:var(--mono);font-size:13px;color:var(--green);flex:1;}
+.copy-btn{font-family:var(--mono);font-size:11px;color:var(--text-muted);background:none;border:1px solid var(--border);cursor:pointer;padding:2px 8px;border-radius:var(--radius-sm);transition:all .12s;}
+.copy-btn:hover{color:var(--text-primary);border-color:var(--border-strong);}
+.pill{font-family:var(--mono);font-size:11px;padding:3px 9px;border-radius:20px;border:1px solid var(--border);color:var(--text-muted);white-space:nowrap;}
+.doc-section{padding:56px 64px;border-bottom:1px solid var(--border);}
+.doc-section.alt{background:var(--bg-surface);}
+.sec-label{font-family:var(--mono);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);font-weight:500;margin-bottom:10px;}
+.sec-title{font-size:clamp(20px,2.5vw,28px);font-weight:600;letter-spacing:-0.8px;margin-bottom:10px;line-height:1.2;}
+.sec-sub{font-size:14.5px;color:var(--text-secondary);line-height:1.7;max-width:680px;margin-bottom:32px;}
+h3{font-size:17px;font-weight:600;margin:32px 0 12px;letter-spacing:-0.3px;}h3:first-child{margin-top:0;}
+h4{font-size:14px;font-weight:600;margin:24px 0 8px;font-family:var(--mono);}
+p{font-size:14px;color:var(--text-secondary);line-height:1.75;margin-bottom:14px;}
+p:last-child{margin-bottom:0;}
+.code-block{background:var(--bg-code);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin:16px 0;}
+.code-header{background:var(--bg-raised);padding:9px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px;}
+.cb-dot{width:10px;height:10px;border-radius:50%;}
+.cb-fname{font-family:var(--mono);font-size:12px;color:var(--text-muted);flex:1;margin-left:6px;}
+.cb-copy{font-family:var(--mono);font-size:11px;color:var(--text-muted);background:none;border:1px solid var(--border);cursor:pointer;padding:2px 8px;border-radius:var(--radius-sm);transition:all .12s;}
+.cb-copy:hover{color:var(--text-primary);border-color:var(--border-strong);}
+.code-block pre{font-family:var(--mono);font-size:13px;line-height:1.85;padding:18px 20px;overflow-x:auto;color:var(--text-code);}
+.tc{color:#8c959f;font-style:italic;}
+.ci{font-family:var(--mono);font-size:12.5px;background:var(--bg-raised);border:1px solid var(--border);border-radius:var(--radius-sm);padding:1px 6px;color:var(--text-code);}
+.terminal{background:#0d1117;border:1px solid #30363d;border-radius:var(--radius-lg);overflow:hidden;margin:16px 0;}
+.term-header{background:#161b22;border-bottom:1px solid #30363d;padding:9px 16px;display:flex;align-items:center;gap:6px;}
+.term-dot{width:10px;height:10px;border-radius:50%;}
+.term-title{font-family:var(--mono);font-size:12px;color:#8b949e;flex:1;margin-left:6px;}
+.term-body{padding:16px 20px;font-family:var(--mono);font-size:13px;line-height:1.9;color:#e6edf3;min-height:120px;max-height:420px;overflow-y:auto;white-space:pre-wrap;}
+.term-body::-webkit-scrollbar{width:4px;}.term-body::-webkit-scrollbar-thumb{background:#30363d;border-radius:4px;}
+.term-prompt{color:#7ee787;}.term-cmd{color:#e6edf3;}.term-out{color:#8b949e;}.term-ok{color:#3fb950;}.term-warn{color:#d29922;}.term-err{color:#f85149;}.term-info{color:#58a6ff;}
+.term-input-row{display:flex;align-items:center;gap:8px;padding:10px 20px;border-top:1px solid #21262d;}
+.term-input{flex:1;background:transparent;border:none;outline:none;font-family:var(--mono);font-size:13px;color:#e6edf3;}
+.term-run-btn{font-family:var(--mono);font-size:11px;background:#238636;color:#fff;border:none;padding:5px 14px;border-radius:var(--radius-sm);cursor:pointer;transition:background .15s;}
+.term-run-btn:hover{background:#2ea043;}
+.term-select{background:#21262d;border:1px solid #30363d;color:#e6edf3;font-family:var(--mono);font-size:11px;padding:3px 8px;border-radius:var(--radius-sm);cursor:pointer;}
+.alert{border-radius:var(--radius-md);padding:12px 16px;margin:16px 0;font-size:13.5px;line-height:1.6;border-left:3px solid;}
+.alert-info{background:var(--accent-dim);border-color:var(--accent);}
+.alert-warn{background:var(--amber-dim);border-color:var(--amber);}
+.alert-ok{background:var(--green-dim);border-color:var(--green);}
+.alert-danger{background:var(--red-dim);border-color:var(--red);}
+.alert strong{font-weight:600;}
+.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-lg);margin:16px 0;}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+thead{background:var(--bg-raised);}
+th{text-align:left;padding:10px 14px;font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);border-bottom:1px solid var(--border);}
+td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:top;color:var(--text-primary);}
+tr:last-child td{border-bottom:none;}tr:hover td{background:var(--bg-page);}
+td code{font-family:var(--mono);font-size:11.5px;background:var(--bg-raised);border:1px solid var(--border);border-radius:var(--radius-sm);padding:1px 5px;}
+.providers-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-top:16px;}
+.pcard{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:14px 16px;transition:border-color .15s;}
+.pcard:hover{border-color:var(--accent);}
+.pc-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;gap:4px;}
+.pc-name{font-family:var(--mono);font-size:11.5px;font-weight:500;color:var(--text-primary);}
+.pc-badge{font-family:var(--mono);font-size:9.5px;padding:1px 6px;border-radius:10px;white-space:nowrap;}
+.open{background:var(--green-dim);color:var(--green);}.auth{background:var(--bg-raised);color:var(--text-muted);border:1px solid var(--border);}.unverified{background:var(--amber-dim);color:var(--amber);border:1px solid var(--amber-dim);}
+.pc-desc{font-size:11.5px;color:var(--text-secondary);line-height:1.5;}
+.pc-chips{display:flex;gap:4px;flex-wrap:wrap;margin-top:8px;}
+.pchip{font-size:10px;font-family:var(--mono);padding:1px 6px;border-radius:3px;background:var(--bg-raised);color:var(--text-muted);border:1px solid var(--border);}
+.pchip.stac{background:var(--accent-dim);color:var(--accent);}
+.pchip.sar{color:#7c3aed;background:#ede9fe;border-color:#ddd6fe;}[data-theme="dark"] .pchip.sar{color:#a78bfa;background:#1e1b4b;border-color:#312e81;}
+.pf-tabs{display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap;}
+.pf-tab{font-family:var(--mono);font-size:12px;padding:5px 12px;border-radius:var(--radius-md);cursor:pointer;border:1px solid var(--border);color:var(--text-secondary);background:var(--bg-surface);transition:all .12s;}
+.pf-tab.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+.flag-table{margin:16px 0;}
+.flag-row{display:grid;grid-template-columns:210px 90px 1fr;border-bottom:1px solid var(--border);padding:9px 0;align-items:start;}
+.flag-row.hdr{background:var(--bg-raised);border-radius:var(--radius-sm);padding:6px 0;}
+.flag-name{font-family:var(--mono);font-size:12px;color:var(--green);padding:0 12px;}
+.flag-type{font-family:var(--mono);font-size:11.5px;color:var(--amber);padding:0 8px;}
+.flag-desc{font-size:13px;color:var(--text-secondary);padding:0 12px;line-height:1.5;}
+.steps-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;}
+.step-card{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;}
+.step-card-header{background:var(--bg-raised);padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;}
+.step-num{width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.step-title{font-size:13.5px;font-weight:500;}
+.step-code{padding:14px 16px;font-family:var(--mono);font-size:12.5px;color:var(--text-code);line-height:1.8;overflow-x:auto;white-space:pre-wrap;}
+.feat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-top:16px;}
+.feat-cell{background:var(--bg-surface);padding:22px;transition:background .15s;}
+.feat-cell:hover{background:var(--bg-raised);}
+.feat-icon{width:34px;height:34px;border-radius:var(--radius-md);background:var(--accent-dim);display:flex;align-items:center;justify-content:center;font-size:16px;margin-bottom:12px;}
+.feat-icon.green{background:var(--green-dim);}.feat-icon.amber{background:var(--amber-dim);}.feat-icon.neutral{background:var(--bg-raised);border:1px solid var(--border);}
+.feat-title{font-size:13.5px;font-weight:600;margin-bottom:7px;}
+.feat-body{font-size:12.5px;color:var(--text-secondary);line-height:1.6;}
+.format-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin:16px 0;}
+.fmt-card{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:14px;}
+.fmt-name{font-family:var(--mono);font-size:12px;font-weight:500;color:var(--accent);margin-bottom:4px;}
+.fmt-desc{font-size:12px;color:var(--text-secondary);line-height:1.5;}
+.pipe-steps{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;background:var(--border);margin:16px 0;}
+.pstep{background:var(--bg-surface);padding:18px;}
+.ps-n{font-family:var(--mono);font-size:10px;color:var(--text-muted);margin-bottom:8px;}
+.ps-icon{font-size:20px;margin-bottom:8px;}
+.ps-title{font-size:13px;font-weight:600;margin-bottom:4px;}
+.ps-desc{font-size:12px;color:var(--text-secondary);line-height:1.5;}
+.sec-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px;}
+.sec-card{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:18px;}
+.sec-card-title{font-size:13.5px;font-weight:600;margin-bottom:10px;}
+.sec-list{list-style:none;display:flex;flex-direction:column;gap:7px;}
+.sec-list li{font-size:13px;color:var(--text-secondary);line-height:1.5;padding-left:16px;position:relative;}
+.sec-list li::before{content:"✓";position:absolute;left:0;color:var(--green);font-weight:600;}
+.api-class{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin:16px 0;}
+.api-class-header{background:var(--bg-raised);padding:12px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;}
+.api-class-name{font-family:var(--mono);font-size:14px;font-weight:500;color:var(--accent);}
+.api-class-type{font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:10px;background:var(--accent-dim);color:var(--accent);}
+.api-method{border-bottom:1px solid var(--border);padding:16px 20px;}
+.api-method:last-child{border-bottom:none;}
+.api-sig{font-family:var(--mono);font-size:12.5px;color:var(--text-code);margin-bottom:8px;line-height:1.6;}
+.api-sig .fn{color:var(--accent);font-weight:500;}
+.api-sig .param{color:var(--amber);}
+.api-sig .ret{color:var(--green);}
+.api-desc{font-size:13px;color:var(--text-secondary);line-height:1.6;margin-bottom:10px;}
+.roadmap-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:16px;}
+.rm-card{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;position:relative;overflow:hidden;}
+.rm-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;}
+.rm-card.done::before{background:var(--green);}
+.rm-card.progress::before{background:var(--accent);}
+.rm-card.planned::before{background:var(--border-strong);}
+.rm-version{font-family:var(--mono);font-size:11px;color:var(--text-muted);margin-bottom:4px;}
+.rm-title{font-size:14px;font-weight:600;margin-bottom:4px;}
+.rm-date{font-family:var(--mono);font-size:11px;margin-bottom:14px;}
+.rm-date.done{color:var(--green);}
+.rm-date.progress{color:var(--accent);}
+.rm-date.planned{color:var(--text-muted);}
+.rm-items{list-style:none;display:flex;flex-direction:column;gap:6px;}
+.rm-items li{font-size:12.5px;color:var(--text-secondary);padding-left:16px;position:relative;line-height:1.4;}
+.rm-items li::before{position:absolute;left:0;font-size:11px;}
+.rm-items li.done::before{content:"✓";color:var(--green);}
+.rm-items li.prog::before{content:"◐";color:var(--accent);}
+.rm-items li.todo::before{content:"○";color:var(--text-muted);}
+.err-grid{display:flex;flex-direction:column;gap:8px;margin-top:16px;}
+.err-row{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:14px 16px;display:grid;grid-template-columns:220px 1fr;gap:16px;align-items:start;}
+.err-code{font-family:var(--mono);font-size:12px;color:var(--red);font-weight:500;}
+.err-desc{font-size:13px;color:var(--text-secondary);line-height:1.5;}
+.err-fix{font-family:var(--mono);font-size:11.5px;color:var(--green);margin-top:4px;}
+footer{background:var(--bg-surface);border-top:1px solid var(--border);padding:40px 64px 24px;}
+.footer-grid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:40px;margin-bottom:32px;max-width:900px;}
+.f-logo{font-size:15px;font-weight:600;margin-bottom:8px;}.f-logo span{color:var(--accent);}
+.f-desc{font-size:13px;color:var(--text-secondary);line-height:1.6;margin-bottom:14px;}
+.f-badges{display:flex;flex-wrap:wrap;gap:6px;}
+.f-col-title{font-size:12px;font-weight:600;margin-bottom:10px;}
+.f-col ul{list-style:none;display:flex;flex-direction:column;gap:7px;}
+.f-col ul li a{font-size:13px;color:var(--text-secondary);transition:color .12s;}
+.f-col ul li a:hover{color:var(--text-primary);text-decoration:none;}
+.footer-bottom{display:flex;justify-content:space-between;align-items:center;padding-top:20px;border-top:1px solid var(--border);flex-wrap:wrap;gap:10px;max-width:900px;}
+.footer-copy{font-size:12px;color:var(--text-muted);}.footer-copy a{color:var(--accent);}
+.footer-built{font-family:var(--mono);font-size:11.5px;color:var(--text-muted);}
+@media(max-width:1024px){.sidebar{width:220px;}.docs-main{margin-left:220px;}.feat-grid{grid-template-columns:1fr 1fr;}.steps-grid{grid-template-columns:1fr;}.sec-grid{grid-template-columns:1fr;}.roadmap-grid{grid-template-columns:1fr 1fr;}}
+@media(max-width:768px){.sidebar{transform:translateX(-100%);width:260px;}.docs-main{margin-left:0;}.hero,.doc-section,.install-bar,footer{padding-left:24px;padding-right:24px;}.pipe-steps{grid-template-columns:1fr 1fr;}.feat-grid{grid-template-columns:1fr;}.flag-row{grid-template-columns:1fr;gap:2px;}.roadmap-grid{grid-template-columns:1fr;}.err-row{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<nav>
+  <div class="nav-inner">
+    <div class="nav-logo">🛰️ <span>PyGeo</span>Fetch</div>
+    <div class="nav-links">
+      <a href="#quickstart">Quick Start</a>
+      <a href="#providers">Providers</a>
+      <a href="#insar">InSAR</a>
+      <a href="#sar-processing">SAR</a>
+      <a href="#processing">Processing</a>
+      <a href="#preprocessing">Preprocess</a>
+      <a href="#viz">Visualization</a>
+      <a href="#cli">CLI</a>
+      <a href="#api">Python API</a>
+    </div>
+    <div class="nav-right">
+      <span class="version-badge">v2.0.0</span>
+      <a href="https://github.com/EOCoreINT/pygeofetch" class="nav-gh" target="_blank">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38v-1.34C3.73 14.36 3.26 12.9 3.26 12.9c-.36-.92-.88-1.16-.88-1.16-.72-.49.05-.48.05-.48.8.06 1.22.82 1.22.82.71 1.22 1.86.87 2.31.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.67 7.67 0 0 1 4 0c1.53-1.03 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.28.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.19c0 .21.15.46.55.38A8 8 0 0 0 8 0z"/></svg>
+        GitHub
+      </a>
+      <a href="#quickstart" class="nav-btn">Get Started →</a>
+      <button class="theme-toggle" id="themeToggle" title="Toggle theme">🌙</button>
+    </div>
+  </div>
+</nav>
+
+<div class="docs-layout">
+<aside class="sidebar" id="sidebar">
+  <div class="sb-section">
+    <div class="sb-title">Getting Started</div>
+    <a href="#overview" class="sb-link active">Overview</a>
+    <a href="#install" class="sb-link">Installation</a>
+    <a href="#quickstart" class="sb-link">Quick Start</a>
+    <a href="#doctor" class="sb-link">Doctor / Diagnostics</a>
+  </div>
+  <div class="sb-section">
+    <div class="sb-title">Authentication</div>
+    <a href="#auth-add" class="sb-link">Adding Credentials</a>
+    <a href="#auth-env" class="sb-link">Environment Variables</a>
+    <a href="#auth-table" class="sb-link">Provider Auth Types</a>
+  </div>
+  <div class="sb-section">
+    <div class="sb-title">Search</div>
+    <a href="#search-basic" class="sb-link">Basic Search</a>
+    <a href="#search-flags" class="sb-link">SearchQuery Fields</a>
+  </div>
+  <div class="sb-section">
+    <div class="sb-title">Download</div>
+    <a href="#download-basic" class="sb-link">Basic Download</a>
+    <a href="#download-resume" class="sb-link">Resume &amp; Progress</a>
+  </div>
+  <div class="sb-section">
+    <div class="sb-title">Providers</div>
+    <a href="#providers" class="sb-link sub">Provider Status</a>
+    <a href="#provider-fallbacks" class="sb-link sub">Reliability Fallbacks</a>
+  </div>
+  <div class="sb-section">
+    <div class="sb-title">InSAR</div>
+    <a href="#insar" class="sb-link">Overview</a>
+    <a href="#insar-slc" class="sb-link">SLC Extraction</a>
+    <a href="#insar-interferogram" class="sb-link">Interferogram Generation</a>
+    <a href="#insar-unwrap" class="sb-link">Phase Unwrapping</a>
+    <a href="#insar-timeseries" class="sb-link">SBAS Time Series</a>
+    <a href="#insar-atmosphere" class="sb-link">Atmospheric Correction</a>
+    <a href="#orbit-files" class="sb-link">Orbit Files</a>
+  </div>
+  <div class="sb-section">
+    <div class="sb-title">SAR Processing</div>
+    <a href="#sar-processing" class="sb-link">SARProcessor</a>
+  </div>
+  <div class="sb-section">
+    <div class="sb-title">Processing</div>
+    <a href="#processing" class="sb-link">Spectral Indices</a>
+    <a href="#processing-landsat" class="sb-link">Landsat Extraction</a>
+    <a href="#preprocessing" class="sb-link">Preprocessing Engine</a>
+    <a href="#postprocessing" class="sb-link">Postprocessing</a>
+  </div>
+  <div class="sb-section">
+    <div class="sb-title">Visualization</div>
+    <a href="#viz" class="sb-link">Plotter</a>
+    <a href="#viz-map" class="sb-link">MapViewer</a>
+  </div>
+  <div class="sb-section">
+    <div class="sb-title">Pipelines</div>
+    <a href="#pipeline-yaml" class="sb-link">YAML Pipelines</a>
+  </div>
+  <div class="sb-section">
+    <div class="sb-title">Python API</div>
+    <a href="#api" class="sb-link">PyGeoFetch class</a>
+  </div>
+  <div class="sb-section">
+    <div class="sb-title">Reference</div>
+    <a href="#cli" class="sb-link">CLI Reference</a>
+    <a href="#security" class="sb-link">Security</a>
+    <a href="#errors" class="sb-link">Error Handling</a>
+    <a href="#roadmap" class="sb-link">Roadmap &amp; Status</a>
+  </div>
+</aside>
+
+<main class="docs-main">
+
+<div class="hero" id="overview">
+  <div class="badge"><span class="badge-dot"></span>v2.0.0 · Actively Developed</div>
+  <h1 class="hero-title"><strong>pygeofetch</strong> Documentation</h1>
+  <p class="hero-sub">A universal satellite data pipeline — unified search and download across major Earth observation providers, plus a complete InSAR and SAR processing chain implemented in pure Python.</p>
+  <div class="hero-actions">
+    <a href="#quickstart" class="btn-primary">Quick Start →</a>
+    <a href="#insar" class="btn-outline">InSAR Chain</a>
+    <a href="#api" class="btn-outline">Python API</a>
+    <a href="https://github.com/EOCoreINT/pygeofetch" class="btn-outline" target="_blank">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38v-1.34C3.73 14.36 3.26 12.9 3.26 12.9c-.36-.92-.88-1.16-.88-1.16-.72-.49.05-.48.05-.48.8.06 1.22.82 1.22.82.71 1.22 1.86.87 2.31.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.67 7.67 0 0 1 4 0c1.53-1.03 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.28.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.19c0 .21.15.46.55.38A8 8 0 0 0 8 0z"/></svg>
+      GitHub
+    </a>
+  </div>
+  <div class="hero-stats">
+    <div class="hstat"><div class="hstat-val">5</div><div class="hstat-label">Hardened Providers</div></div>
+    <div class="hstat"><div class="hstat-val">5</div><div class="hstat-label">InSAR Modules</div></div>
+    <div class="hstat"><div class="hstat-val">17+</div><div class="hstat-label">Spectral Indices</div></div>
+    <div class="hstat"><div class="hstat-val">MIT</div><div class="hstat-label">License</div></div>
+  </div>
+  <div class="alert alert-info" style="margin-top:24px;max-width:680px;">
+    <strong>On provider count:</strong> PyGeoFetch integrates with a growing set of Earth observation providers. A subset — currently Copernicus, USGS, AWS Earth, Planetary Computer, and Element84 — are hardened and tested against their live APIs. The rest are implemented but not yet verified; calling them raises a clear <code class="ci">UnverifiedIntegrationError</code> rather than silently returning empty results. See <a href="#providers">Provider Status</a> for the full breakdown.
+  </div>
+</div>
+
+<div class="install-bar" id="install">
+  <div class="install-inner">
+    <span class="install-label">$ install</span>
+    <div class="install-tabs">
+      <button class="itab active" onclick="setInstall('pip',this)">pip</button>
+      <button class="itab" onclick="setInstall('geo',this)">+geo</button>
+      <button class="itab" onclick="setInstall('insar',this)">+insar</button>
+      <button class="itab" onclick="setInstall('sar',this)">+sar</button>
+      <button class="itab" onclick="setInstall('viz',this)">+viz</button>
+      <button class="itab" onclick="setInstall('full',this)">full</button>
+    </div>
+    <div class="install-box">
+      <span class="install-cmd" id="install-cmd">pip install pygeofetch</span>
+      <button class="copy-btn" onclick="copyInstall()">copy</button>
+    </div>
+    <span class="pill">MIT License</span>
+    <span class="pill">Python 3.9+</span>
+  </div>
+</div>
+
+<div class="doc-section" id="quickstart">
+  <div class="sec-label">Getting Started</div>
+  <h2 class="sec-title">Up and running in a few minutes</h2>
+  <p class="sec-sub">Core install gives you search, download, and credential management. Processing (InSAR, SAR, spectral indices) and visualization are opt-in extras.</p>
+  <div class="steps-grid">
+    <div class="step-card">
+      <div class="step-card-header"><div class="step-num">1</div><div class="step-title">Install</div></div>
+      <div class="step-code"><span style="color:#8c959f;font-style:italic"># Core — search and download</span>
+pip install pygeofetch
+
+<span style="color:#8c959f;font-style:italic"># Raster I/O (needed downstream)</span>
+pip install "pygeofetch[geo]"
+
+<span style="color:#8c959f;font-style:italic"># InSAR: SNAPHU unwrapping, SBAS</span>
+pip install "pygeofetch[insar]"</div>
+    </div>
+    <div class="step-card">
+      <div class="step-card-header"><div class="step-num">2</div><div class="step-title">Verify</div></div>
+      <div class="step-code">python3 -c "import pygeofetch; print(pygeofetch.__version__)"
+<span style="color:#8c959f;font-style:italic"># → 2.0.0</span>
+
+pygeofetch doctor</div>
+    </div>
+    <div class="step-card">
+      <div class="step-card-header"><div class="step-num">3</div><div class="step-title">Search</div></div>
+      <div class="step-code">from pygeofetch import PyGeoFetch
+from pygeofetch.models.search_query import SearchQuery, BoundingBox
+
+client = PyGeoFetch()
+client.add_credentials("copernicus", username="you@example.com", password="...")
+
+results = client.search(
+    SearchQuery(
+        bbox=BoundingBox.from_string("-1.75,6.15,-1.60,6.25"),
+        start_date="2024-01-01", end_date="2024-12-31",
+    ),
+    providers=["copernicus"],
+)</div>
+    </div>
+    <div class="step-card">
+      <div class="step-card-header"><div class="step-num">4</div><div class="step-title">Download</div></div>
+      <div class="step-code">from pygeofetch.models.download_task import DownloadOptions
+
+options = DownloadOptions(parallel=2, resume=True, on_failure="skip")
+client.download(results, destination="./data", options=options)
+<span style="color:#8c959f;font-style:italic"># Real-time progress bar, auto-resume</span></div>
+    </div>
+  </div>
+
+  <h3 id="doctor">Interactive demo</h3>
+  <p>Select a command and click Run to see representative output:</p>
+  <div class="terminal">
+    <div class="term-header">
+      <div class="term-dot" style="background:#ff5f56"></div>
+      <div class="term-dot" style="background:#ffbd2e"></div>
+      <div class="term-dot" style="background:#27c93f"></div>
+      <span class="term-title">pygeofetch — interactive demo</span>
+      <select class="term-select" id="termSelect" onchange="loadCmd()">
+        <option value="doctor">pygeofetch doctor</option>
+        <option value="providers">providers list</option>
+        <option value="search_multi">federated search</option>
+        <option value="download">download with progress</option>
+        <option value="insar">InSAR pipeline</option>
+        <option value="flood">SAR flood mapping</option>
+      </select>
+    </div>
+    <div class="term-body" id="termBody"><span class="term-prompt">$ </span><span class="term-cmd">pygeofetch doctor</span>
+<span class="term-out">Select a command above and click ▶ Run</span></div>
+    <div class="term-input-row">
+      <span class="term-prompt">$ </span>
+      <input class="term-input" id="termInput" value="pygeofetch doctor" readonly/>
+      <button class="term-run-btn" onclick="runCmd()">▶ Run</button>
+    </div>
+  </div>
+</div>
+
+<div class="doc-section alt" id="auth-add">
+  <div class="sec-label">Authentication</div>
+  <h2 class="sec-title">Managing Provider Credentials</h2>
+  <p class="sec-sub">Supports username/password, API keys, and OAuth2/token-based flows including Copernicus 2FA (TOTP) and USGS's M2M Application Token.</p>
+  <div class="code-block">
+    <div class="code-header"><div class="cb-dot" style="background:#ff5f56"></div><div class="cb-dot" style="background:#ffbd2e"></div><div class="cb-dot" style="background:#27c93f"></div><span class="cb-fname">Python API</span><button class="cb-copy" onclick="copyCode(this)">copy</button></div>
+    <pre><span class="tc"># Copernicus — username/password, plus TOTP if 2FA is enabled</span>
+client.add_credentials("copernicus", username="you@example.com", password="...")
+client.add_credentials("copernicus", username="you@example.com", password="...", totp="123456")
+
+<span class="tc"># USGS — Application Token, NOT your ERS password (deprecated 2025-02-26)</span>
+client.add_credentials("usgs", username="your_ers_username", api_key="your_64_char_token")
+<span class="tc"># Also requires separate M2M access approval: ers.cr.usgs.gov/profile/access</span>
+
+<span class="tc"># List / verify / remove</span>
+client.auth.list()
+client.auth.authenticate("copernicus")
+client.auth.remove("usgs")</pre>
+  </div>
+  <div class="alert alert-warn"><strong>Copernicus "Invalid user credentials":</strong> CDSE returns this exact message for four different causes — wrong password, missing 2FA code, unverified email, or a very new account. Log in manually at dataspace.copernicus.eu first to isolate which one applies.</div>
+
+  <h3 id="auth-env">Environment variables</h3>
+  <div class="code-block">
+    <div class="code-header"><div class="cb-dot" style="background:#ff5f56"></div><div class="cb-dot" style="background:#ffbd2e"></div><div class="cb-dot" style="background:#27c93f"></div><span class="cb-fname">.env / CI/CD</span><button class="cb-copy" onclick="copyCode(this)">copy</button></div>
+    <pre>export pygeofetch_USGS_USERNAME=myuser
+export pygeofetch_USGS_API_KEY=your_64_char_application_token
+export pygeofetch_COPERNICUS_USERNAME=email@example.com
+export pygeofetch_COPERNICUS_PASSWORD=pass
+export pygeofetch_LOG_LEVEL=DEBUG</pre>
+  </div>
+  <div class="alert alert-warn"><strong>Headless Linux:</strong> set <code class="ci">PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring</code> if no keyring daemon is available.</div>
+
+  <h3 id="auth-table">Provider auth types</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Provider</th><th>Auth Type</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td><code>usgs</code></td><td>Username + M2M Application Token</td><td>✓ Hardened</td></tr>
+        <tr><td><code>copernicus</code></td><td>Username / Password (+TOTP), OAuth2</td><td>✓ Hardened</td></tr>
+        <tr><td><code>aws_earth</code>, <code>planetary_computer</code>, <code>element84</code></td><td>None (public STAC)</td><td>✓ Hardened</td></tr>
+        <tr><td><code>sentinel_hub</code>, <code>planet</code>, <code>nasa_earthdata(_cloud)</code>, <code>eodag</code></td><td>Varies</td><td>Implemented, lightly tested</td></tr>
+        <tr><td>12 other providers</td><td>Varies</td><td>⚠ Unverified — see <a href="#providers">Provider Status</a></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="doc-section" id="search-basic">
+  <div class="sec-label">Search</div>
+  <h2 class="sec-title">Searching Satellite Data</h2>
+  <p class="sec-sub">Federated search across multiple providers with real ThreadPoolExecutor concurrency, deduplication, and relevance scoring.</p>
+  <div class="code-block">
+    <div class="code-header"><div class="cb-dot" style="background:#ff5f56"></div><div class="cb-dot" style="background:#ffbd2e"></div><div class="cb-dot" style="background:#27c93f"></div><span class="cb-fname">search examples</span><button class="cb-copy" onclick="copyCode(this)">copy</button></div>
+    <pre><span class="tc"># Basic</span>
+from pygeofetch.models.search_query import SearchQuery, BoundingBox
+
+query = SearchQuery(
+    bbox=BoundingBox.from_string("-1.75,6.15,-1.60,6.25"),
+    start_date="2024-01-01", end_date="2024-12-31", cloud_cover_max=15,
+)
+results = client.search(query, providers=["copernicus", "aws_earth"])
+
+<span class="tc"># SAR — auto-routed away from GRD-only providers when product_type="SLC"</span>
+query = SearchQuery(
+    bbox=aoi, start_date="2024-01-01", end_date="2024-03-01",
+    product_type="SLC", polarisation="VV", pass_direction="DESCENDING",
+)
+
+<span class="tc"># Polygon geometry instead of a rectangle</span>
+query = SearchQuery(geometry=my_geojson_polygon, start_date="2024-01-01")</pre>
+  </div>
+  <h3 id="search-flags">SearchQuery fields</h3>
+  <div class="flag-table">
+    <div class="flag-row hdr"><div class="flag-name" style="color:var(--text-muted)">Field</div><div class="flag-type" style="color:var(--text-muted)">Type</div><div class="flag-desc" style="color:var(--text-muted)">Description</div></div>
+    <div class="flag-row"><div class="flag-name">bbox</div><div class="flag-type">BoundingBox</div><div class="flag-desc"><code class="ci">BoundingBox.from_string(...)</code></div></div>
+    <div class="flag-row"><div class="flag-name">geometry</div><div class="flag-type">dict</div><div class="flag-desc">GeoJSON geometry for polygon AOIs.</div></div>
+    <div class="flag-row"><div class="flag-name">product_type</div><div class="flag-type">str</div><div class="flag-desc">SAR: "SLC", "GRD", "GRD-COG".</div></div>
+    <div class="flag-row"><div class="flag-name">polarisation</div><div class="flag-type">str</div><div class="flag-desc">SAR: "VV", "VH", "HH", "HV".</div></div>
+    <div class="flag-row"><div class="flag-name">pass_direction</div><div class="flag-type">str</div><div class="flag-desc">Keep consistent across an InSAR/SBAS network.</div></div>
+  </div>
+</div>
+
+<div class="doc-section alt" id="download-basic">
+  <div class="sec-label">Download</div>
+  <h2 class="sec-title">Downloading Satellite Data</h2>
+  <p class="sec-sub">Real-time per-chunk progress via tqdm (correct in both terminals and Jupyter, including concurrent bars), automatic resume, provider-aware retry.</p>
+  <div class="code-block">
+    <div class="code-header"><div class="cb-dot" style="background:#ff5f56"></div><div class="cb-dot" style="background:#ffbd2e"></div><div class="cb-dot" style="background:#27c93f"></div><span class="cb-fname">download</span><button class="cb-copy" onclick="copyCode(this)">copy</button></div>
+    <pre>from pygeofetch.models.download_task import DownloadOptions
+
+options = DownloadOptions(parallel=2, resume=True, on_failure="skip")
+download_results = client.download(results, destination="./data", options=options)
+
+for r in download_results:
+    print(f"  {r.data_id}: {'OK' if r.success else r.error}")
+    if r.success:
+        print(f"    -> {r.output_path}")</pre>
+  </div>
+  <h3 id="download-resume">Resume &amp; real-time progress</h3>
+  <p>With <code class="ci">resume=True</code> (default), re-running a download checks for an existing, validated file — not just "a file with this name exists." For Copernicus, interrupted large transfers attempt HTTP Range-based resume, verified against the server's actual response, since CDSE is documented to sometimes ignore Range headers and return the full file instead.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Field</th><th>Default</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><code>parallel</code></td><td>4</td><td>Concurrent downloads</td></tr>
+        <tr><td><code>resume</code></td><td>True</td><td>Skip validated existing files</td></tr>
+        <tr><td><code>retry_attempts</code></td><td>3</td><td>Per-file retry count</td></tr>
+        <tr><td><code>chunk_size_mb</code></td><td>16.0</td><td>Streaming/progress granularity</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="doc-section" id="providers">
+  <div class="sec-label">Providers</div>
+  <h2 class="sec-title">Provider Status</h2>
+  <p class="sec-sub">Honest status, not a marketing count. Every provider was checked against its actual implementation.</p>
+  <div class="alert alert-danger">
+    <strong>How "unverified" providers behave:</strong> roughly a dozen were built from a shared generic template without confirming it matches the real API. At least one (ESA SciHub) points at a service decommissioned in November 2023. These now raise <code class="ci">UnverifiedIntegrationError</code> before any network call, rather than silently returning empty results indistinguishable from "no matching data."
+  </div>
+  <div class="pf-tabs">
+    <button class="pf-tab active" onclick="filterP('all',this)">All</button>
+    <button class="pf-tab" onclick="filterP('hardened',this)">✓ Hardened</button>
+    <button class="pf-tab" onclick="filterP('light',this)">Lightly tested</button>
+    <button class="pf-tab" onclick="filterP('unverified',this)">⚠ Unverified</button>
+  </div>
+  <div class="providers-grid" id="pgrid">
+    <div class="pcard" data-hardened="1"><div class="pc-top"><span class="pc-name">copernicus</span><span class="pc-badge open">✓ Hardened</span></div><div class="pc-desc">Sentinel-1/2/3/5P via CDSE. 2FA, resumable downloads, offline-product retrieval, verified polarisation filtering.</div><div class="pc-chips"><span class="pchip stac">STAC</span><span class="pchip sar">SAR</span></div></div>
+    <div class="pcard" data-hardened="1"><div class="pc-top"><span class="pc-name">usgs</span><span class="pc-badge open">✓ Hardened</span></div><div class="pc-desc">Landsat 4-9 via M2M API. Application Token auth, dynamic product resolution.</div><div class="pc-chips"><span class="pchip stac">STAC</span></div></div>
+    <div class="pcard" data-hardened="1"><div class="pc-top"><span class="pc-name">planetary_computer</span><span class="pc-badge open">✓ Hardened</span></div><div class="pc-desc">Microsoft's real STAC API, verified — including its per-asset download style.</div><div class="pc-chips"><span class="pchip stac">STAC</span></div></div>
+    <div class="pcard" data-hardened="1"><div class="pc-top"><span class="pc-name">aws_earth</span><span class="pc-badge open">✓ Hardened</span></div><div class="pc-desc">AWS Earth Open Data STAC catalog.</div><div class="pc-chips"><span class="pchip stac">STAC</span></div></div>
+    <div class="pcard" data-hardened="1"><div class="pc-top"><span class="pc-name">element84</span><span class="pc-badge open">✓ Hardened</span></div><div class="pc-desc">Element 84 Earth Search — real STAC API.</div><div class="pc-chips"><span class="pchip stac">STAC</span></div></div>
+    <div class="pcard" data-light="1"><div class="pc-top"><span class="pc-name">sentinel_hub</span><span class="pc-badge auth">Lightly tested</span></div><div class="pc-desc">OAuth2 client credentials. Implemented, not exercised as deeply as the hardened set.</div><div class="pc-chips"><span class="pchip sar">SAR</span></div></div>
+    <div class="pcard" data-light="1"><div class="pc-top"><span class="pc-name">planet</span><span class="pc-badge auth">Lightly tested</span></div><div class="pc-desc">Planet Labs API key auth.</div><div class="pc-chips"><span class="pchip stac">STAC</span></div></div>
+    <div class="pcard" data-light="1"><div class="pc-top"><span class="pc-name">nasa_earthdata</span><span class="pc-badge auth">Lightly tested</span></div><div class="pc-desc">NASA CMR via Earthdata Login.</div><div class="pc-chips"><span class="pchip stac">STAC</span></div></div>
+    <div class="pcard" data-light="1"><div class="pc-top"><span class="pc-name">eodag</span><span class="pc-badge auth">Lightly tested</span></div><div class="pc-desc">Federated access to 20+ sources via EODAG.</div><div class="pc-chips"></div></div>
+    <div class="pcard" data-unverified="1"><div class="pc-top"><span class="pc-name">esa_scihub</span><span class="pc-badge unverified">⚠ Confirmed dead</span></div><div class="pc-desc">Points to the Copernicus Open Access Hub — decommissioned Nov 2, 2023.</div><div class="pc-chips"></div></div>
+    <div class="pcard" data-unverified="1"><div class="pc-top"><span class="pc-name">geoserver_generic</span><span class="pc-badge unverified">⚠ Wrong protocol</span></div><div class="pc-desc">OGC WMS/WFS uses XML GetCapabilities, not the JSON REST pattern implemented here.</div><div class="pc-chips"></div></div>
+    <div class="pcard" data-unverified="1"><div class="pc-top"><span class="pc-name">google_earth_engine</span><span class="pc-badge unverified">⚠ Unverified</span></div><div class="pc-desc">GEE's real model is server-side ImageCollection filtering, not this REST pattern.</div><div class="pc-chips"></div></div>
+    <div class="pcard" data-unverified="1"><div class="pc-top"><span class="pc-name">digitalglobe</span><span class="pc-badge unverified">⚠ Unverified</span></div><div class="pc-desc">Base URL points at a marketing webpage, not an API root.</div><div class="pc-chips"></div></div>
+    <div class="pcard" data-unverified="1"><div class="pc-top"><span class="pc-name">jaxa_earth</span><span class="pc-badge unverified">⚠ Unverified</span></div><div class="pc-desc">Base URL points at JAXA EORC's website root.</div><div class="pc-chips"></div></div>
+    <div class="pcard" data-unverified="1"><div class="pc-top"><span class="pc-name">noaa_big_data</span><span class="pc-badge unverified">⚠ Unverified</span></div><div class="pc-desc">Base URL is a raw S3 bucket — no REST search support.</div><div class="pc-chips"></div></div>
+    <div class="pcard" data-unverified="1"><div class="pc-top"><span class="pc-name">earth_explorer_additional</span><span class="pc-badge unverified">⚠ Unverified</span></div><div class="pc-desc">Likely redundant with, and inferior to, the working usgs provider.</div><div class="pc-chips"></div></div>
+    <div class="pcard" data-unverified="1"><div class="pc-top"><span class="pc-name">alaska_satellite_facility</span><span class="pc-badge unverified">⚠ Unverified</span></div><div class="pc-desc">Endpoint path/params not confirmed against ASF's real search API.</div><div class="pc-chips"><span class="pchip sar">SAR</span></div></div>
+    <div class="pcard" data-unverified="1"><div class="pc-top"><span class="pc-name">airbus_oneatlas</span><span class="pc-badge unverified">⚠ Unverified</span></div><div class="pc-desc">Real OneAtlas API uses a different endpoint and auth host.</div><div class="pc-chips"></div></div>
+    <div class="pcard" data-unverified="1"><div class="pc-top"><span class="pc-name">inpe_cbers</span><span class="pc-badge unverified">⚠ Unverified</span></div><div class="pc-desc">Not confirmed against INPE's real catalog API.</div><div class="pc-chips"></div></div>
+    <div class="pcard" data-unverified="1"><div class="pc-top"><span class="pc-name">isro_bhuvan</span><span class="pc-badge unverified">⚠ Unverified</span></div><div class="pc-desc">Bhuvan's real API is WMS-oriented, not this REST pattern.</div><div class="pc-chips"></div></div>
+    <div class="pcard" data-unverified="1"><div class="pc-top"><span class="pc-name">maxar_gbdx</span><span class="pc-badge unverified">⚠ Unverified</span></div><div class="pc-desc">Not confirmed against Maxar's real Geospatial Platform endpoint.</div><div class="pc-chips"></div></div>
+    <div class="pcard" data-unverified="1"><div class="pc-top"><span class="pc-name">opentopography</span><span class="pc-badge auth">Implemented</span></div><div class="pc-desc">DEM/lidar via API key. Not covered by the provider audit — status not re-confirmed.</div><div class="pc-chips"></div></div>
+    <div class="pcard" data-unverified="1"><div class="pc-top"><span class="pc-name">terrabotics</span><span class="pc-badge auth">Implemented</span></div><div class="pc-desc">Commercial VHR imagery. Not covered by the provider audit — status not re-confirmed.</div><div class="pc-chips"></div></div>
+  </div>
+  <h3 id="provider-fallbacks">Reliability fallback clients</h3>
+  <p><code class="ci">pip install "pygeofetch[provider-fallbacks]"</code> — for Copernicus and USGS specifically, PyGeoFetch automatically retries via <a href="https://pypi.org/project/cdse/" target="_blank"><code class="ci">cdse</code></a> or <a href="https://pypi.org/project/usgsxplore/" target="_blank"><code class="ci">usgsxplore</code></a> when the direct API path hits a persistent error, using credentials you already registered. No extra config once installed; skipped transparently if not installed.</p>
+</div>
+
+<div class="doc-section alt" id="insar">
+  <div class="sec-label">InSAR</div>
+  <h2 class="sec-title">Full InSAR Processing Chain</h2>
+  <p class="sec-sub"><code class="ci">pip install "pygeofetch[insar]"</code> — coregistration, interferogram formation, phase unwrapping, and SBAS time series inversion, in pure Python. No SNAP or ISCE required for the core pipeline.</p>
+  <div class="pipe-steps">
+    <div class="pstep"><div class="ps-n">STEP 01</div><div class="ps-icon">📡</div><div class="ps-title">SLC Extraction</div><div class="ps-desc">Sub-swath extraction from .SAFE archives via embedded GCP matching.</div></div>
+    <div class="pstep"><div class="ps-n">STEP 02</div><div class="ps-icon">🔗</div><div class="ps-title">Interferogram</div><div class="ps-desc">Coregistration with ESD, formation, topographic phase removal.</div></div>
+    <div class="pstep"><div class="ps-n">STEP 03</div><div class="ps-icon">🌀</div><div class="ps-title">Unwrapping</div><div class="ps-desc">SNAPHU-based phase unwrapping via snaphu-py.</div></div>
+    <div class="pstep"><div class="ps-n">STEP 04</div><div class="ps-icon">📈</div><div class="ps-title">Time Series</div><div class="ps-desc">SBAS inversion with reference-pixel normalization.</div></div>
+  </div>
+  <div class="code-block">
+    <div class="code-header"><div class="cb-dot" style="background:#ff5f56"></div><div class="cb-dot" style="background:#ffbd2e"></div><div class="cb-dot" style="background:#27c93f"></div><span class="cb-fname">end-to-end InSAR</span><button class="cb-copy" onclick="copyCode(this)">copy</button></div>
+    <pre>from pygeofetch.insar import SLCExtractor, InterferogramGenerator, PhaseUnwrapper
+
+extractor = SLCExtractor(polarisation="VV")
+ref_tif, sec_tif = extractor.extract_pair(
+    download_results[0], download_results[1], aoi=aoi, output_dir="./data",
+)
+
+gen = InterferogramGenerator()
+result = gen.process_pair(ref_tif, sec_tif, dem="dem.tif")
+print(f"Mean coherence: {result.coherence.mean():.3f}")
+
+unwrapper = PhaseUnwrapper(cost_mode="defo")
+unwrapped, conncomp = unwrapper.unwrap(result.interferogram, result.coherence)</pre>
+  </div>
+  <h3 id="insar-slc">SLC Extraction</h3>
+  <p>Sentinel-1 IW SLC spans 3 sub-swaths per polarisation; your AOI typically falls in just one, varying per scene. <code class="ci">SLCExtractor</code> reads each sub-swath's embedded GCPs via rasterio and picks the one that overlaps your AOI.</p>
+  <div class="alert alert-ok"><strong>DownloadResult-first design:</strong> pass DownloadResult objects directly — <code class="ci">.output_path</code> already holds the exact path the provider wrote to, avoiding filename/subfolder-mismatch bugs.</div>
+  <h3 id="insar-interferogram">Interferogram Generation</h3>
+  <p>Correctly handles GDAL's <code class="ci">complex_int16</code> dtype — the actual format real Sentinel-1 SLC TIFFs use, not just complex64/complex128. Missing this silently discards phase data. Topographic phase removal is R²-gated (&gt;0.5) so real deformation isn't mistaken for terrain phase.</p>
+  <h3 id="insar-unwrap">Phase Unwrapping</h3>
+  <p>SNAPHU (Chen &amp; Zebker 2001) via <code class="ci">snaphu-py</code> — the same algorithm ASF's On-Demand InSAR and ISCE2/3 use in production.</p>
+  <h3 id="insar-timeseries">SBAS Time Series</h3>
+  <p>Berardino et al. (2002) SBAS inversion, with optional MintPy delegation for the full correction chain.</p>
+  <div class="alert alert-danger"><strong>The reference pixel matters more than almost anything else here.</strong> Phase unwrapping only recovers phase relative to an arbitrary per-interferogram offset. Combining unwrapped interferograms without a common stable reference pixel corrupts the entire result. Validated: referencing inside a synthetic subsidence bowl gave 103mm/yr RMSE against a 100mm/yr true signal; a verified-stable reference gave 8.84mm/yr RMSE. Always pass an explicit, independently-verified <code class="ci">reference_pixel</code>.</div>
+  <h3 id="insar-atmosphere">Atmospheric Correction</h3>
+  <p>Elevation-correlated (no extra deps, same R²-gating) or ERA5-based via PyAPS (<code class="ci">pygeofetch[insar-full]</code>, needs free CDS API credentials).</p>
+  <h3 id="orbit-files">Orbit Files</h3>
+  <div class="code-block">
+    <div class="code-header"><div class="cb-dot" style="background:#ff5f56"></div><div class="cb-dot" style="background:#ffbd2e"></div><div class="cb-dot" style="background:#27c93f"></div><span class="cb-fname">orbit files</span></div>
+    <pre>orbit_path = client.fetch_orbit_file(
+    product_name=scene.properties.get("name", scene.id),
+    orbit_type="precise",
+)</pre>
+  </div>
+  <p>Served by ESA as <code class="ci">.EOF.zip</code>; extraction is automatic, always returning a directly-usable <code class="ci">.EOF</code> path.</p>
+</div>
+
+<div class="doc-section" id="sar-processing">
+  <div class="sec-label">SAR Processing</div>
+  <h2 class="sec-title">SARProcessor</h2>
+  <p class="sec-sub"><code class="ci">pip install "pygeofetch[sar]"</code> — despeckling, calibration, flood mapping, coherence, with pluggable backends.</p>
+  <div class="code-block">
+    <div class="code-header"><div class="cb-dot" style="background:#ff5f56"></div><div class="cb-dot" style="background:#ffbd2e"></div><div class="cb-dot" style="background:#27c93f"></div><span class="cb-fname">SAR flood mapping</span><button class="cb-copy" onclick="copyCode(this)">copy</button></div>
+    <pre>from pygeofetch.sar import SARProcessor
+
+sar = SARProcessor()
+cal_pre = sar.calibrate("pre_event_vv.tif", output_type="sigma0", in_db=True)
+cal_post = sar.calibrate("post_event_vv.tif", output_type="sigma0", in_db=True)
+
+flood_result = sar.flood_map(
+    str(cal_post.output_path), reference=str(cal_pre.output_path), threshold=-15.0,
+)
+print(f"{flood_result.metadata['water_pct']:.1f}% flagged as flooded")</pre>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Backend</th><th>Requires</th><th>Best for</th></tr></thead>
+      <tbody>
+        <tr><td><code>"native"</code></td><td>Nothing extra</td><td>Despeckle, calibrate, flood map, coherence</td></tr>
+        <tr><td><code>"sarxarray"</code></td><td><code class="ci">pygeofetch[sar]</code></td><td>xarray/Dask-native large-scale processing</td></tr>
+        <tr><td><code>"ost"</code></td><td><code class="ci">pygeofetch[ost]</code> + SNAP</td><td>Production Range-Doppler terrain correction</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="doc-section alt" id="processing">
+  <div class="sec-label">Processing</div>
+  <h2 class="sec-title">Spectral Indices</h2>
+  <p class="sec-sub"><code class="ci">pip install "pygeofetch[processor]"</code> — 17 built-in indices, or 232+ via optional spyndex.</p>
+  <div class="code-block">
+    <div class="code-header"><div class="cb-dot" style="background:#ff5f56"></div><div class="cb-dot" style="background:#ffbd2e"></div><div class="cb-dot" style="background:#27c93f"></div><span class="cb-fname">spectral indices</span><button class="cb-copy" onclick="copyCode(this)">copy</button></div>
+    <pre>from pygeofetch.processor import SpectralIndex
+
+si = SpectralIndex()
+ndvi = si.compute("NDVI", RED=red_array, NIR=nir_array)
+ndvi = si.from_files("NDVI", red="B04.tif", nir="B08.tif", output="ndvi.tif")</pre>
+  </div>
+  <div class="format-grid">
+    <div class="fmt-card"><div class="fmt-name">NDVI / EVI / SAVI</div><div class="fmt-desc">Vegetation health</div></div>
+    <div class="fmt-card"><div class="fmt-name">NDWI / MNDWI</div><div class="fmt-desc">Surface water</div></div>
+    <div class="fmt-card"><div class="fmt-name">NDBI</div><div class="fmt-desc">Built-up areas</div></div>
+    <div class="fmt-card"><div class="fmt-name">NBR / dNBR</div><div class="fmt-desc">Burn severity</div></div>
+    <div class="fmt-card"><div class="fmt-name">+ 10 more</div><div class="fmt-desc">NDSI, NDMI, BSI, ARVI, GNDVI, RVI, VCI, CRI1, PSRI</div></div>
+  </div>
+  <h3 id="processing-landsat">Landsat Extraction</h3>
+  <div class="code-block">
+    <div class="code-header"><div class="cb-dot" style="background:#ff5f56"></div><div class="cb-dot" style="background:#ffbd2e"></div><div class="cb-dot" style="background:#27c93f"></div><span class="cb-fname">LandsatExtractor</span><button class="cb-copy" onclick="copyCode(this)">copy</button></div>
+    <pre>from pygeofetch.processor import LandsatExtractor
+
+extractor = LandsatExtractor()
+scene = extractor.process_scene(download_result, output_dir="./data")
+
+print(scene.sensor)      <span class="tc"># "OLI" or "TM"</span>
+red, nir = scene.get("red"), scene.get("nir")</pre>
+  </div>
+  <div class="alert alert-ok">
+    <strong>Two easy-to-get-wrong things this handles:</strong>
+    <ul class="sec-list" style="margin-top:8px;">
+      <li>OLI (Landsat 8/9) and TM/ETM+ (4/5/7) use different band numbers for the same wavelength — SR_B4 is Red on OLI, NIR on TM/ETM+. Sensor auto-detected, correct map applied.</li>
+      <li>Not every provider delivers one archive — Planetary Computer downloads each band separately. <code class="ci">process_scene()</code> handles both delivery styles transparently.</li>
+    </ul>
+  </div>
+  <p>Radiometric scaling verified against USGS's own worked examples (DN 18639 → 0.313 reflectance; DN 44947 → 302.6K). Cloud masking decodes QA_PIXEL bits per the official Science Product Guide.</p>
+</div>
+
+<div class="doc-section" id="preprocessing">
+  <div class="sec-label">Preprocessing</div>
+  <h2 class="sec-title">Preprocessing Engine</h2>
+  <p class="sec-sub">Atmospheric correction, cloud masking, topographic correction, geometric operations, pan-sharpening, and multi-scene compositing — the foundational optical-data toolkit underneath the InSAR/SAR/Landsat modules documented above.</p>
+
+  <div class="alert alert-warn"><strong>Verification status:</strong> these modules are part of the original PyGeoFetch codebase and are documented here from the project's own reference material. Unlike InSAR, SAR, and LandsatExtractor above — which were independently tested against synthetic and real data within this development thread — the preprocessing engine's internals have not been re-verified against running code in this session. Treat the method signatures and options below as accurate to the documented API; if you hit a discrepancy, please file it.</div>
+
+  <div class="code-block">
+    <div class="code-header"><div class="cb-dot" style="background:#ff5f56"></div><div class="cb-dot" style="background:#ffbd2e"></div><div class="cb-dot" style="background:#27c93f"></div><span class="cb-fname">preprocessing chain</span><button class="cb-copy" onclick="copyCode(this)">copy</button></div>
+    <pre><span class="tc"># Individual operations</span>
+corrected = client.preprocess.atmos("scene.tif", method="dos1")
+masked    = client.preprocess.cloud_mask("scene.tif", method="scl", scl_band="SCL.tif")
+clipped   = client.preprocess.clip("scene.tif", bbox=(-74.1, 40.6, -73.7, 40.9))
+reproj    = client.preprocess.reproject("scene.tif", crs="EPSG:4326")
+
+<span class="tc"># Chained as part of a pipeline</span>
+result = (
+    client.pipeline("sentinel2-ndvi")
+    .atmos(method="dos1")
+    .cloud_mask(method="scl", scl_band="SCL.tif")
+    .clip(bbox=(-74.1, 40.6, -73.7, 40.9))
+    .ndvi(red="B04.tif", nir="B08.tif")
+    .run(input="scene.tif", output_dir="./processed/")
+)</pre>
+  </div>
+
+  <h3>Available operations</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Method</th><th>Options</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>atmos()</code></td><td>dos1, dos2, sen2cor, flaash, 6s, icor</td><td>Atmospheric correction</td></tr>
+        <tr><td><code>cloud_mask()</code></td><td>scl, fmask, threshold, ndsi</td><td>Cloud masking</td></tr>
+        <tr><td><code>cloud_fill()</code></td><td>—</td><td>Fill cloud gaps using a multi-date time series</td></tr>
+        <tr><td><code>topo_correct()</code></td><td>cosine, minnaert, c-correction</td><td>Topographic (terrain illumination) correction</td></tr>
+        <tr><td><code>clip()</code></td><td>bbox or GeoJSON polygon</td><td>Clip to an area of interest</td></tr>
+        <tr><td><code>reproject()</code></td><td>any target CRS</td><td>Reproject (EPSG:4326, UTM zones, etc.)</td></tr>
+        <tr><td><code>resample()</code></td><td>nearest, bilinear, cubic, lanczos</td><td>Change spatial resolution</td></tr>
+        <tr><td><code>pansharpen()</code></td><td>brovey, ihs, gram-schmidt</td><td>Pan-sharpen multispectral with a panchromatic band</td></tr>
+        <tr><td><code>tile()</code></td><td>tile size, overlap</td><td>Split into overlapping tiles, e.g. for AI inference</td></tr>
+        <tr><td><code>mosaic()</code></td><td>first, last, min, max</td><td>Merge overlapping scenes</td></tr>
+        <tr><td><code>composite()</code></td><td>median, mean, max, best-pixel</td><td>Multi-temporal compositing</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="code-block">
+    <div class="code-header"><div class="cb-dot" style="background:#ff5f56"></div><div class="cb-dot" style="background:#ffbd2e"></div><div class="cb-dot" style="background:#27c93f"></div><span class="cb-fname">CLI</span><button class="cb-copy" onclick="copyCode(this)">copy</button></div>
+    <pre>pygeofetch preprocess atmos        scene.tif --method dos1
+pygeofetch preprocess cloud-mask   scene.tif --method scl
+pygeofetch preprocess topo-correct scene.tif dem.tif --method cosine
+pygeofetch preprocess clip         scene.tif --bbox "-74.1,40.6,-73.7,40.9"
+pygeofetch preprocess reproject    scene.tif --crs EPSG:4326
+pygeofetch preprocess pansharpen   pan.tif ms.tif --method brovey
+pygeofetch preprocess mosaic       s1.tif s2.tif --method first
+pygeofetch preprocess composite    *.tif --method median</pre>
+  </div>
+</div>
+
+<div class="doc-section alt" id="postprocessing">
+  <div class="sec-label">Postprocessing</div>
+  <h2 class="sec-title">Postprocessing</h2>
+  <p class="sec-sub">Turn a raster analysis result into GIS-ready vectors and statistics: vectorize → smooth → regularize → zonal stats → buffer → centroids → compress → COG.</p>
+
+  <div class="alert alert-warn"><strong>Same verification note as Preprocessing above:</strong> documented from the project's reference material, not independently re-tested against running code in this session.</div>
+
+  <div class="code-block">
+    <div class="code-header"><div class="cb-dot" style="background:#ff5f56"></div><div class="cb-dot" style="background:#ffbd2e"></div><div class="cb-dot" style="background:#27c93f"></div><span class="cb-fname">postprocessing chain</span><button class="cb-copy" onclick="copyCode(this)">copy</button></div>
+    <pre>vectors  = client.post.vectorize("ndvi.tif", threshold=0.3)
+smoothed = client.post.smooth(vectors, tolerance=0.5)
+stats    = client.post.zonal_stats("ndvi.tif", "parcels.geojson", output="stats.csv")
+cog      = client.post.cog("scene.tif", compress="deflate")</pre>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Method</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>vectorize()</code></td><td>Raster → vector polygons at a given threshold</td></tr>
+        <tr><td><code>smooth()</code></td><td>Simplify/smooth polygon boundaries</td></tr>
+        <tr><td><code>regularize()</code></td><td>Regularize building/parcel footprints toward rectilinear shapes</td></tr>
+        <tr><td><code>zonal_stats()</code></td><td>Per-polygon raster statistics (mean, min, max, etc.)</td></tr>
+        <tr><td><code>buffer()</code></td><td>Buffer vector geometries by a distance</td></tr>
+        <tr><td><code>centroids()</code></td><td>Extract polygon centroids</td></tr>
+        <tr><td><code>geometry_metrics()</code></td><td>Area, perimeter, shape-complexity metrics per feature</td></tr>
+        <tr><td><code>compress()</code></td><td>Recompress a raster (LZW, DEFLATE, ZSTD)</td></tr>
+        <tr><td><code>cog()</code></td><td>Convert to Cloud Optimized GeoTIFF</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="code-block">
+    <div class="code-header"><div class="cb-dot" style="background:#ff5f56"></div><div class="cb-dot" style="background:#ffbd2e"></div><div class="cb-dot" style="background:#27c93f"></div><span class="cb-fname">CLI</span><button class="cb-copy" onclick="copyCode(this)">copy</button></div>
+    <pre>pygeofetch post vectorize    ndvi.tif --threshold 0.3 --format geojson
+pygeofetch post smooth       polygons.geojson --tolerance 0.5
+pygeofetch post zonal-stats  ndvi.tif parcels.geojson --output stats.csv
+pygeofetch post cog          scene.tif --compress deflate --blocksize 512</pre>
+  </div>
+</div>
+
+<div class="doc-section" id="viz">
+  <div class="sec-label">Visualization</div>
+  <h2 class="sec-title">Plotter &amp; MapViewer</h2>
+  <p class="sec-sub"><code class="ci">pip install "pygeofetch[viz]"</code> — static plotting and interactive maps.</p>
+  <div class="code-block">
+    <div class="code-header"><div class="cb-dot" style="background:#ff5f56"></div><div class="cb-dot" style="background:#ffbd2e"></div><div class="cb-dot" style="background:#27c93f"></div><span class="cb-fname">quicklook — one call for almost anything</span><button class="cb-copy" onclick="copyCode(this)">copy</button></div>
+    <pre>from pygeofetch.viz import Plotter
+
+pl = Plotter()
+pl.quicklook(ndvi_array)              <span class="tc"># index -> diverging colormap</span>
+pl.quicklook("sentinel1_sigma0.tif")  <span class="tc"># SAR -> grayscale</span>
+pl.quicklook(flood_mask)              <span class="tc"># categorical -> auto legend</span>
+pl.quicklook(download_result)         <span class="tc"># DownloadResult resolved automatically</span></pre>
+  </div>
+  <p>Value-range heuristics, not format detection — few distinct values → categorical; mostly-negative dB range → SAR grayscale; within [-1,1] → diverging index colormap; otherwise → continuous. All overridable via <code class="ci">mode=</code>.</p>
+  <div class="code-block">
+    <div class="code-header"><div class="cb-dot" style="background:#ff5f56"></div><div class="cb-dot" style="background:#ffbd2e"></div><div class="cb-dot" style="background:#27c93f"></div><span class="cb-fname">purpose-built plots</span><button class="cb-copy" onclick="copyCode(this)">copy</button></div>
+    <pre>pl.plot_comparison(
+    {"Baseline": ndvi_before, "Recent": ndvi_after, "Change": ndvi_change},
+    per_panel_cmap={"Change": "RdBu"}, per_panel_range={"Change": (-0.5, 0.5)},
+)
+
+pl.plot_classification(
+    classified_array,
+    class_labels={0: "Stable", 1: "Moderate", 2: "Severe"},
+    class_colors={0: "#2ecc71", 1: "#f39c12", 2: "#e74c3c"},
+)</pre>
+  </div>
+  <p><code class="ci">plot_raster()</code> and <code class="ci">plot_rgb()</code> accept in-memory numpy arrays directly — no round-trip through disk needed.</p>
+  <h3 id="viz-map">MapViewer</h3>
+  <div class="code-block">
+    <div class="code-header"><div class="cb-dot" style="background:#ff5f56"></div><div class="cb-dot" style="background:#ffbd2e"></div><div class="cb-dot" style="background:#27c93f"></div><span class="cb-fname">interactive maps</span><button class="cb-copy" onclick="copyCode(this)">copy</button></div>
+    <pre>from pygeofetch.viz import MapViewer
+
+mv = MapViewer(center=(6.198, -1.693), zoom=12)
+mv.add_vector("boundary.geojson", layer_name="Study Area", style={"color": "#2c3e50", "fillOpacity": 0})
+mv.add_raster("ndvi_change.tif", colormap="RdBu", vmin=-0.5, vmax=0.5, opacity=0.75)
+mv.add_basemap("SATELLITE")
+mv.save("interactive_map.html")</pre>
+  </div>
+  <div class="alert alert-warn"><code class="ci">add_raster()</code> needs <code class="ci">rioxarray</code> and <code class="ci">localtileserver</code> alongside leafmap — both declared in the <code class="ci">[viz]</code> extra as of this version.</div>
+</div>
+
+<div class="doc-section alt" id="pipeline-yaml">
+  <div class="sec-label">Pipelines</div>
+  <h2 class="sec-title">YAML Pipeline Orchestration</h2>
+  <div class="code-block">
+    <div class="code-header"><div class="cb-dot" style="background:#ff5f56"></div><div class="cb-dot" style="background:#ffbd2e"></div><div class="cb-dot" style="background:#27c93f"></div><span class="cb-fname">weekly-sentinel2.yaml</span><button class="cb-copy" onclick="copyCode(this)">copy</button></div>
+    <pre>name: weekly-sentinel2-ndvi
+schedule: "0 6 * * 1"
+steps:
+  - search:
+      providers: [copernicus, aws_earth]
+      date_range: last_7_days
+      cloud_cover: 0-10
+  - download:
+      parallel: 4
+      output: ./raw/
+      on_failure: skip</pre>
+  </div>
+  <div class="code-block">
+    <div class="code-header"><div class="cb-dot" style="background:#ff5f56"></div><div class="cb-dot" style="background:#ffbd2e"></div><div class="cb-dot" style="background:#27c93f"></div><span class="cb-fname">pipeline commands</span><button class="cb-copy" onclick="copyCode(this)">copy</button></div>
+    <pre>PyGeoFetch pipeline run weekly-sentinel2.yaml
+PyGeoFetch pipeline schedule weekly-sentinel2.yaml --name ndvi-monitor --cron "0 6 * * 1"
+PyGeoFetch pipeline list-scheduled
+PyGeoFetch pipeline logs ndvi-monitor --follow</pre>
+  </div>
+  <div class="alert alert-warn"><strong>Not independently re-verified this session:</strong> the scheduling backend and notification delivery weren't part of the provider/InSAR/SAR audit. Confirm current behavior against the CLI's own <code class="ci">--help</code> before relying on them for unattended production runs.</div>
+</div>
+
+<div class="doc-section" id="api">
+  <div class="sec-label">Python API</div>
+  <h2 class="sec-title">Python API Reference</h2>
+  <div class="code-block">
+    <div class="code-header"><div class="cb-dot" style="background:#ff5f56"></div><div class="cb-dot" style="background:#ffbd2e"></div><div class="cb-dot" style="background:#27c93f"></div><span class="cb-fname">full workflow</span><button class="cb-copy" onclick="copyCode(this)">copy</button></div>
+    <pre>from pathlib import Path
+from pygeofetch import PyGeoFetch
+from pygeofetch.models.search_query import SearchQuery, BoundingBox
+from pygeofetch.models.download_task import DownloadOptions
+
+client = PyGeoFetch()
+client.add_credentials("usgs", username="user", api_key="your_m2m_token")
+
+results = client.search(
+    SearchQuery(bbox=BoundingBox.from_string("-1.75,6.15,-1.60,6.25"),
+                start_date="2024-01-01", end_date="2024-06-01", max_results=50),
+    providers=["usgs", "copernicus"],
+)
+download_results = client.download(results[:5], destination=Path("./data/"),
+                                    options=DownloadOptions(parallel=4, resume=True))</pre>
+  </div>
+  <div class="api-class">
+    <div class="api-class-header"><span class="api-class-name">PyGeoFetch</span><span class="api-class-type">class</span></div>
+    <div class="api-method"><div class="api-sig"><span class="fn">add_credentials</span>(<span class="param">provider</span>: str, **kwargs) → None</div><div class="api-desc">Register credentials for a provider.</div></div>
+    <div class="api-method"><div class="api-sig"><span class="fn">search</span>(<span class="param">query</span>: SearchQuery, <span class="param">providers</span>=None) → <span class="ret">list[SatelliteData]</span></div><div class="api-desc">Federated search, real concurrency, deduplicated and scored.</div></div>
+    <div class="api-method"><div class="api-sig"><span class="fn">download</span>(<span class="param">scenes</span>, <span class="param">destination</span>, <span class="param">options</span>) → <span class="ret">list[DownloadResult]</span></div><div class="api-desc">Parallel, resumable downloads with real-time progress.</div></div>
+    <div class="api-method"><div class="api-sig"><span class="fn">fetch_orbit_file</span>(<span class="param">product_name</span>: str, <span class="param">orbit_type</span>="precise") → <span class="ret">str | None</span></div><div class="api-desc">Fetch a Sentinel-1 precise/restituted orbit file.</div></div>
+  </div>
+</div>
+
+<div class="doc-section alt" id="cli">
+  <div class="sec-label">Reference</div>
+  <h2 class="sec-title">CLI Reference</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Group</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>auth</code></td><td>add, login, list, test, remove, export</td></tr>
+        <tr><td><code>providers</code></td><td>list, info, search</td></tr>
+        <tr><td><code>search</code>, <code>download</code></td><td>run, status, history</td></tr>
+        <tr><td><code>index</code></td><td>ndvi, evi, savi, ndwi, mndwi, ndbi, ndsi, ndmi, nbr, dnbr, tct, pca, texture, lst</td></tr>
+        <tr><td><code>sar</code></td><td>despeckle, calibrate, flood-map, coherence</td></tr>
+        <tr><td><code>preprocess</code></td><td>clip, reproject, resample, cloud-mask, cloud-fill, atmos, topo-correct, pansharpen, mosaic, composite, tile</td></tr>
+        <tr><td><code>post</code></td><td>vectorize, smooth, regularize, zonal-stats, buffer, centroids, geometry-metrics, compress, cog</td></tr>
+        <tr><td><code>pipeline</code></td><td>run, validate, schedule, list-scheduled, unschedule, logs, history, retry</td></tr>
+        <tr><td><code>cache</code>, <code>config</code></td><td>stats/clear/ttl/location/prune, show/get/set/path/reset</td></tr>
+        <tr><td><code>status</code>, <code>doctor</code>, <code>version</code></td><td>—</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="doc-section" id="security">
+  <div class="sec-label">Security</div>
+  <h2 class="sec-title">Security Model</h2>
+  <div class="sec-grid">
+    <div class="sec-card">
+      <div class="sec-card-title">🔑 Credential Handling</div>
+      <ul class="sec-list">
+        <li>Credentials never written to disk in plain text</li>
+        <li>System keyring storage where available</li>
+        <li>Log filters redact passwords, tokens, and API keys</li>
+      </ul>
+    </div>
+    <div class="sec-card">
+      <div class="sec-card-title">🌐 Network Security</div>
+      <ul class="sec-list">
+        <li>Verified: no <code class="ci">verify=False</code> anywhere in the codebase</li>
+        <li>Verified: no bare silent exception-swallowing patterns</li>
+      </ul>
+    </div>
+  </div>
+  <div class="alert alert-info" style="margin-top:16px;">These two claims were specifically checked (full-codebase grep), not assumed. Other security claims from earlier drafts (encrypted-file fallback specifics, checksum verification details) haven't been re-verified this session and are omitted pending confirmation.</div>
+</div>
+
+<div class="doc-section alt" id="errors">
+  <div class="sec-label">Reference</div>
+  <h2 class="sec-title">Error Handling &amp; Resilience</h2>
+  <div class="err-grid">
+    <div class="err-row">
+      <div><div class="err-code">UnverifiedIntegrationError</div><div class="err-fix">→ See Provider Status</div></div>
+      <div class="err-desc">This provider's search()/download() hasn't been confirmed against its real API. Not the same as "no results."</div>
+    </div>
+    <div class="err-row">
+      <div><div class="err-code">ProviderOfflineRetrievalTriggered</div><div class="err-fix">→ Retry in minutes to hours</div></div>
+      <div class="err-desc">Copernicus: requested product is archived and retrieval has been triggered.</div>
+    </div>
+  </div>
+  <h3>What's actually implemented and verified</h3>
+  <div class="feat-grid">
+    <div class="feat-cell">
+      <div class="feat-icon green">⏸️</div>
+      <div class="feat-title">Resume Support</div>
+      <div class="feat-body">Verified end-to-end. Copernicus checks the server's actual Range response (206 vs 200) rather than trusting it blindly.</div>
+    </div>
+    <div class="feat-cell">
+      <div class="feat-icon">🔄</div>
+      <div class="feat-title">Conservative Backoff</div>
+      <div class="feat-body">Copernicus and USGS have real retry-with-backoff. 20 of 22 other providers currently have none — a known, open gap.</div>
+    </div>
+    <div class="feat-cell">
+      <div class="feat-icon">📊</div>
+      <div class="feat-title">Real-Time Progress</div>
+      <div class="feat-body">Per-chunk progress via tqdm across all providers, verified in both terminals and Jupyter.</div>
+    </div>
+  </div>
+  <div class="alert alert-danger" style="margin-top:16px;"><strong>Circuit breaker — currently non-functional:</strong> a CircuitBreaker class is instantiated per-provider, but its methods are never called anywhere in the request path (verified by full-codebase grep). It contributes zero actual resilience today. Treat any prior claim of automatic provider disabling after repeated failures as not currently true.</div>
+</div>
+
+<div class="doc-section" id="roadmap">
+  <div class="sec-label">Roadmap</div>
+  <h2 class="sec-title">Roadmap &amp; Honest Status</h2>
+  <div class="roadmap-grid">
+    <div class="rm-card done">
+      <div class="rm-version">v2.0.0</div>
+      <div class="rm-title">InSAR / SAR / Processing Platform</div>
+      <div class="rm-date done">✓ Current</div>
+      <ul class="rm-items">
+        <li class="done">Full InSAR chain</li>
+        <li class="done">SAR processing (despeckle, calibrate, flood map, coherence)</li>
+        <li class="done">Landsat extraction, sensor-aware band mapping</li>
+        <li class="done">17+ spectral indices</li>
+        <li class="done">Real-time download progress + resume, all providers</li>
+        <li class="done">Plotter + MapViewer</li>
+        <li class="done">5 hardened providers, verified against live APIs</li>
+      </ul>
+    </div>
+    <div class="rm-card progress">
+      <div class="rm-title">Provider Hardening</div>
+      <div class="rm-date progress">◐ In progress</div>
+      <ul class="rm-items">
+        <li class="prog">Rework or remove the 12 unverified providers</li>
+        <li class="todo">Wire retry/backoff into the remaining 20 providers</li>
+        <li class="todo">Wire CircuitBreaker into the request path, or remove it</li>
+      </ul>
+    </div>
+    <div class="rm-card planned">
+      <div class="rm-title">Test Coverage</div>
+      <div class="rm-date planned">○ Planned</div>
+      <ul class="rm-items">
+        <li class="todo">Dedicated tests per provider (12 currently have zero)</li>
+        <li class="todo">Live-API integration tests, credential-gated</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <div class="footer-grid">
+    <div>
+      <div class="f-logo">🛰️ <span>PyGeo</span>Fetch</div>
+      <div class="f-desc">A satellite data pipeline with a complete InSAR/SAR processing chain, and a small set of hardened, verified providers rather than an unverified long list. MIT licensed.</div>
+      <div class="f-badges">
+        <span class="pill">v2.0.0</span>
+        <span class="pill">MIT</span>
+        <span class="pill">Python 3.9+</span>
+      </div>
+    </div>
+    <div class="f-col">
+      <div class="f-col-title">Docs</div>
+      <ul>
+        <li><a href="#quickstart">Quick Start</a></li>
+        <li><a href="#insar">InSAR</a></li>
+        <li><a href="#sar-processing">SAR Processing</a></li>
+        <li><a href="#providers">Provider Status</a></li>
+      </ul>
+    </div>
+    <div class="f-col">
+      <div class="f-col-title">Reference</div>
+      <ul>
+        <li><a href="#cli">CLI Reference</a></li>
+        <li><a href="#api">Python API</a></li>
+        <li><a href="#errors">Error Handling</a></li>
+        <li><a href="#roadmap">Roadmap</a></li>
+      </ul>
+    </div>
+    <div class="f-col">
+      <div class="f-col-title">Community</div>
+      <ul>
+        <li><a href="https://github.com/EOCoreINT/pygeofetch" target="_blank">GitHub</a></li>
+        <li><a href="https://github.com/EOCoreINT/pygeofetch/issues" target="_blank">Issues</a></li>
+        <li><a href="https://www.eocoreint.com" target="_blank">Free Tutorials — EOCoreINT</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <div class="footer-copy">© 2026 <a href="https://github.com/appiahkubis14" target="_blank">Samuel Appiah Kubi</a>. Released under the <a href="https://opensource.org/licenses/MIT">MIT License</a>.</div>
+    <div class="footer-built">pygeofetch v2.0.0</div>
+  </div>
+</footer>
+
+</main>
+</div>
+
+<script>
+const toggle = document.getElementById('themeToggle');
+const html = document.documentElement;
+toggle.addEventListener('click', () => {
+  const isDark = html.getAttribute('data-theme') === 'dark';
+  html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  toggle.textContent = isDark ? '🌙' : '☀️';
+});
+
+const cmds = {
+  pip: 'pip install pygeofetch',
+  geo: 'pip install "pygeofetch[geo]"',
+  insar: 'pip install "pygeofetch[insar]"',
+  sar: 'pip install "pygeofetch[sar]"',
+  viz: 'pip install "pygeofetch[viz]"',
+  full: 'pip install "pygeofetch[full]"'
+};
+function setInstall(k, btn) {
+  document.getElementById('install-cmd').textContent = cmds[k];
+  document.querySelectorAll('.itab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+function copyInstall() {
+  navigator.clipboard.writeText(document.getElementById('install-cmd').textContent).catch(() => {});
+}
+function copyCode(btn) {
+  const pre = btn.closest('.code-block').querySelector('pre');
+  navigator.clipboard.writeText(pre.innerText).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = 'copied!';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  }).catch(() => {});
+}
+function filterP(key, btn) {
+  document.querySelectorAll('.pf-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.pcard').forEach(card => {
+    if (key === 'all') { card.style.display = ''; return; }
+    card.style.display = card.dataset[key] ? '' : 'none';
+  });
+}
+
+const termOutputs = {
+  doctor: `<span class="term-prompt">$ </span><span class="term-cmd">pygeofetch doctor</span>
+
+<span class="term-info">pygeofetch Doctor v2.0.0</span>
+<span class="term-out">────────────────────────────────────────────</span>
+<span class="term-ok">✓</span> Python 3.11.4
+<span class="term-ok">✓</span> pygeofetch 2.0.0 installed
+
+<span class="term-out">Hardened providers</span>
+<span class="term-ok">✓</span> copernicus, usgs, aws_earth, planetary_computer, element84
+<span class="term-warn">⚠</span> 12 providers unverified — see docs before relying on them
+<span class="term-out">────────────────────────────────────────────</span>
+<span class="term-ok">Doctor complete.</span>`,
+
+  providers: `<span class="term-prompt">$ </span><span class="term-cmd">pygeofetch providers list</span>
+
+<span class="term-info">Provider status</span>
+<span class="term-out">────────────────────────────────────────────────────────</span>
+<span class="term-ok"> ✓ HARDENED    </span> copernicus, usgs, aws_earth, planetary_computer, element84
+<span class="term-warn"> ◐ LIGHT       </span> sentinel_hub, planet, nasa_earthdata, eodag
+<span class="term-err"> ⚠ UNVERIFIED  </span> 12 providers — raise UnverifiedIntegrationError until confirmed`,
+
+  search_multi: `<span class="term-prompt">$ </span><span class="term-cmd">client.search(query, providers=["copernicus", "aws_earth"])</span>
+
+<span class="term-info">Federated search across 2 providers ...</span>
+<span class="term-ok">✓</span> copernicus: 8 results
+<span class="term-ok">✓</span> aws_earth: 12 results
+<span class="term-info">Deduplicated: 18 unique scenes</span>`,
+
+  download: `<span class="term-prompt">$ </span><span class="term-cmd">client.download(results, destination="./data", options=DownloadOptions(parallel=2))</span>
+
+<span class="term-out">⬇ 2 scenes  →  ./data              ██████████  2/2  [02:14]</span>
+<span class="term-ok">✓</span> S1A_..._EF47.SAFE.zip: 100%|██████████| 7.45G/7.45G [01:58<00:00, 65.2MB/s]`,
+
+  insar: `<span class="term-prompt">$ </span><span class="term-cmd">result = gen.process_pair(ref_tif, sec_tif, dem="dem.tif")</span>
+
+<span class="term-info">Coregistering (ESD refinement)...</span>
+<span class="term-ok">✓</span> Mean coherence: 0.647
+<span class="term-ok">✓</span> Topographic phase removed (R²=0.71)`,
+
+  flood: `<span class="term-prompt">$ </span><span class="term-cmd">flood_result = sar.flood_map(post_db, reference=pre_db, threshold=-15.0)</span>
+
+<span class="term-ok">✓</span> 11.8% of scene flagged as flooded
+<span class="term-out">flood_result.output_path -> flood_extent.tif</span>`
+};
+
+const termInputs = {
+  doctor: 'pygeofetch doctor',
+  providers: 'pygeofetch providers list',
+  search_multi: 'client.search(query, providers=["copernicus", "aws_earth"])',
+  download: 'client.download(results, destination="./data")',
+  insar: 'gen.process_pair(ref_tif, sec_tif, dem="dem.tif")',
+  flood: 'sar.flood_map(post_db, reference=pre_db)',
+};
+
+function loadCmd() {
+  const key = document.getElementById('termSelect').value;
+  document.getElementById('termInput').value = termInputs[key];
+  document.getElementById('termBody').innerHTML = `<span class="term-prompt">$ </span><span class="term-cmd">${termInputs[key]}</span>\n<span class="term-out">Click ▶ Run to execute...</span>`;
+}
+function runCmd() {
+  const key = document.getElementById('termSelect').value;
+  const body = document.getElementById('termBody');
+  body.innerHTML = `<span class="term-out">Running...</span>`;
+  setTimeout(() => {
+    body.innerHTML = termOutputs[key] || `<span class="term-err">Unknown command.</span>`;
+    body.scrollTop = body.scrollHeight;
+  }, 320);
+}
+
+const sections = document.querySelectorAll('[id]');
+const links = document.querySelectorAll('.sb-link');
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      links.forEach(l => l.classList.toggle('active', l.getAttribute('href') === '#' + e.target.id));
+    }
+  });
+}, { rootMargin: '-56px 0px -70% 0px', threshold: 0 });
+sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>

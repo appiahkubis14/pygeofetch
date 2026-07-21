@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+from pygeofetch.core.logging import report_download_progress
 from pygeofetch.models.download_task import (
     DownloadOptions,
     DownloadResult,
@@ -54,6 +55,7 @@ class GoogleEarthEngineProvider(AbstractBaseProvider):
     DESCRIPTION = "Google Earth Engine catalog. Multi-petabyte multi-mission archive. Service account auth."
     SATELLITES = ["Sentinel-1", "Sentinel-2", "Landsat", "MODIS", "VIIRS"]
     BASE_URL = "https://earthengine.googleapis.com/v1alpha"
+    INTEGRATION_VERIFIED = False  # see UnverifiedIntegrationError docstring — not confirmed against the live API
 
     def authenticate(self, credentials: Credentials) -> AuthSession:
 
@@ -83,6 +85,7 @@ class GoogleEarthEngineProvider(AbstractBaseProvider):
         self._session = session
 
     def search(self, query: SearchQuery) -> list[SatelliteData]:
+        self._check_integration_verified()
         if self.REQUIRES_AUTH:
             self.require_auth()
         import httpx
@@ -155,6 +158,7 @@ class GoogleEarthEngineProvider(AbstractBaseProvider):
     def download(
         self, data: SatelliteData, destination: Path, options: DownloadOptions
     ) -> DownloadResult:
+        self._check_integration_verified()
         if self.REQUIRES_AUTH:
             self.require_auth()
         import httpx
@@ -183,12 +187,24 @@ class GoogleEarthEngineProvider(AbstractBaseProvider):
                     follow_redirects=True,
                 ) as resp:
                     self._handle_http_error(resp)
+                    total_bytes_this_asset = int(resp.headers.get("content-length", 0))
+                    bytes_written_this_asset = 0
+                    chunk_t0 = time.time()
                     with open(out_file, "wb") as f:
-                        f.writelines(
-                            resp.iter_bytes(
-                                chunk_size=int(options.chunk_size_mb * 1024 * 1024)
+                        for chunk in resp.iter_bytes(
+                            chunk_size=int(options.chunk_size_mb * 1024 * 1024)
+                        ):
+                            f.write(chunk)
+                            bytes_written_this_asset += len(chunk)
+                            elapsed = time.time() - chunk_t0
+                            speed = (
+                                bytes_written_this_asset / elapsed
+                                if elapsed > 0
+                                else 0.0
                             )
-                        )
+                            report_download_progress(
+                                bytes_written_this_asset, total_bytes_this_asset, speed
+                            )
                 output_paths.append(out_file)
                 total_bytes += out_file.stat().st_size
             except Exception as exc:

@@ -372,6 +372,37 @@ class USGSProvider(AbstractBaseProvider):
         self, dataset_name: str, query: SearchQuery
     ) -> list[SatelliteData]:
         """Search a specific USGS dataset."""
+        import time as _time
+
+        max_attempts = 3
+        for attempt in range(1, max_attempts + 1):
+            try:
+                return self._search_dataset_once(dataset_name, query)
+            except SearchError as exc:
+                # This account tier's M2M access enforces a strict "one
+                # request at a time" limit (confirmed via a real
+                # RATE_LIMIT response, not assumed) — even fully
+                # sequential, non-overlapping requests can occasionally
+                # collide with it if USGS's session lock has any release
+                # latency after a response is sent. Retry with backoff
+                # specifically for this case rather than failing the
+                # whole search outright.
+                if "RATE_LIMIT" in str(exc) and attempt < max_attempts:
+                    delay = 5.0 * attempt
+                    self._logger.warning(
+                        f"USGS rate limit hit for {dataset_name!r} "
+                        f"(attempt {attempt}/{max_attempts}), retrying in "
+                        f"{delay:.0f}s..."
+                    )
+                    _time.sleep(delay)
+                    continue
+                raise
+        return []
+
+    def _search_dataset_once(
+        self, dataset_name: str, query: SearchQuery
+    ) -> list[SatelliteData]:
+        """Search a specific USGS dataset — single attempt, no retry."""
         import httpx
 
         payload: dict[str, Any] = {
@@ -381,41 +412,44 @@ class USGSProvider(AbstractBaseProvider):
             "metadataType": "full",
         }
 
-        if query.start_date or query.end_date:
-            payload["temporalFilter"] = {}
-            if query.start_date:
-                payload["temporalFilter"]["start"] = str(query.start_date)
-            if query.end_date:
-                payload["temporalFilter"]["end"] = str(query.end_date)
+        # ALL of acquisitionFilter, spatialFilter, and cloudCoverFilter
+        # belong nested inside a single "sceneFilter" wrapper object —
+        # confirmed against the complete real M2M API request structure
+        # (usgsxplore's actual working scene-search call). Previously all
+        # three were sent as separate TOP-LEVEL keys directly in the
+        # payload — at the wrong nesting level entirely. USGS silently
+        # ignores unrecognized top-level fields rather than rejecting the
+        # request, so NONE of these three filters were ever actually
+        # being applied: not spatial, not temporal, not cloud cover. This
+        # is confirmed to be the complete explanation for every search
+        # returning the API's unfiltered default (most-recent-first)
+        # results regardless of what AOI, date range, or cloud threshold
+        # was requested — my two previous fixes (correcting the field
+        # names "spatialFilter"/"acquisitionFilter") were necessary but
+        # not sufficient, since both were still being placed one level
+        # too shallow in the payload.
+        scene_filter: dict[str, Any] = {}
 
-        # Prefer a real polygon spatial filter over a bounding-box
-        # approximation when a geometry is given — USGS's M2M API natively
-        # supports geoJson-type spatial filters (filterType: "geoJson"),
-        # not just MBR/bbox. Previously query.geometry was never checked
-        # here at all: only query.bbox was handled, so searching with a
-        # polygon AOI (and no separate bbox) sent NO spatial filter
-        # whatsoever — USGS would search its entire global archive for the
-        # date range, which is consistent with the multi-minute timeouts
-        # and "does not support multiple requests at a time" errors this
-        # caused: an unconstrained global query is dramatically slower,
-        # and a still-processing prior request collides with the next one.
+        if query.start_date or query.end_date:
+            acquisition_filter: dict[str, Any] = {}
+            if query.start_date:
+                acquisition_filter["start"] = str(query.start_date)
+            if query.end_date:
+                acquisition_filter["end"] = str(query.end_date)
+            scene_filter["acquisitionFilter"] = acquisition_filter
+
         geometry = getattr(query, "geometry", None)
         if geometry:
             geom_type = geometry.get("type", "Polygon")
             coordinates = geometry.get("coordinates")
             if coordinates:
-                payload["spatialFilter"] = {
-                    # "geojson" — lowercase. Confirmed against usgsxplore's
-                    # actual working implementation of this same API; the
-                    # official docs page itself requires an ERS login to
-                    # view directly, so this was cross-checked against a
-                    # real, actively-maintained client rather than assumed.
+                scene_filter["spatialFilter"] = {
                     "filterType": "geojson",
                     "geoJson": {"type": geom_type, "coordinates": coordinates},
                 }
         elif query.bbox:
             bbox = query.bbox
-            payload["spatialFilter"] = {
+            scene_filter["spatialFilter"] = {
                 "filterType": "mbr",
                 "lowerLeft": {"latitude": bbox.min_lat, "longitude": bbox.min_lon},
                 "upperRight": {"latitude": bbox.max_lat, "longitude": bbox.max_lon},
@@ -423,17 +457,31 @@ class USGSProvider(AbstractBaseProvider):
 
         cloud_max = getattr(query, "cloud_cover_max", 100) or 100
         if cloud_max < 100:
-            payload["cloudCoverFilter"] = {
+            scene_filter["cloudCoverFilter"] = {
                 "min": int(getattr(query, "cloud_cover_min", 0)),
                 "max": int(cloud_max),
                 "includeUnknown": True,
             }
 
+        if scene_filter:
+            payload["sceneFilter"] = scene_filter
+
         response = httpx.post(
             f"{self.BASE_URL}/scene-search",
             json=payload,
             headers={"X-Auth-Token": self._session.access_token},  # type: ignore
-            timeout=60,
+            # Was hardcoded to 60s. Observed in practice: a geoJson polygon
+            # spatial filter against a full-year date range consistently
+            # took longer than that server-side — the client gave up at
+            # exactly ~60-61s every time (confirmed against real timestamped
+            # logs), not because USGS rejected the request quickly, but
+            # because the client stopped waiting while USGS was still
+            # processing it. The next sequential search then collided with
+            # "does not support multiple requests at a time" because the
+            # first request likely hadn't actually finished server-side
+            # yet. 300s gives real polygon+date-range queries room to
+            # actually complete rather than being cut off mid-flight.
+            timeout=300,
         )
         data = response.json()
         if response.status_code not in (200, 201):
@@ -446,7 +494,49 @@ class USGSProvider(AbstractBaseProvider):
             raise SearchError(msg)
 
         scenes = (data.get("data") or {}).get("results", [])
-        return [self._scene_to_satellite_data(s, dataset_name) for s in scenes]
+        results = [self._scene_to_satellite_data(s, dataset_name) for s in scenes]
+
+        # Defensive client-side date filtering. This is not a substitute
+        # for the server-side acquisitionFilter above — it's a safety
+        # net and a diagnostic tripwire. If USGS's server-side date
+        # filtering is ever ignored, ignored for a specific dataset, or
+        # broken by a future API change, this catches it here — as a
+        # clear, loud warning identifying exactly what happened, rather
+        # than silently returning scenes outside the requested range
+        # with no indication anything was wrong (which is what happened
+        # previously: identical, most-recent-first results returned for
+        # every one of several distinct multi-year date windows, with
+        # nothing in the response indicating the filter hadn't applied).
+        if query.start_date or query.end_date:
+            start = query.start_date if query.start_date else None
+            end = query.end_date if query.end_date else None
+            in_range = []
+            out_of_range = []
+            for r in results:
+                if r.datetime is None:
+                    in_range.append(r)  # can't judge — don't silently drop it
+                    continue
+                r_date = r.datetime.date() if hasattr(r.datetime, "date") else r.datetime
+                if start and r_date < (start if hasattr(start, "year") else datetime.strptime(str(start), "%Y-%m-%d").date()):
+                    out_of_range.append(r)
+                elif end and r_date > (end if hasattr(end, "year") else datetime.strptime(str(end), "%Y-%m-%d").date()):
+                    out_of_range.append(r)
+                else:
+                    in_range.append(r)
+
+            if out_of_range:
+                self._logger.warning(
+                    f"USGS returned {len(out_of_range)} of {len(results)} "
+                    f"result(s) for {dataset_name!r} OUTSIDE the requested "
+                    f"date range ({query.start_date} to {query.end_date}) — "
+                    f"server-side acquisitionFilter may not be applying "
+                    f"correctly. These have been filtered out client-side. "
+                    f"Example out-of-range date: "
+                    f"{out_of_range[0].datetime.date() if out_of_range[0].datetime else 'unknown'}."
+                )
+            results = in_range
+
+        return results
 
     def _scene_to_satellite_data(self, scene: dict, dataset_name: str) -> SatelliteData:
         """Convert a USGS scene dict to SatelliteData."""
@@ -463,14 +553,45 @@ class USGSProvider(AbstractBaseProvider):
                 lats = [c[1] for c in coords]
                 bbox = (min(lons), min(lats), max(lons), max(lats))
 
-        # Parse acquisition date
+        # Parse acquisition date. Confirmed against a second, independent,
+        # actively-used M2M API client (landsatxplore) that the real API
+        # response carries this as a nested "temporalCoverage" object with
+        # "startDate"/"endDate" sub-fields — NOT flat "acquisitionDate" /
+        # "startingDate" string fields as this previously checked for.
+        # Neither of those flat field names matches the real response
+        # structure at all, which is why date parsing was silently
+        # failing (dt stayed None) regardless of format. Both the old
+        # flat field names and the real nested structure are checked
+        # here, in case a specific dataset ever legitimately returns the
+        # flat form, and any date string found is parsed with several
+        # candidate formats rather than one strict one — with a logged
+        # warning (not silent failure) if none of them match.
         dt = None
-        date_str = scene.get("acquisitionDate") or scene.get("startingDate")
+        date_str = None
+        temporal = scene.get("temporalCoverage")
+        if isinstance(temporal, dict):
+            date_str = temporal.get("startDate") or temporal.get("endDate")
+        if not date_str:
+            date_str = scene.get("acquisitionDate") or scene.get("startingDate")
+
         if date_str:
-            try:
-                dt = datetime.strptime(date_str, "%Y-%m-%d")
-            except ValueError:
-                pass
+            for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S.%fZ", "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%d %H:%M:%S"):
+                try:
+                    dt = datetime.strptime(date_str, fmt)
+                    break
+                except ValueError:
+                    continue
+            if dt is None:
+                try:
+                    dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+                except ValueError:
+                    self._logger.warning(
+                        f"Could not parse acquisition date {date_str!r} for "
+                        f"scene {scene_id!r} — .datetime will be None for "
+                        f"this result. Tried formats: %Y-%m-%d, ISO 8601 "
+                        f"variants. If this recurs, USGS may have changed "
+                        f"the response format again."
+                    )
 
         # Identify satellite from dataset name
         satellite = "Landsat"

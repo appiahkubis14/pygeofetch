@@ -624,6 +624,7 @@ class Preprocessor:
         geometry: str | Path | dict | None = None,
         output: str | None = None,
         all_touched: bool = False,
+        geometry_crs: str = "EPSG:4326",
     ) -> ProcessingResult:
         """
         Clip (crop / mask) a raster to a bounding box or polygon geometry.
@@ -634,6 +635,18 @@ class Preprocessor:
             geometry:    GeoJSON file path, GeoJSON dict, or shapely geometry.
             output:      Output path.
             all_touched: Include pixels touching boundary.
+            geometry_crs: CRS the bbox/geometry coordinates are actually
+                        in. Defaults to EPSG:4326 (WGS84 lat/lon) — the
+                        standard CRS for GeoJSON per RFC 7946, and the
+                        overwhelmingly common case for AOI/boundary data.
+                        If the raster's own CRS differs (true for almost
+                        all real satellite imagery, which is delivered in
+                        a projected UTM CRS in metres, not lat/lon
+                        degrees), the geometry is automatically
+                        reprojected to match before clipping. Set this to
+                        match your raster's CRS directly if your
+                        bbox/geometry coordinates are already in a
+                        non-WGS84 CRS.
 
         Example::
 
@@ -644,6 +657,7 @@ class Preprocessor:
         import json
 
         from rasterio.mask import mask as rasterio_mask
+        from rasterio.warp import transform_geom
 
         inp = Path(input)
         out_path = _resolve_output(inp, output, "clipped")
@@ -673,6 +687,26 @@ class Preprocessor:
             raise ValueError(msg)
 
         with rasterio.open(inp) as src:
+            # Reproject the clip geometry into the raster's actual CRS
+            # before masking. Previously this was never done at all —
+            # the geometry's coordinate VALUES were passed straight into
+            # rasterio.mask() and compared directly against the raster's
+            # pixel grid, with no regard for whether they were even in
+            # the same coordinate system. A WGS84 polygon (values roughly
+            # -180 to 180) clipped against a UTM raster (values in the
+            # hundreds of thousands to millions of metres) doesn't raise
+            # a CRS error — it just computes a nonsensical, effectively
+            # empty intersection window, since the numbers are simply
+            # read as if they were already in the raster's units. This
+            # is confirmed to be the exact cause of "Input shapes do not
+            # overlap raster" when clipping real downloaded Landsat bands
+            # (delivered in their native UTM zone) with a WGS84 AOI
+            # boundary (the standard, expected format for GeoJSON AOIs).
+            if src.crs is not None and str(src.crs) != str(geometry_crs):
+                shapes = [
+                    transform_geom(geometry_crs, src.crs, shp) for shp in shapes
+                ]
+
             out_image, out_transform = rasterio_mask(
                 src, shapes, crop=True, all_touched=all_touched
             )

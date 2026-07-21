@@ -53,6 +53,22 @@ def search() -> None:
     default=None,
     help="Comma-separated satellite names e.g. Sentinel-2,Landsat-8.",
 )
+@click.option(
+    "--product-type",
+    default=None,
+    help=(
+        "SAR product type e.g. GRD, SLC, GRD-COG. Currently only "
+        "meaningfully filters Copernicus (OData-based, not STAC) — "
+        "STAC providers like planetary_computer/element84 offer only "
+        "pre-processed Sentinel-1 RTC via their collection mapping, not "
+        "raw GRD/SLC, so this has no effect there regardless of value."
+    ),
+)
+@click.option(
+    "--polarisation",
+    default=None,
+    help='SAR polarisation e.g. VV, VH, HH, HV. Same Copernicus-only caveat as --product-type.',
+)
 @click.option("--max-results", "-n", default=100, show_default=True)
 @click.option(
     "--sort-by",
@@ -98,6 +114,8 @@ def search_run(
     processing_level,
     providers,
     satellites,
+    product_type,
+    polarisation,
     max_results,
     sort_by,
     sort_order,
@@ -196,7 +214,16 @@ def search_run(
 
     query = SearchQuery(
         bbox=bbox_obj,
-        geometry_geojson=geometry_geojson,
+        # Was "geometry_geojson=geometry_geojson" — a SEPARATE, unused
+        # field that nothing in the codebase actually reads. Every
+        # provider (and the model's own to_stac_params()/
+        # has_spatial_filter() methods) reads query.geometry, not
+        # query.geometry_geojson. This meant --geometry-file silently
+        # never applied real polygon-based spatial filtering at all —
+        # it fell back to the bbox approximation computed just above
+        # (still functional, but loses the actual polygon precision
+        # that geometry-based filtering exists to provide).
+        geometry=geometry_geojson,
         start_date=start_date,
         end_date=end_date,
         cloud_cover_min=cloud_min,
@@ -205,6 +232,8 @@ def search_run(
         resolution_max_m=res_max,
         processing_levels=pl_list,
         satellites=sat_list,
+        product_type=product_type,
+        polarisation=polarisation,
         max_results=max_results,
         providers=provider_list or [],
         sort_by=sort_by,

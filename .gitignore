@@ -104,7 +104,7 @@ search_cache/
 pygeofetch.log
 pygeofetch_*.log
 logs/
-
+paper/
 # ── Satellite & Geospatial Data ───────────────────────────────────────────────
 # Raster files (can be 100s of MB to GB each)
 *.tif

@@ -707,9 +707,56 @@ class Preprocessor:
                     transform_geom(geometry_crs, src.crs, shp) for shp in shapes
                 ]
 
-            out_image, out_transform = rasterio_mask(
-                src, shapes, crop=True, all_touched=all_touched
-            )
+            try:
+                out_image, out_transform = rasterio_mask(
+                    src, shapes, crop=True, all_touched=all_touched
+                )
+            except ValueError as exc:
+                if "do not overlap" not in str(exc):
+                    raise
+                # A near-miss (off by a pixel or two), not a gross CRS
+                # mismatch — the geometry and raster ARE in the same CRS
+                # and roughly the same place, but floating-point precision
+                # in the reprojection, or the AOI sitting right at the
+                # edge of the raster's real coverage, can produce a
+                # bounding window that misses by a sliver. Retry once with
+                # a small buffer (a few pixels' worth, computed from the
+                # raster's own resolution) before giving up — a standard,
+                # safe technique for exactly this class of edge case.
+                from shapely.geometry import shape as _shp_shape
+
+                px_size = abs(src.transform[0])
+                buffer_dist = px_size * 3
+                buffered_shapes = [
+                    _shp_shape(s).buffer(buffer_dist).__geo_interface__
+                    for s in shapes
+                ]
+                try:
+                    out_image, out_transform = rasterio_mask(
+                        src, buffered_shapes, crop=True, all_touched=all_touched
+                    )
+                    logger.warning(
+                        f"clip(): initial geometry missed the raster by a "
+                        f"sliver — succeeded after a {buffer_dist:.1f}m "
+                        f"buffer retry. Raster bounds: {tuple(src.bounds)}, "
+                        f"CRS: {src.crs}."
+                    )
+                except ValueError:
+                    # Genuinely doesn't overlap even with a buffer — surface
+                    # the actual bounds so this is diagnosable directly from
+                    # the error, instead of a bare "do not overlap" message.
+                    geom_bounds = _shp_shape(shapes[0]).bounds
+                    raise ValueError(
+                        f"Input shapes do not overlap raster, even after a "
+                        f"buffer retry. Raster bounds: {tuple(src.bounds)} "
+                        f"(CRS: {src.crs}). Geometry bounds (after any CRS "
+                        f"reprojection): {geom_bounds}. If these are wildly "
+                        f"different, the raster's real coverage genuinely "
+                        f"doesn't include this AOI (check you have the "
+                        f"right scene/tile) — if they're close, this may be "
+                        f"a genuine precision edge case worth reporting."
+                    ) from exc
+
             profile = src.profile.copy()
             profile.update(
                 dtype=out_image.dtype,

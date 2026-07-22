@@ -127,6 +127,7 @@ class TimeSeriesAnalyzer:
         self,
         date_bands: Dict[str, Dict[str, Union[str, Path]]],
         precomputed: bool = False,
+        align_grids: bool = True,
     ) -> IndexTimeStack:
         """
         Compute the configured index for every date and stack the results
@@ -141,14 +142,21 @@ class TimeSeriesAnalyzer:
                        but without keeping the profile for zonal use).
             precomputed: Treat date_bands values as ready-made single-band
                        index rasters instead of raw band dicts.
+            align_grids: If a date's raster doesn't share the first date's
+                       grid (different shape, transform, or CRS), reproject
+                       it onto the first date's grid automatically rather
+                       than raising. Default True. This is a real, common
+                       case: different acquisitions of the same AOI can
+                       come from different satellite scene footprints
+                       (tile boundaries, orbit tracks), especially for
+                       elongated or irregularly-shaped AOIs, and end up
+                       with slightly different pixel grids after clipping
+                       even though they cover (nearly) the same area. Set
+                       False to restore the old strict behaviour (raise on
+                       any mismatch) if you specifically want that.
 
         Returns:
             IndexTimeStack — sorted by date, with .as_xarray() available.
-
-        All dates must share the same grid (same CRS, transform, shape) —
-        typically true for repeat acquisitions of the same AOI from the
-        same sensor. Reproject/resample first if that's not the case for
-        your data (see the reproject post-process action).
         """
         np = _require_numpy()
         rasterio = _require_rasterio()
@@ -159,40 +167,68 @@ class TimeSeriesAnalyzer:
         arrays = []
         profile = None
         ref_shape = None
+        ref_transform = None
+        ref_crs = None
 
         si = SpectralIndex(prefer_spyndex=False) if not precomputed else None
+
+        def _read_aligned(path, date, label):
+            nonlocal profile, ref_shape, ref_transform, ref_crs
+            with rasterio.open(path) as src:
+                arr = src.read(1).astype(np.float32)
+                if profile is None:
+                    profile = src.profile.copy()
+                    ref_shape = arr.shape
+                    ref_transform = src.transform
+                    ref_crs = src.crs
+                    return arr
+
+                same_grid = (
+                    arr.shape == ref_shape
+                    and src.transform == ref_transform
+                    and src.crs == ref_crs
+                )
+                if same_grid:
+                    return arr
+
+                if not align_grids:
+                    raise ValueError(
+                        f"{date}/{label}: grid {arr.shape} doesn't match the "
+                        f"first date's grid {ref_shape}. All dates must "
+                        f"share the same grid, or call with align_grids=True "
+                        f"(the default) to align automatically."
+                    )
+
+                from rasterio.warp import reproject, Resampling
+
+                logger.info(
+                    "%s/%s: grid %s differs from the first date's %s — "
+                    "reprojecting onto the first date's grid automatically "
+                    "(align_grids=True). This is expected when different "
+                    "acquisitions come from different scene footprints over "
+                    "the same AOI.",
+                    date, label, arr.shape, ref_shape,
+                )
+                aligned = np.full(ref_shape, np.nan, dtype=np.float32)
+                reproject(
+                    source=arr, destination=aligned,
+                    src_transform=src.transform, src_crs=src.crs,
+                    dst_transform=ref_transform, dst_crs=ref_crs,
+                    resampling=Resampling.bilinear, src_nodata=np.nan, dst_nodata=np.nan,
+                )
+                return aligned
 
         for date in dates:
             entry = date_bands[date]
 
             if precomputed:
-                path = Path(entry)  # type: ignore[arg-type]
-                with rasterio.open(path) as src:
-                    arr = src.read(1).astype(np.float32)
-                    if profile is None:
-                        profile = src.profile.copy()
-                        ref_shape = arr.shape
-                    elif arr.shape != ref_shape:
-                        raise ValueError(
-                            f"{date}: shape {arr.shape} doesn't match the "
-                            f"first date's shape {ref_shape}. All dates must "
-                            f"share the same grid — reproject/resample first."
-                        )
+                arr = _read_aligned(Path(entry), date, "index")  # type: ignore[arg-type]
             else:
                 band_arrays = {}
                 for band_name, band_path in entry.items():
-                    with rasterio.open(Path(band_path)) as src:
-                        arr = src.read(1).astype(np.float32)
-                        if profile is None:
-                            profile = src.profile.copy()
-                            ref_shape = arr.shape
-                        elif arr.shape != ref_shape:
-                            raise ValueError(
-                                f"{date}/{band_name}: shape {arr.shape} doesn't "
-                                f"match the first date's shape {ref_shape}. All "
-                                f"bands/dates must share the same grid."
-                            )
-                    band_arrays[band_name.upper()] = arr
+                    band_arrays[band_name.upper()] = _read_aligned(
+                        Path(band_path), date, band_name
+                    )
                 arr = np.asarray(si.compute(self.index_name, **band_arrays), dtype=np.float32)
 
             arrays.append(arr)

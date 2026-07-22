@@ -338,7 +338,35 @@ class CopernicusProvider(AbstractBaseProvider):
         if query.end_date:
             filters.append(f"ContentDate/Start le {query.end_date}T23:59:59.000Z")
 
-        if query.bbox:
+        # Prefer a real polygon spatial filter over a bounding-box
+        # approximation when a geometry is given. Previously query.geometry
+        # was never checked here at all — only query.bbox — meaning any
+        # search using geometry= (not bbox=) had NO spatial constraint
+        # applied whatsoever: the query scanned Copernicus's entire global
+        # archive for the date/product-type/polarisation criteria, sorted
+        # by most-recent-first, with location playing no role at all. This
+        # is confirmed to be the actual explanation for a real search
+        # returning a Sentinel-1 scene over the Yucatán Peninsula, Mexico
+        # for a query intended for Accra, Ghana — not a GCP-reading or
+        # georeferencing bug downstream, which was independently tested
+        # and ruled out. This is the exact same bug class (a field never
+        # checked at all) found and fixed for USGS earlier — it just
+        # hadn't been checked for Copernicus specifically until now.
+        geometry = getattr(query, "geometry", None)
+        if geometry:
+            geom_type = geometry.get("type", "Polygon")
+            coordinates = geometry.get("coordinates")
+            if coordinates and geom_type == "Polygon":
+                # OData.CSC.Intersects expects a WKT POLYGON — build it
+                # directly from the GeoJSON ring, not a bbox approximation,
+                # so search results are constrained to the real AOI shape.
+                ring = coordinates[0]
+                coord_str = ",".join(f"{lon} {lat}" for lon, lat in ring)
+                polygon = f"POLYGON(({coord_str}))"
+                filters.append(
+                    f"OData.CSC.Intersects(area=geography'SRID=4326;{polygon}')"
+                )
+        elif query.bbox:
             bbox = query.bbox
             polygon = (
                 f"POLYGON(("
@@ -727,10 +755,24 @@ class CopernicusProvider(AbstractBaseProvider):
         for attempt in range(1, max_attempts + 1):
             try:
                 start_time = time.time()
+
+                # Resume from where the previous attempt left off, rather
+                # than deleting the partial file and restarting the whole
+                # download from zero on every retry — confirmed this was
+                # happening: for a multi-GB Sentinel-1 product, a dropped
+                # connection at 1GB+ into the transfer meant every retry
+                # re-downloaded that same 1GB+ again before even reaching
+                # new data, on a connection that had just shown it
+                # couldn't sustain the transfer in the first place.
+                existing_bytes = output_file.stat().st_size if output_file.exists() else 0
+                headers = {"Authorization": f"Bearer {self._session.access_token}"}  # type: ignore
+                if existing_bytes > 0:
+                    headers["Range"] = f"bytes={existing_bytes}-"
+
                 with httpx.stream(
                     "GET",
                     href,
-                    headers={"Authorization": f"Bearer {self._session.access_token}"},  # type: ignore
+                    headers=headers,
                     timeout=options.timeout_seconds,
                     follow_redirects=True,
                 ) as resp:
@@ -749,17 +791,33 @@ class CopernicusProvider(AbstractBaseProvider):
                             response=resp,
                         )
                     self._handle_http_error(resp)
+
+                    # CDSE is documented to sometimes ignore Range headers
+                    # and return the full file (200) instead of resuming
+                    # (206) — check which actually happened rather than
+                    # assume the Range request was honoured.
+                    resumed = existing_bytes > 0 and resp.status_code == 206
+                    if existing_bytes > 0 and resp.status_code == 200:
+                        # Server sent the whole file despite the Range
+                        # request — start writing from scratch, not append,
+                        # or the file would be corrupted with duplicated
+                        # content at the front.
+                        existing_bytes = 0
+
                     total_bytes = int(resp.headers.get("content-length", 0))
-                    bytes_written = 0
+                    if resumed:
+                        total_bytes += existing_bytes
+                    bytes_written = existing_bytes
                     chunk_t0 = time.time()
-                    with open(output_file, "wb") as f:
+                    write_mode = "ab" if resumed else "wb"
+                    with open(output_file, write_mode) as f:
                         for chunk in resp.iter_bytes(
                             chunk_size=int(options.chunk_size_mb * 1024 * 1024)
                         ):
                             f.write(chunk)
                             bytes_written += len(chunk)
                             elapsed = time.time() - chunk_t0
-                            speed = bytes_written / elapsed if elapsed > 0 else 0.0
+                            speed = (bytes_written - existing_bytes) / elapsed if elapsed > 0 else 0.0
                             report_download_progress(bytes_written, total_bytes, speed)
 
                 duration = time.time() - start_time
@@ -782,15 +840,37 @@ class CopernicusProvider(AbstractBaseProvider):
             except Exception as exc:
                 last_error = str(exc)
                 last_error_type = type(exc).__name__
-                output_file.unlink(missing_ok=True)
+                # No longer unconditionally deleting the partial file here —
+                # the next attempt (or the whole retry loop, if this was
+                # the final attempt) needs it intact to resume from.
                 if attempt < max_attempts:
-                    backoff = min(2**attempt, 30)
+                    # Base backoff scaled by how much has already been
+                    # downloaded — a connection that just dropped a
+                    # multi-GB transfer needs meaningfully more recovery
+                    # time than the previous flat min(2**attempt, 30)
+                    # gave it (as little as 1-2 seconds on early attempts,
+                    # confirmed against a real 1GB+ download that had
+                    # just timed out).
+                    current_size_gb = (
+                        output_file.stat().st_size / (1024**3)
+                        if output_file.exists()
+                        else 0
+                    )
+                    size_factor = max(1.0, current_size_gb * 10)
+                    backoff = min(15 * size_factor * attempt, 120)
                     self._logger.warning(
                         f"Download attempt {attempt}/{max_attempts} failed for "
-                        f"{data.id}: {last_error}. Retrying in {backoff}s..."
+                        f"{data.id}: {last_error}. Resuming from "
+                        f"{output_file.stat().st_size / (1024**2):.0f}MB in "
+                        f"{backoff:.0f}s..."
+                        if output_file.exists()
+                        else f"Download attempt {attempt}/{max_attempts} failed for "
+                        f"{data.id}: {last_error}. Retrying in {backoff:.0f}s..."
                     )
                     time.sleep(backoff)
 
+        # Final failure — clean up only now, not on every intermediate retry
+        output_file.unlink(missing_ok=True)
         return DownloadResult(
             status=DownloadStatus.FAILED,
             data_id=data.id,

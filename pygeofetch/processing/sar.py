@@ -223,6 +223,7 @@ class SARProcessor:
         threshold: float = -15.0,
         output: str | None = None,
         reference: str | Path | None = None,
+        detect_direction: str = "decrease",
     ) -> ProcessingResult:
         """
         Flood mapping from SAR backscatter via simple threshold or change detection.
@@ -230,16 +231,38 @@ class SARProcessor:
         Args:
             input:     SAR raster in dB (VV or VH polarisation).
             threshold: Backscatter below this = water (typical -15 to -20 dB).
+                     Also sets the change-detection sensitivity (see
+                     detect_direction) as abs(threshold * 0.5).
             output:    Output binary mask (1=water, 0=land, 255=nodata).
             reference: Optional pre-event reference for change-based detection.
+            detect_direction: For change detection only. "decrease" (default)
+                     flags pixels where backscatter DROPPED — the correct
+                     signature for open water (smooth surfaces are
+                     near-specular reflectors). "increase" flags pixels
+                     where backscatter ROSE — the signature of flooded
+                     urban/built-up areas, where water at the base of
+                     buildings creates a double-bounce reflection
+                     (ground-wall-sensor) stronger than dry ground alone.
+                     "both" flags either direction — the most robust
+                     choice when an AOI mixes open water and dense urban
+                     flooding (e.g. Accra), since a one-directional
+                     threshold structurally cannot detect the other
+                     pattern at all, not just detect it poorly.
 
         Example::
 
             result = client.sar.flood_map("post_event.tif",
-                                           reference="pre_event.tif")
+                                           reference="pre_event.tif",
+                                           detect_direction="both")
         """
         np = _require_numpy()
         rasterio = _require_rasterio()
+
+        if detect_direction not in ("decrease", "increase", "both"):
+            raise ValueError(
+                f"detect_direction must be 'decrease', 'increase', or "
+                f"'both', got {detect_direction!r}"
+            )
 
         inp = Path(input)
         out_path = _resolve_output(inp, output, "flood_map")
@@ -251,8 +274,14 @@ class SARProcessor:
 
         if reference is not None:
             ref_d, _, _ = self._read(Path(reference), ref_shape=data.shape)
-            change = ref_d - data
-            water_mask = (change > abs(threshold * 0.5)) & valid
+            change = ref_d - data  # positive = backscatter dropped (open water)
+            change_threshold = abs(threshold * 0.5)
+            if detect_direction == "decrease":
+                water_mask = (change > change_threshold) & valid
+            elif detect_direction == "increase":
+                water_mask = (change < -change_threshold) & valid
+            else:  # "both"
+                water_mask = (np.abs(change) > change_threshold) & valid
         else:
             water_mask = (data < threshold) & valid
 
@@ -276,15 +305,23 @@ class SARProcessor:
             dst.write(result[None, :, :])
 
         logger.info("Flood map: %.1f%% water → %s", water_pct, out_path.name)
+        metadata = {
+            "threshold_db": threshold,
+            "water_pct": round(float(water_pct), 2),
+        }
+        if reference is not None:
+            metadata["detect_direction"] = detect_direction
+            decrease_pct = 100 * np.sum((change > change_threshold) & valid) / (np.sum(valid) + 1e-10)
+            increase_pct = 100 * np.sum((change < -change_threshold) & valid) / (np.sum(valid) + 1e-10)
+            metadata["decrease_pct"] = round(float(decrease_pct), 2)
+            metadata["increase_pct"] = round(float(increase_pct), 2)
+
         return ProcessingResult(
             success=True,
             operation="flood_map",
             input_path=inp,
             output_path=out_path,
-            metadata={
-                "threshold_db": threshold,
-                "water_pct": round(float(water_pct), 2),
-            },
+            metadata=metadata,
         )
 
     # ── Coherence ────────────────────────────────────────────────────────

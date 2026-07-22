@@ -17,7 +17,7 @@ One CLI. One Python API. A single interface to search, download, and process sat
 • Complete InSAR pipeline in pure Python — coregistration, interferogram, SNAPHU unwrapping, SBAS inversion
 • Sentinel-1 SLC support for real InSAR workflows
 • YAML pipeline orchestration for repeatable, scheduled workflows
-
+pygeofetch_linkedin_announcement.md
 💡 Why this matters:
 I've tested this against real problems — a 6-year vegetation trend analysis over the Obuasi mining belt and flood extent mapping in Accra. Tools that only work in a demo don't help anyone.This is early. Some providers are more battle-tested than others. But the core has been hardened against real APIs, real edge cases, and real data — until it held up.
 

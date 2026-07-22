@@ -209,6 +209,9 @@ dmypy.json
 .vscode/
 *.code-workspace
 .history/
+pygeofetch_documentation.html/
+pygeofetch_linkedin_announcement.md/
+PYGEOFETCH_SESSION_REPORT.md/
 
 # JetBrains (PyCharm, DataSpell, etc.)
 .idea/

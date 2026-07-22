@@ -213,6 +213,7 @@ dmypy.json
 pygeofetch_documentation.html
 pygeofetch_linkedin_announcement.md
 PYGEOFETCH_SESSION_REPORT.md
+CONDA_DEPLOYMENT_GUIDE.md
 
 # JetBrains (PyCharm, DataSpell, etc.)
 .idea/

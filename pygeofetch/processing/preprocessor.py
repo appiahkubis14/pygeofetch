@@ -709,7 +709,7 @@ class Preprocessor:
 
             try:
                 out_image, out_transform = rasterio_mask(
-                    src, shapes, crop=True, all_touched=all_touched
+                    src, shapes, crop=True, all_touched=all_touched, nodata=0
                 )
             except ValueError as exc:
                 if "do not overlap" not in str(exc):
@@ -733,7 +733,7 @@ class Preprocessor:
                 ]
                 try:
                     out_image, out_transform = rasterio_mask(
-                        src, buffered_shapes, crop=True, all_touched=all_touched
+                        src, buffered_shapes, crop=True, all_touched=all_touched, nodata=0
                     )
                     logger.warning(
                         f"clip(): initial geometry missed the raster by a "
@@ -763,6 +763,7 @@ class Preprocessor:
                 height=out_image.shape[1],
                 width=out_image.shape[2],
                 transform=out_transform,
+                nodata=0,
             )
             with rasterio.open(out_path, "w", **profile) as dst:
                 dst.write(out_image)
@@ -873,11 +874,13 @@ class Preprocessor:
         input: str | Path,
         resolution: float | None = None,
         scale_factor: float | None = None,
+        reference: str | Path | None = None,
         method: str = "bilinear",
         output: str | None = None,
     ) -> ProcessingResult:
         """
-        Resample raster to a different spatial resolution.
+        Resample raster to a different spatial resolution, or align it to
+        exactly match another raster's grid.
 
         Args:
             input:        Input raster.
@@ -885,8 +888,23 @@ class Preprocessor:
                           For geographic CRS, use degrees; for projected, metres.
             scale_factor: Alternatively, a scale factor (0.5 = half resolution,
                           2.0 = double resolution). Cannot combine with resolution.
+            reference:    Alternatively, another raster to match exactly —
+                          same shape, transform, and CRS as this file, not
+                          just the same resolution. Two rasters independently
+                          resampled to "the same resolution" can still have
+                          different origins/extents and fail to line up
+                          pixel-for-pixel; `reference` guarantees they do.
+                          The real, common case this solves: combining
+                          results from two different sensors (e.g. Sentinel-1
+                          SAR at ~10m native resolution and Landsat optical
+                          at 30m) that need to sit on identical pixels before
+                          being compared or combined. Cannot combine with
+                          resolution or scale_factor.
             method:       ``"nearest"``, ``"bilinear"``, ``"cubic"``, ``"lanczos"``,
-                          ``"average"``.
+                          ``"average"``. Use ``"nearest"`` for categorical/
+                          classified data (class codes, masks) — bilinear
+                          and the other continuous-data methods will blend
+                          adjacent classes into meaningless fractional values.
             output:       Output path.
 
         Example::
@@ -895,8 +913,13 @@ class Preprocessor:
             result = client.preprocess.resample("B02_10m.tif", resolution=30)
             # Downsample by factor of 2
             result = client.preprocess.resample("scene.tif", scale_factor=0.5)
+            # Align a SAR classification mask onto an optical raster's exact grid
+            result = client.preprocess.resample(
+                "sar_mask.tif", reference="optical_classified.tif", method="nearest",
+            )
         """
         rasterio = _require_rasterio()
+        np = _require_numpy()
         from rasterio.enums import Resampling as RS
 
         rs_map = {
@@ -909,6 +932,46 @@ class Preprocessor:
         rs_method = rs_map.get(method, RS.bilinear)
 
         inp = Path(input)
+
+        if reference is not None:
+            if resolution is not None or scale_factor is not None:
+                msg = "Provide only one of resolution, scale_factor, or reference"
+                raise ValueError(msg)
+
+            from rasterio.warp import reproject as _warp_reproject
+
+            out_path = _resolve_output(inp, output, "aligned")
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+
+            with rasterio.open(reference) as ref_src:
+                ref_transform, ref_crs = ref_src.transform, ref_src.crs
+                new_h, new_w = ref_src.height, ref_src.width
+
+            with rasterio.open(inp) as src:
+                profile = src.profile.copy()
+                profile.update(height=new_h, width=new_w, transform=ref_transform, crs=ref_crs)
+                data = np.zeros((src.count, new_h, new_w), dtype=src.dtypes[0])
+                for band_idx in range(1, src.count + 1):
+                    _warp_reproject(
+                        source=rasterio.band(src, band_idx),
+                        destination=data[band_idx - 1],
+                        src_transform=src.transform, src_crs=src.crs,
+                        dst_transform=ref_transform, dst_crs=ref_crs,
+                        resampling=rs_method,
+                    )
+
+            with rasterio.open(out_path, "w", **profile) as dst:
+                dst.write(data)
+
+            logger.info(f"Aligned to reference grid → {new_w}×{new_h} → {out_path}")
+            return ProcessingResult(
+                success=True,
+                operation="resample",
+                input_path=inp,
+                output_path=out_path,
+                metadata={"method": method, "new_width": new_w, "new_height": new_h, "reference": str(reference)},
+            )
+
         res_label = str(resolution or scale_factor).replace(".", "p")
         out_path = _resolve_output(inp, output, f"resamp_{res_label}m")
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -923,7 +986,7 @@ class Preprocessor:
                 scale_x = scale_factor
                 scale_y = scale_factor
             else:
-                msg = "Provide either resolution or scale_factor"
+                msg = "Provide either resolution, scale_factor, or reference"
                 raise ValueError(msg)
 
             new_h = max(1, int(src.height * scale_y))

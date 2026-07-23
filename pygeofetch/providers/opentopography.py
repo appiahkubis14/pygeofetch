@@ -44,13 +44,27 @@ class OpentopographyProvider(AbstractBaseProvider):
     BASE_URL = "https://portal.opentopography.org/API"
 
     DEM_TYPES = {
-        "srtm30": "SRTMGL30",
+        # Verified against OpenTopography's live API documentation
+        # (portal.opentopography.org/apidocs) — every value below is
+        # confirmed to be a real, currently-accepted demtype. An earlier
+        # "srtm30": "SRTMGL30" entry was removed here — that value does
+        # not exist in the real API at all (confirmed against the live
+        # documented list) and would have produced a 400 Bad Request if
+        # ever downloaded; it was also redundant with srtm1arc below,
+        # which already correctly represents the real 30m/1-arc-second
+        # SRTM product.
         "srtm90": "SRTMGL3",
         "srtm1arc": "SRTMGL1",
         "cop30": "COP30",
         "cop90": "COP90",
         "nasadem": "NASADEM",
         "alos": "AW3D30",
+        # A real value in the live API, not independently verified this
+        # session — the documentation lists it only as "(DTM 30m)" with
+        # no further detail on coverage or methodology, so it's included
+        # here as an available option, not asserted to be a confirmed
+        # global bare-earth product.
+        "gedtm30": "GEDTM30",
     }
 
     def authenticate(self, credentials: Credentials) -> AuthSession:
@@ -64,7 +78,7 @@ class OpentopographyProvider(AbstractBaseProvider):
             provider=self.PROVIDER_ID,
             access_token=_plain(api_key),
             expires_at=datetime.now(timezone.utc) + timedelta(days=365),
-            session_data={"api_key": api_key},
+            session_data={"api_key": _plain(api_key)},
         )
         self._session = session
         return session
@@ -127,9 +141,25 @@ class OpentopographyProvider(AbstractBaseProvider):
             else ""
         )
         output_paths, total_bytes = [], 0
+        asset_errors = []
         for key, asset in (data.data_assets or data.assets).items():
             href = asset.href
-            if "API_Key=" not in href:
+            # Always ensure the CURRENT session's key is actually present
+            # with a real value -- not just checking whether the literal
+            # substring "API_Key=" exists in the URL. search() bakes a key
+            # into every href at search time; if that key was empty or
+            # stale for any reason, a substring-only check would never
+            # notice or correct it, silently sending an unauthenticated
+            # request on every retry.
+            import re
+
+            existing_match = re.search(r"[?&]API_Key=([^&]*)", href)
+            if existing_match and existing_match.group(1):
+                pass  # a real, non-empty key is already present, keep it
+            elif existing_match:
+                # Present but empty -- replace with the current key
+                href = href[: existing_match.start(1)] + api_key + href[existing_match.end(1) :]
+            else:
                 sep = "&" if "?" in href else "?"
                 href = f"{href}{sep}API_Key={api_key}"
             out_file = destination / f"{data.id}_{key}.tif"
@@ -138,22 +168,33 @@ class OpentopographyProvider(AbstractBaseProvider):
                     "GET", href, timeout=options.timeout_seconds, follow_redirects=True
                 ) as resp:
                     self._handle_http_error(resp)
+                    bytes_written = 0
                     with open(out_file, "wb") as f:
-                        f.writelines(
-                            resp.iter_bytes(
-                                chunk_size=int(options.chunk_size_mb * 1024 * 1024)
-                            )
+                        for chunk in resp.iter_bytes(
+                            chunk_size=int(options.chunk_size_mb * 1024 * 1024)
+                        ):
+                            f.write(chunk)
+                            bytes_written += len(chunk)
+                    if bytes_written == 0:
+                        out_file.unlink(missing_ok=True)
+                        raise RuntimeError(
+                            f"OpenTopography returned an empty response for "
+                            f"{key} (status {resp.status_code}) — often means "
+                            f"the API key is invalid/unapproved, or the "
+                            f"requested area exceeds OpenTopography's size "
+                            f"limit for this DEM type."
                         )
                 output_paths.append(out_file)
                 total_bytes += out_file.stat().st_size
             except Exception as exc:
+                asset_errors.append(f"{key}: {exc}")
                 self._logger.warning(f"OT download failed: {exc}")
         if not output_paths:
             return DownloadResult(
                 status=DownloadStatus.FAILED,
                 data_id=data.id,
                 provider=self.PROVIDER_ID,
-                error="Download failed",
+                error="; ".join(asset_errors) if asset_errors else "Download failed",
             )
         return DownloadResult(
             status=DownloadStatus.COMPLETED,

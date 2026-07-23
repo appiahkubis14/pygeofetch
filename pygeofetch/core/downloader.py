@@ -206,15 +206,15 @@ class AdaptiveDownloader:
                         result = self._verify_checksums(result, data, options)
                     if options.post_process:
                         result = self._run_post_process(result, options)
-                    size_mb = (
-                        result.bytes_downloaded / (1024 * 1024)
-                        if result.bytes_downloaded
-                        else 0
-                    )
+                    size_bytes = result.bytes_downloaded or 0
+                    if size_bytes < 1024 * 1024:
+                        size_str = f"{size_bytes / 1024:.0f} KB"
+                    else:
+                        size_str = f"{size_bytes / (1024 * 1024):.1f} MB"
                     logger.info(
-                        "  ✓ %-45s %6.0f MB  %5.1fs",
+                        "  ✓ %-45s %10s  %5.1fs",
                         str(data.id)[:45],
-                        size_mb,
+                        size_str,
                         result.duration_seconds,
                     )
                     return result

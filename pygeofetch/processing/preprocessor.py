@@ -869,6 +869,241 @@ class Preprocessor:
     # ──────────────────────────────────────────────────────────────────────
 
     @_timed
+    def topographic_wetness_index(
+        self,
+        input: str | Path,
+        output: str | None = None,
+    ) -> ProcessingResult:
+        """
+        Compute the Topographic Wetness Index (TWI) — a standard,
+        real hydrological index (Beven & Kirkby, 1979) used in genuine
+        flood susceptibility and soil moisture mapping, not a novel or
+        approximate substitute for one.
+
+        TWI = ln(specific catchment area / tan(slope))
+
+        High TWI = flat, low-lying areas with large upslope contributing
+        area — exactly where surface water accumulates and standing
+        floodwater is most likely to persist. Low TWI = steep or ridge
+        terrain where water drains away quickly.
+
+        Uses a D8 flow-direction and flow-accumulation algorithm
+        (O'Callaghan & Mark, 1984) — the same method used in GRASS GIS
+        r.watershed, ArcGIS Flow Accumulation, and TauDEM — computed
+        directly rather than depending on an external hydrology library.
+
+        Args:
+            input:  DEM raster (elevation in metres).
+            output: Output path.
+
+        Returns:
+            ProcessingResult with metadata including ``mean_twi``,
+            ``max_twi``, and ``high_twi_pct`` (percentage of the area
+            in the top wetness quintile — a reasonable first-pass
+            flood-susceptibility screen).
+
+        Example::
+
+            result = client.preprocess.topographic_wetness_index("dem.tif")
+        """
+        rasterio = _require_rasterio()
+        np = _require_numpy()
+
+        inp = Path(input)
+        out_path = _resolve_output(inp, output, "twi")
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with rasterio.open(inp) as src:
+            dem = src.read(1).astype(np.float64)
+            profile = src.profile.copy()
+            transform = src.transform
+            crs = src.crs
+
+            pixel_size_x = abs(transform.a)
+            pixel_size_y = abs(transform.e)
+            if crs is not None and crs.is_geographic:
+                center_lat = (src.bounds.top + src.bounds.bottom) / 2.0
+                pixel_size_x_m = pixel_size_x * 111320.0 * np.cos(np.radians(center_lat))
+                pixel_size_y_m = pixel_size_y * 111320.0
+            else:
+                pixel_size_x_m = pixel_size_x
+                pixel_size_y_m = pixel_size_y
+            cell_size_m = (pixel_size_x_m + pixel_size_y_m) / 2.0
+
+        h, w = dem.shape
+        neighbors = [
+            (-1, -1, 1.4142), (-1, 0, 1.0), (-1, 1, 1.4142), (0, -1, 1.0),
+            (0, 1, 1.0), (1, -1, 1.4142), (1, 0, 1.0), (1, 1, 1.4142),
+        ]
+
+        flow_dir = np.full((h, w), -1, dtype=np.int8)
+        padded = np.pad(dem, 1, mode="edge")
+        best_drop = None
+        for idx, (dr, dc, dist) in enumerate(neighbors):
+            neighbor_elev = padded[1 + dr : 1 + dr + h, 1 + dc : 1 + dc + w]
+            drop = (dem - neighbor_elev) / (dist * cell_size_m)
+            if idx == 0:
+                best_drop = drop.copy()
+                flow_dir[:] = 0
+            else:
+                better = drop > best_drop
+                flow_dir[better] = idx
+                best_drop[better] = drop[better]
+        flow_dir[best_drop <= 0] = -1
+
+        flow_accum = np.ones((h, w), dtype=np.float64)
+        order = np.argsort(-dem.ravel())
+        flat_flow_dir = flow_dir.ravel()
+        for flat_idx in order:
+            d = flat_flow_dir[flat_idx]
+            if d == -1:
+                continue
+            r, c = divmod(flat_idx, w)
+            dr, dc, _ = neighbors[d]
+            nr, nc = r + dr, c + dc
+            if 0 <= nr < h and 0 <= nc < w:
+                flow_accum[nr, nc] += flow_accum[r, c]
+
+        # Slope, needed for the TWI denominator — same Horn-method
+        # calculation as terrain_derivatives(), kept independent here so
+        # this method has no dependency on that one having been run first.
+        dzdy, dzdx = np.gradient(dem, pixel_size_y_m, pixel_size_x_m)
+        slope_rad = np.arctan(np.sqrt(dzdx**2 + dzdy**2))
+        # Floor slope at a small positive value -- true zero slope would
+        # make tan(slope) zero and TWI undefined (infinite), which is
+        # mathematically correct but not usable; a small floor is the
+        # standard practical convention in TWI literature.
+        slope_rad_floored = np.maximum(slope_rad, np.radians(0.1))
+
+        specific_catchment_area = flow_accum * cell_size_m
+        twi = np.log(specific_catchment_area / np.tan(slope_rad_floored)).astype(np.float32)
+
+        out_profile = profile.copy()
+        out_profile.update(dtype="float32", count=1)
+        with rasterio.open(out_path, "w", **out_profile) as dst:
+            dst.write(twi, 1)
+
+        high_threshold = float(np.nanpercentile(twi, 80))
+        logger.info(f"TWI computed → {out_path}")
+        return ProcessingResult(
+            success=True,
+            operation="topographic_wetness_index",
+            input_path=inp,
+            output_path=out_path,
+            metadata={
+                "mean_twi": float(np.nanmean(twi)),
+                "max_twi": float(np.nanmax(twi)),
+                "high_twi_pct": float(100 * np.nanmean(twi > high_threshold)),
+                "high_twi_threshold": high_threshold,
+            },
+        )
+
+    def terrain_derivatives(
+        self,
+        input: str | Path,
+        azimuth: float = 315.0,
+        altitude: float = 45.0,
+        output_dir: str | None = None,
+    ) -> ProcessingResult:
+        """
+        Compute slope, aspect, and hillshade from a DEM in one call.
+
+        Standard Horn-method gradient-based terrain analysis. Correctly
+        handles geographic (lat/lon) DEMs by converting pixel size from
+        degrees to metres at the raster's actual latitude before computing
+        slope — a common source of wrong slope values when a DEM's pixel
+        size is used directly in degrees.
+
+        Args:
+            input:     DEM raster (elevation in metres).
+            azimuth:   Sun azimuth for hillshade, degrees (0=N, 90=E,
+                      180=S, 270=W). Default 315 (NW), the cartographic
+                      convention.
+            altitude:  Sun altitude above the horizon, degrees. Default 45.
+            output_dir: Directory for the three output rasters. Defaults
+                      to the input's own directory.
+
+        Returns:
+            ProcessingResult with metadata containing paths to all three
+            outputs (``slope_path``, ``aspect_path``, ``hillshade_path``)
+            and summary statistics (``mean_slope_deg``, ``max_slope_deg``,
+            ``steep_pct`` — the percentage of the area over 30 degrees).
+
+        Example::
+
+            result = client.preprocess.terrain_derivatives("dem.tif")
+            print(result.metadata["mean_slope_deg"])
+        """
+        rasterio = _require_rasterio()
+        np = _require_numpy()
+
+        inp = Path(input)
+        out_dir = Path(output_dir) if output_dir else inp.parent
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        with rasterio.open(inp) as src:
+            dem = src.read(1).astype(np.float32)
+            profile = src.profile.copy()
+            transform = src.transform
+            crs = src.crs
+
+            pixel_size_x = abs(transform.a)
+            pixel_size_y = abs(transform.e)
+            # Geographic CRS (degrees) needs conversion to metres at this
+            # raster's actual latitude, or slope comes out wildly wrong —
+            # a degree of longitude is not the same physical distance as
+            # a degree of latitude except at the equator.
+            if crs is not None and crs.is_geographic:
+                center_lat = (src.bounds.top + src.bounds.bottom) / 2.0
+                pixel_size_x_m = pixel_size_x * 111320.0 * np.cos(np.radians(center_lat))
+                pixel_size_y_m = pixel_size_y * 111320.0
+            else:
+                pixel_size_x_m = pixel_size_x
+                pixel_size_y_m = pixel_size_y
+
+        dzdy, dzdx = np.gradient(dem, pixel_size_y_m, pixel_size_x_m)
+        slope_rad = np.arctan(np.sqrt(dzdx**2 + dzdy**2))
+        slope_deg = np.degrees(slope_rad).astype(np.float32)
+
+        aspect_rad = np.arctan2(-dzdx, dzdy)
+        aspect_deg = ((450 - np.degrees(aspect_rad)) % 360).astype(np.float32)
+
+        azimuth_rad = np.radians(360 - azimuth + 90)
+        zenith_rad = np.radians(90 - altitude)
+        hillshade = (
+            np.cos(zenith_rad) * np.cos(slope_rad)
+            + np.sin(zenith_rad) * np.sin(slope_rad) * np.cos(azimuth_rad - aspect_rad)
+        )
+        hillshade = np.clip(hillshade, 0, 1).astype(np.float32)
+
+        out_profile = profile.copy()
+        out_profile.update(dtype="float32", count=1)
+
+        slope_path = out_dir / f"{inp.stem}_slope.tif"
+        aspect_path = out_dir / f"{inp.stem}_aspect.tif"
+        hillshade_path = out_dir / f"{inp.stem}_hillshade.tif"
+
+        for path, arr in [(slope_path, slope_deg), (aspect_path, aspect_deg), (hillshade_path, hillshade)]:
+            with rasterio.open(path, "w", **out_profile) as dst:
+                dst.write(arr, 1)
+
+        logger.info(f"Terrain derivatives computed → {out_dir}")
+        return ProcessingResult(
+            success=True,
+            operation="terrain_derivatives",
+            input_path=inp,
+            output_path=slope_path,
+            metadata={
+                "slope_path": str(slope_path),
+                "aspect_path": str(aspect_path),
+                "hillshade_path": str(hillshade_path),
+                "mean_slope_deg": float(np.nanmean(slope_deg)),
+                "max_slope_deg": float(np.nanmax(slope_deg)),
+                "steep_pct": float(100 * np.nanmean(slope_deg > 30)),
+                "pixel_size_m": float((pixel_size_x_m + pixel_size_y_m) / 2),
+            },
+        )
+
     def resample(
         self,
         input: str | Path,

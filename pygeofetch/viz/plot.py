@@ -51,6 +51,137 @@ class Plotter:
         self._figsize = figsize
         self._dpi = dpi
 
+    def plot_3d_terrain(
+        self,
+        data: Union[str, Path, Any],
+        title: str = "",
+        colormap: str = "terrain",
+        drape: Optional[Any] = None,
+        drape_colormap: str = "Blues",
+        drape_alpha: float = 0.6,
+        azimuth: float = 315.0,
+        altitude: float = 45.0,
+        vert_exaggeration: float = 1.5,
+        max_render_dim: int = 250,
+        elev_angle: float = 35.0,
+        azim_angle: float = -60.0,
+        output: Optional[Union[str, Path]] = None,
+        colorbar_label: Optional[str] = None,
+    ) -> Any:
+        """
+        3D-render a DEM as an illuminated terrain surface — from a file
+        path OR directly from an in-memory numpy array, same convention
+        as plot_raster().
+
+        Args:
+            data:      Path to a DEM GeoTIFF, OR a 2D numpy array of
+                       elevation values.
+            title:     Plot title.
+            colormap:  Matplotlib colormap for the terrain surface itself.
+            drape:     Optional second array or path to overlay ON the 3D
+                       surface — e.g. a flood susceptibility classification,
+                       TWI, or observed flood extent — so risk/analysis
+                       results can be shown directly on the real terrain
+                       shape rather than as a flat 2D map. Must share the
+                       DEM's grid (same shape).
+            drape_colormap: Colormap for the drape layer.
+            drape_alpha: Opacity of the drape layer over the base terrain shading.
+            azimuth:   Sun azimuth for surface illumination, degrees
+                       (cartographic convention: 0=N, 90=E, 180=S, 270=W).
+            altitude:  Sun altitude above the horizon, degrees.
+            vert_exaggeration: Vertical exaggeration factor — real terrain
+                       relief is often subtle relative to its horizontal
+                       extent; 1.5-3x is typical for a readable 3D plot
+                       without visually lying about the real proportions.
+            max_render_dim: Downsample the grid so its largest dimension
+                       doesn't exceed this — full-resolution DEMs (often
+                       thousands of pixels per side) render extremely
+                       slowly and are not visually distinguishable from a
+                       downsampled version in a 3D view.
+            elev_angle: Camera elevation angle for the 3D view.
+            azim_angle: Camera azimuth angle for the 3D view.
+            output:    Save path (.png/.pdf/.svg). Show in notebook if None.
+            colorbar_label: Label for the terrain colorbar.
+
+        Example::
+
+            pl.plot_3d_terrain("dem.tif", drape="flood_susceptibility.tif",
+                               title="Flood Susceptibility Draped on Terrain")
+        """
+        import numpy as np
+
+        plt = _require_matplotlib()
+        from matplotlib.colors import LightSource
+        from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 (registers 3D projection)
+
+        def _load(source, band=1):
+            if isinstance(source, (str, Path)):
+                import rasterio
+
+                with rasterio.open(source) as src:
+                    arr = src.read(band).astype(np.float32)
+                    nodata = src.nodata
+                    if nodata is not None:
+                        arr = np.where(arr == nodata, np.nan, arr)
+                    ext = [src.bounds.left, src.bounds.right, src.bounds.bottom, src.bounds.top]
+                return arr, ext
+            return np.asarray(source, dtype=np.float32), None
+
+        dem, plot_extent = _load(data)
+        drape_arr = None
+        if drape is not None:
+            drape_arr, drape_extent = _load(drape)
+            if drape_arr.shape != dem.shape:
+                raise ValueError(
+                    f"drape shape {drape_arr.shape} doesn't match the DEM's "
+                    f"shape {dem.shape} — they must share the same grid. "
+                    f"Use Preprocessor.resample(reference=...) to align them first."
+                )
+            plot_extent = plot_extent or drape_extent
+
+        step = max(1, max(dem.shape) // max_render_dim)
+        dem_ds = dem[::step, ::step]
+        h, w = dem_ds.shape
+
+        if plot_extent is not None:
+            lon = np.linspace(plot_extent[0], plot_extent[1], w)
+            lat = np.linspace(plot_extent[3], plot_extent[2], h)
+        else:
+            lon = np.arange(w)
+            lat = np.arange(h)
+        lon_mesh, lat_mesh = np.meshgrid(lon, lat)
+
+        ls = LightSource(azdeg=azimuth, altdeg=altitude)
+        rgb = ls.shade(dem_ds, cmap=plt.get_cmap(colormap), vert_exag=vert_exaggeration, blend_mode="soft")
+
+        if drape_arr is not None:
+            drape_ds = drape_arr[::step, ::step]
+            drape_norm = plt.Normalize(vmin=np.nanmin(drape_ds), vmax=np.nanmax(drape_ds))
+            drape_rgba = plt.get_cmap(drape_colormap)(drape_norm(drape_ds))
+            valid = ~np.isnan(drape_ds)
+            blended_rgb = np.where(
+                valid[..., None],
+                rgb[..., :3] * (1 - drape_alpha) + drape_rgba[..., :3] * drape_alpha,
+                rgb[..., :3],
+            )
+            rgb = np.concatenate([blended_rgb, rgb[..., 3:4]], axis=-1)
+
+        fig = plt.figure(figsize=self._figsize)
+        ax = fig.add_subplot(111, projection="3d")
+        ax.plot_surface(
+            lon_mesh, lat_mesh, dem_ds, facecolors=rgb,
+            rstride=1, cstride=1, antialiased=True, shade=False,
+        )
+        ax.set_title(title or "3D Terrain", fontsize=13)
+        if plot_extent is not None:
+            ax.set_xlabel("Longitude")
+            ax.set_ylabel("Latitude")
+        ax.set_zlabel(colorbar_label or "Elevation (m)")
+        ax.view_init(elev=elev_angle, azim=azim_angle)
+        plt.tight_layout()
+
+        return self._save_or_show(fig, output)
+
     def plot_raster(
         self,
         data: Union[str, Path, Any],

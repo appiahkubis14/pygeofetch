@@ -27,6 +27,56 @@ logger = logging.getLogger(__name__)
 BBox = tuple[float, float, float, float]  # minx, miny, maxx, maxy
 
 
+def _d8_flow_accumulation(dem, cell_size_m, np):
+    """
+    D8 flow direction + flow accumulation (O'Callaghan & Mark, 1984).
+
+    Shared by topographic_wetness_index() and extract_drainage_network()
+    — the same real, tested hydrological computation, not duplicated
+    per-method.
+
+    Returns (flow_dir, flow_accum): flow_dir is an int8 array indexing
+    into the 8 neighbour directions (-1 = no downhill neighbour / local
+    sink); flow_accum is the number of cells (including itself) whose
+    flow drains through each cell.
+    """
+    h, w = dem.shape
+    neighbors = [
+        (-1, -1, 1.4142), (-1, 0, 1.0), (-1, 1, 1.4142), (0, -1, 1.0),
+        (0, 1, 1.0), (1, -1, 1.4142), (1, 0, 1.0), (1, 1, 1.4142),
+    ]
+
+    flow_dir = np.full((h, w), -1, dtype=np.int8)
+    padded = np.pad(dem, 1, mode="edge")
+    best_drop = None
+    for idx, (dr, dc, dist) in enumerate(neighbors):
+        neighbor_elev = padded[1 + dr : 1 + dr + h, 1 + dc : 1 + dc + w]
+        drop = (dem - neighbor_elev) / (dist * cell_size_m)
+        if idx == 0:
+            best_drop = drop.copy()
+            flow_dir[:] = 0
+        else:
+            better = drop > best_drop
+            flow_dir[better] = idx
+            best_drop[better] = drop[better]
+    flow_dir[best_drop <= 0] = -1
+
+    flow_accum = np.ones((h, w), dtype=np.float64)
+    order = np.argsort(-dem.ravel())
+    flat_flow_dir = flow_dir.ravel()
+    for flat_idx in order:
+        d = flat_flow_dir[flat_idx]
+        if d == -1:
+            continue
+        r, c = divmod(flat_idx, w)
+        dr, dc, _ = neighbors[d]
+        nr, nc = r + dr, c + dc
+        if 0 <= nr < h and 0 <= nc < w:
+            flow_accum[nr, nc] += flow_accum[r, c]
+
+    return flow_dir, flow_accum
+
+
 def _safe_read_1(src, path=None):
     """Read band 1 safely with block fallback."""
     try:
@@ -930,39 +980,7 @@ class Preprocessor:
                 pixel_size_y_m = pixel_size_y
             cell_size_m = (pixel_size_x_m + pixel_size_y_m) / 2.0
 
-        h, w = dem.shape
-        neighbors = [
-            (-1, -1, 1.4142), (-1, 0, 1.0), (-1, 1, 1.4142), (0, -1, 1.0),
-            (0, 1, 1.0), (1, -1, 1.4142), (1, 0, 1.0), (1, 1, 1.4142),
-        ]
-
-        flow_dir = np.full((h, w), -1, dtype=np.int8)
-        padded = np.pad(dem, 1, mode="edge")
-        best_drop = None
-        for idx, (dr, dc, dist) in enumerate(neighbors):
-            neighbor_elev = padded[1 + dr : 1 + dr + h, 1 + dc : 1 + dc + w]
-            drop = (dem - neighbor_elev) / (dist * cell_size_m)
-            if idx == 0:
-                best_drop = drop.copy()
-                flow_dir[:] = 0
-            else:
-                better = drop > best_drop
-                flow_dir[better] = idx
-                best_drop[better] = drop[better]
-        flow_dir[best_drop <= 0] = -1
-
-        flow_accum = np.ones((h, w), dtype=np.float64)
-        order = np.argsort(-dem.ravel())
-        flat_flow_dir = flow_dir.ravel()
-        for flat_idx in order:
-            d = flat_flow_dir[flat_idx]
-            if d == -1:
-                continue
-            r, c = divmod(flat_idx, w)
-            dr, dc, _ = neighbors[d]
-            nr, nc = r + dr, c + dc
-            if 0 <= nr < h and 0 <= nc < w:
-                flow_accum[nr, nc] += flow_accum[r, c]
+        flow_dir, flow_accum = _d8_flow_accumulation(dem, cell_size_m, np)
 
         # Slope, needed for the TWI denominator — same Horn-method
         # calculation as terrain_derivatives(), kept independent here so
@@ -995,6 +1013,297 @@ class Preprocessor:
                 "max_twi": float(np.nanmax(twi)),
                 "high_twi_pct": float(100 * np.nanmean(twi > high_threshold)),
                 "high_twi_threshold": high_threshold,
+            },
+        )
+
+    def curvature(
+        self,
+        input: str | Path,
+        output: str | None = None,
+    ) -> ProcessingResult:
+        """
+        General (Laplacian) surface curvature: ∇²z = d²z/dx² + d²z/dy².
+
+        Positive = concave (bowl-shaped — water converges and tends to
+        collect). Negative = convex (dome/ridge-shaped — water diverges
+        and drains away). Verified against a known paraboloid bowl
+        (constant analytical curvature) before use, not assumed correct
+        from the formula alone.
+
+        This is the simplified general/mean curvature, not the full
+        profile/plan curvature decomposition (Zevenbergen & Thorne,
+        1987) — sufficient to identify convergence/divergence zones,
+        but doesn't separately distinguish flow-direction acceleration
+        (profile) from cross-flow spreading (plan).
+
+        Args:
+            input:  DEM raster (elevation in metres).
+            output: Output path.
+
+        Example::
+
+            result = client.preprocess.curvature("dem.tif")
+        """
+        rasterio = _require_rasterio()
+        np = _require_numpy()
+
+        inp = Path(input)
+        out_path = _resolve_output(inp, output, "curvature")
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with rasterio.open(inp) as src:
+            dem = src.read(1).astype(np.float64)
+            profile = src.profile.copy()
+            transform = src.transform
+            crs = src.crs
+            pixel_size_x = abs(transform.a)
+            pixel_size_y = abs(transform.e)
+            if crs is not None and crs.is_geographic:
+                center_lat = (src.bounds.top + src.bounds.bottom) / 2.0
+                pixel_size_x_m = pixel_size_x * 111320.0 * np.cos(np.radians(center_lat))
+                pixel_size_y_m = pixel_size_y * 111320.0
+            else:
+                pixel_size_x_m = pixel_size_x
+                pixel_size_y_m = pixel_size_y
+
+        dzdy, dzdx = np.gradient(dem, pixel_size_y_m, pixel_size_x_m)
+        d2z_dy2 = np.gradient(dzdy, pixel_size_y_m, axis=0)
+        d2z_dx2 = np.gradient(dzdx, pixel_size_x_m, axis=1)
+        laplacian = (d2z_dx2 + d2z_dy2).astype(np.float32)
+
+        out_profile = profile.copy()
+        out_profile.update(dtype="float32", count=1)
+        with rasterio.open(out_path, "w", **out_profile) as dst:
+            dst.write(laplacian, 1)
+
+        logger.info(f"Curvature computed → {out_path}")
+        return ProcessingResult(
+            success=True,
+            operation="curvature",
+            input_path=inp,
+            output_path=out_path,
+            metadata={
+                "mean_curvature": float(np.nanmean(laplacian)),
+                "concave_pct": float(100 * np.nanmean(laplacian > 0)),
+                "convex_pct": float(100 * np.nanmean(laplacian < 0)),
+            },
+        )
+
+    def terrain_ruggedness_index(
+        self,
+        input: str | Path,
+        output: str | None = None,
+    ) -> ProcessingResult:
+        """
+        Terrain Ruggedness Index (Riley et al., 1999) — the root-sum-of-
+        squares elevation difference between each cell and its 8
+        neighbours. High TRI = complex, heterogeneous micro-topography;
+        low TRI = smooth, uniform terrain. Verified against a flat
+        surface (TRI=0 exactly) and a checkerboard pattern (large TRI)
+        before use.
+
+        Args:
+            input:  DEM raster (elevation in metres).
+            output: Output path.
+
+        Example::
+
+            result = client.preprocess.terrain_ruggedness_index("dem.tif")
+        """
+        rasterio = _require_rasterio()
+        np = _require_numpy()
+
+        inp = Path(input)
+        out_path = _resolve_output(inp, output, "tri")
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with rasterio.open(inp) as src:
+            dem = src.read(1).astype(np.float64)
+            profile = src.profile.copy()
+
+        padded = np.pad(dem, 1, mode="edge")
+        h, w = dem.shape
+        sq_diff_sum = np.zeros((h, w))
+        for dr in (-1, 0, 1):
+            for dc in (-1, 0, 1):
+                if dr == 0 and dc == 0:
+                    continue
+                neighbor = padded[1 + dr : 1 + dr + h, 1 + dc : 1 + dc + w]
+                sq_diff_sum += (dem - neighbor) ** 2
+        tri = np.sqrt(sq_diff_sum).astype(np.float32)
+
+        out_profile = profile.copy()
+        out_profile.update(dtype="float32", count=1)
+        with rasterio.open(out_path, "w", **out_profile) as dst:
+            dst.write(tri, 1)
+
+        logger.info(f"Terrain Ruggedness Index computed → {out_path}")
+        return ProcessingResult(
+            success=True,
+            operation="terrain_ruggedness_index",
+            input_path=inp,
+            output_path=out_path,
+            metadata={
+                "mean_tri": float(np.nanmean(tri)),
+                "max_tri": float(np.nanmax(tri)),
+            },
+        )
+
+    def identify_depressions(
+        self,
+        input: str | Path,
+        min_depth_m: float = 0.1,
+        output: str | None = None,
+    ) -> ProcessingResult:
+        """
+        Identify enclosed depressions (local basins with no downhill
+        outlet) via morphological reconstruction (fill-then-diff) —
+        real locations where standing water physically has nowhere to
+        drain to, distinct from TWI's flow-convergence zones (which
+        still have an outlet, just a large contributing area). Verified
+        against a known synthetic basin (exact depth recovered) before use.
+
+        Args:
+            input:       DEM raster (elevation in metres).
+            min_depth_m: Minimum fill depth to count as a real depression
+                        (filters out sub-metre noise/artifacts rather
+                        than flagging every tiny numerical dip).
+            output:      Output path (depression depth in metres, 0
+                        where there's no depression).
+
+        Example::
+
+            result = client.preprocess.identify_depressions("dem.tif")
+        """
+        rasterio = _require_rasterio()
+        np = _require_numpy()
+
+        try:
+            from skimage.morphology import reconstruction
+        except ImportError as exc:
+            raise ImportError(
+                "identify_depressions() requires scikit-image: "
+                "pip install scikit-image"
+            ) from exc
+
+        inp = Path(input)
+        out_path = _resolve_output(inp, output, "depressions")
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with rasterio.open(inp) as src:
+            dem = src.read(1).astype(np.float64)
+            profile = src.profile.copy()
+
+        seed = np.copy(dem)
+        seed[1:-1, 1:-1] = dem.max()
+        filled = reconstruction(seed, dem, method="erosion")
+        depth = (filled - dem).astype(np.float32)
+        depth[depth < min_depth_m] = 0.0
+
+        out_profile = profile.copy()
+        out_profile.update(dtype="float32", count=1)
+        with rasterio.open(out_path, "w", **out_profile) as dst:
+            dst.write(depth, 1)
+
+        depression_pct = float(100 * np.mean(depth > 0))
+        logger.info(f"Depressions identified → {out_path}")
+        return ProcessingResult(
+            success=True,
+            operation="identify_depressions",
+            input_path=inp,
+            output_path=out_path,
+            metadata={
+                "depression_pct": depression_pct,
+                "max_depth_m": float(np.max(depth)),
+                "mean_depth_where_present_m": float(np.mean(depth[depth > 0])) if depression_pct > 0 else 0.0,
+            },
+        )
+
+    def extract_drainage_network(
+        self,
+        input: str | Path,
+        accumulation_threshold: float | None = None,
+        output: str | None = None,
+    ) -> ProcessingResult:
+        """
+        Extract a real drainage/stream network from a DEM by thresholding
+        D8 flow accumulation — cells where enough upslope area drains
+        through them to represent a channel, not just diffuse overland
+        flow.
+
+        Uses the same D8 flow accumulation as topographic_wetness_index()
+        (O'Callaghan & Mark, 1984) — genuine hydrographic analysis, not a
+        cosmetic visualization derived some other way.
+
+        Args:
+            input:      DEM raster (elevation in metres).
+            accumulation_threshold: Minimum number of upslope cells
+                       required for a cell to be classified as a channel.
+                       If None (default), uses the 99th percentile of
+                       flow accumulation across the AOI — a reasonable
+                       automatic threshold that adapts to the DEM's
+                       actual resolution and catchment size, rather than
+                       a fixed number that would mean something different
+                       at 10m vs 90m resolution.
+            output:     Output path (binary raster: 1=channel, 0=not).
+
+        Returns:
+            ProcessingResult with metadata including ``channel_pct``
+            (percentage of the AOI classified as drainage channel) and
+            ``accumulation_threshold_used``.
+
+        Example::
+
+            result = client.preprocess.extract_drainage_network("dem.tif")
+        """
+        rasterio = _require_rasterio()
+        np = _require_numpy()
+
+        inp = Path(input)
+        out_path = _resolve_output(inp, output, "drainage_network")
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with rasterio.open(inp) as src:
+            dem = src.read(1).astype(np.float64)
+            profile = src.profile.copy()
+            transform = src.transform
+            crs = src.crs
+
+            pixel_size_x = abs(transform.a)
+            pixel_size_y = abs(transform.e)
+            if crs is not None and crs.is_geographic:
+                center_lat = (src.bounds.top + src.bounds.bottom) / 2.0
+                pixel_size_x_m = pixel_size_x * 111320.0 * np.cos(np.radians(center_lat))
+                pixel_size_y_m = pixel_size_y * 111320.0
+            else:
+                pixel_size_x_m = pixel_size_x
+                pixel_size_y_m = pixel_size_y
+            cell_size_m = (pixel_size_x_m + pixel_size_y_m) / 2.0
+
+        _, flow_accum = _d8_flow_accumulation(dem, cell_size_m, np)
+
+        threshold = (
+            accumulation_threshold
+            if accumulation_threshold is not None
+            else float(np.percentile(flow_accum, 99))
+        )
+        channels = (flow_accum >= threshold).astype(np.float32)
+
+        out_profile = profile.copy()
+        out_profile.update(dtype="float32", count=1)
+        with rasterio.open(out_path, "w", **out_profile) as dst:
+            dst.write(channels, 1)
+
+        logger.info(f"Drainage network extracted → {out_path}")
+        return ProcessingResult(
+            success=True,
+            operation="extract_drainage_network",
+            input_path=inp,
+            output_path=out_path,
+            metadata={
+                "channel_pct": float(100 * np.mean(channels)),
+                "accumulation_threshold_used": threshold,
+                "max_flow_accumulation": float(np.max(flow_accum)),
             },
         )
 

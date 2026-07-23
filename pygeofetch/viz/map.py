@@ -93,8 +93,136 @@ class MapViewer:
             )
             logger.info("Raster layer added: %s", name)
         except Exception as exc:
+            msg = str(exc)
+            if "is not installed" in msg or "ModuleNotFoundError" in msg or isinstance(exc, ImportError):
+                # A missing dependency means EVERY raster layer will
+                # silently fail to appear on the map, not just this one --
+                # confirmed directly: add_raster() previously caught this,
+                # logged a warning, and let save() succeed anyway, producing
+                # a map that looked fine but was missing its actual content.
+                raise ImportError(
+                    f"add_raster() requires a dependency that isn't "
+                    f"installed: {msg}\n"
+                    f"Without it, EVERY raster layer will silently fail to "
+                    f"appear on the map — install it before continuing "
+                    f"rather than proceeding with an incomplete map."
+                ) from exc
             logger.warning("Could not add raster %s: %s", p.name, exc)
         self._layers.append({"type": "raster", "path": str(p), "name": name})
+        return self
+
+    def add_split_comparison(
+        self,
+        left_path: Union[str, Path],
+        right_path: Union[str, Path],
+        left_label: Optional[str] = None,
+        right_label: Optional[str] = None,
+        colormap: str = "terrain",
+        vmin: Optional[float] = None,
+        vmax: Optional[float] = None,
+    ) -> "MapViewer":
+        """
+        Side-by-side draggable split comparison of two rasters — e.g. a
+        DSM against a DTM, or two independent DEM sources — directly in
+        a Jupyter notebook or exported HTML. Backed by leafmap's own
+        split_map(), the same dependency MapViewer already requires; no
+        new library needed.
+
+        Args:
+            left_path:   Raster shown on the left panel.
+            right_path:  Raster shown on the right panel.
+            left_label:  Label for the left panel (defaults to filename).
+            right_label: Label for the right panel (defaults to filename).
+            colormap:    Matplotlib colormap name, applied to both panels.
+            vmin/vmax:   Value range for colormap scaling, applied to both
+                        panels so they're visually comparable on the same
+                        scale rather than each auto-stretched independently.
+
+        Example::
+
+            mv.add_split_comparison("dsm.tif", "dtm.tif",
+                                     left_label="DSM", right_label="DTM")
+        """
+        lm = _require_leafmap()
+        left_p, right_p = Path(left_path), Path(right_path)
+        m = lm.Map(center=self._center, zoom=self._zoom)
+
+        raster_args = {"colormap": colormap}
+        if vmin is not None:
+            raster_args["vmin"] = vmin
+        if vmax is not None:
+            raster_args["vmax"] = vmax
+
+        try:
+            m.split_map(
+                left_layer=str(left_p),
+                right_layer=str(right_p),
+                left_args=raster_args,
+                right_args=raster_args,
+                left_label=left_label or left_p.stem,
+                right_label=right_label or right_p.stem,
+            )
+            self._map = m
+            self._layers.append({"type": "split", "left": str(left_p), "right": str(right_p)})
+            logger.info(
+                "Split comparison added: %s vs %s",
+                left_label or left_p.stem, right_label or right_p.stem,
+            )
+        except Exception as exc:
+            msg = str(exc)
+            if "Server not started" not in msg and "ServerDownError" not in msg:
+                raise
+            # leafmap's interactive split view needs a local tile server
+            # (via localtileserver) to serve the raster tiles -- confirmed
+            # via a real user error that this can fail to start in some
+            # restricted/sandboxed network environments (firewalls,
+            # port-binding restrictions, some corporate VPN setups). This
+            # is a real limitation of that dependency's architecture, not
+            # something fixable from here -- the fallback below needs no
+            # server at all, so it works regardless of the environment.
+            logger.warning(
+                "leafmap's interactive split view needs a local tile "
+                "server that couldn't start in this environment (%s) -- "
+                "falling back to a static side-by-side comparison, which "
+                "needs no server.",
+                msg,
+            )
+            self._static_split_fallback(
+                left_p, right_p,
+                left_label or left_p.stem, right_label or right_p.stem,
+                colormap, vmin, vmax,
+            )
+        return self
+
+    def _static_split_fallback(self, left_p, right_p, left_label, right_label, colormap, vmin, vmax):
+        """Server-free side-by-side raster comparison (matplotlib), used
+        when leafmap's dynamic split view can't start a local tile server."""
+        import numpy as np
+        import rasterio
+        import matplotlib.pyplot as plt
+
+        with rasterio.open(left_p) as src:
+            left_arr = src.read(1).astype(float)
+            left_nodata = src.nodata
+            if left_nodata is not None:
+                left_arr = np.where(left_arr == left_nodata, np.nan, left_arr)
+        with rasterio.open(right_p) as src:
+            right_arr = src.read(1).astype(float)
+            right_nodata = src.nodata
+            if right_nodata is not None:
+                right_arr = np.where(right_arr == right_nodata, np.nan, right_arr)
+
+        fig, axes = plt.subplots(1, 2, figsize=(16, 7), facecolor="white")
+        im0 = axes[0].imshow(left_arr, cmap=colormap, vmin=vmin, vmax=vmax)
+        axes[0].set_title(left_label, fontsize=13)
+        plt.colorbar(im0, ax=axes[0], fraction=0.04)
+        im1 = axes[1].imshow(right_arr, cmap=colormap, vmin=vmin, vmax=vmax)
+        axes[1].set_title(right_label, fontsize=13)
+        plt.colorbar(im1, ax=axes[1], fraction=0.04)
+        plt.tight_layout()
+
+        self._map = fig
+        self._layers.append({"type": "static_split", "left": str(left_p), "right": str(right_p)})
         return self
 
     def add_vector(
@@ -127,15 +255,29 @@ class MapViewer:
 
     def show(self) -> Any:
         """Display the map (Jupyter only)."""
-        return self._get_map()
+        m = self._get_map()
+        if hasattr(m, "to_html"):
+            return m
+        # Static matplotlib fallback (see add_split_comparison) -- just
+        # return the figure directly, Jupyter renders it inline as-is.
+        return m
 
     def save(self, output: Union[str, Path]) -> Path:
-        """Save the map as a standalone HTML file."""
+        """Save the map as a standalone HTML file (or PNG, if this is a
+        static matplotlib fallback — see add_split_comparison)."""
         out = Path(output)
         out.parent.mkdir(parents=True, exist_ok=True)
-        self._get_map().to_html(str(out))
-        logger.info("Map saved → %s", out)
-        return out
+        m = self._get_map()
+        if hasattr(m, "to_html"):
+            m.to_html(str(out))
+            logger.info("Map saved → %s", out)
+            return out
+        # Static fallback: a matplotlib Figure has no to_html() — save as
+        # PNG instead, adjusting the extension if the caller asked for .html
+        png_out = out.with_suffix(".png") if out.suffix.lower() == ".html" else out
+        m.savefig(str(png_out), dpi=150, bbox_inches="tight", facecolor="white")
+        logger.info("Static comparison saved (no interactive server available) → %s", png_out)
+        return png_out
 
     @property
     def layers(self) -> List[dict]:

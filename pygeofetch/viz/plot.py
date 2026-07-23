@@ -51,6 +51,125 @@ class Plotter:
         self._figsize = figsize
         self._dpi = dpi
 
+    def plot_3d_terrain_interactive(
+        self,
+        data: Union[str, Path, Any],
+        drape: Optional[Any] = None,
+        drape_colormap: str = "Blues",
+        colormap: str = "terrain",
+        vert_exaggeration: float = 2.0,
+        max_render_dim: int = 400,
+        output: Optional[Union[str, Path]] = None,
+        window_size: tuple = (1000, 700),
+    ) -> Any:
+        """
+        Real interactive 3D terrain via PyVista — rotate, zoom, and pan
+        in-browser, not a static rendered image. A genuine step up from
+        plot_3d_terrain() when interactivity itself matters (e.g. a
+        presentation where the audience explores the terrain directly),
+        at the cost of a heavier optional dependency
+        (``pip install "pyvista[jupyter]"``) and a bigger output file.
+
+        Args:
+            data:      Path to a DEM GeoTIFF, OR a 2D numpy array of
+                       elevation values.
+            drape:     Optional second array or path to color the mesh
+                       by, instead of elevation — e.g. a susceptibility
+                       classification or TWI. Must share the DEM's grid.
+            drape_colormap: Colormap used when a drape is given.
+            colormap:  Colormap used for elevation when no drape is given.
+            vert_exaggeration: Vertical exaggeration factor.
+            max_render_dim: Downsample so the largest grid dimension
+                       doesn't exceed this — real DEMs are often far too
+                       large to mesh and render interactively at full
+                       resolution without becoming unusably slow.
+            output:    Path to save a standalone interactive HTML file
+                       (self-contained, opens in any browser, no server
+                       needed). If None, returns the PyVista plotter for
+                       inline Jupyter display instead.
+            window_size: Render window size in pixels (width, height).
+
+        Example::
+
+            pl.plot_3d_terrain_interactive(
+                "dem.tif", drape=susceptibility, drape_colormap="Blues",
+                output="susceptibility_interactive.html",
+            )
+        """
+        import numpy as np
+
+        try:
+            import pyvista as pv
+        except ImportError as exc:
+            raise ImportError(
+                'plot_3d_terrain_interactive() requires PyVista: '
+                'pip install "pyvista[jupyter]" (the [jupyter] extra is '
+                'needed for HTML export via output=...)'
+            ) from exc
+
+        def _load(source):
+            if isinstance(source, (str, Path)):
+                import rasterio
+
+                with rasterio.open(source) as src:
+                    arr = src.read(1).astype(np.float32)
+                    nodata = src.nodata
+                    if nodata is not None:
+                        arr = np.where(arr == nodata, np.nan, arr)
+                return arr
+            return np.asarray(source, dtype=np.float32)
+
+        dem = _load(data)
+        finite_dem = dem[np.isfinite(dem)]
+        if finite_dem.size == 0:
+            raise ValueError(
+                "DEM contains no finite elevation values at all (all NaN) — "
+                "nothing to render."
+            )
+
+        step = max(1, max(dem.shape) // max_render_dim)
+        dem_ds = dem[::step, ::step]
+        h, w = dem_ds.shape
+        fill_value = float(np.nanmin(dem_ds))
+        dem_filled = np.where(np.isfinite(dem_ds), dem_ds, fill_value)
+
+        grid = pv.ImageData()
+        grid.dimensions = (w, h, 1)
+        grid.origin = (0, 0, 0)
+        grid.spacing = (1, 1, 1)
+        grid.point_data["elevation"] = dem_filled.flatten(order="C")
+
+        scalars_name = "elevation"
+        cmap = colormap
+        if drape is not None:
+            drape_arr = _load(drape)
+            if drape_arr.shape != dem.shape:
+                raise ValueError(
+                    f"drape shape {drape_arr.shape} doesn't match the DEM's "
+                    f"shape {dem.shape} — they must share the same grid. "
+                    f"Use Preprocessor.resample(reference=...) to align them first."
+                )
+            drape_ds = drape_arr[::step, ::step]
+            grid.point_data["drape"] = np.where(
+                np.isfinite(drape_ds), drape_ds, np.nan
+            ).flatten(order="C")
+            scalars_name = "drape"
+            cmap = drape_colormap
+
+        warped = grid.warp_by_scalar("elevation", factor=vert_exaggeration)
+
+        plotter = pv.Plotter(off_screen=output is not None, window_size=window_size)
+        plotter.add_mesh(warped, scalars=scalars_name, cmap=cmap, show_scalar_bar=True)
+        plotter.set_background("white")
+
+        if output is not None:
+            out_path = Path(output)
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            plotter.export_html(str(out_path))
+            logger.info("Interactive 3D terrain saved → %s", out_path)
+            return out_path
+        return plotter
+
     def plot_3d_terrain(
         self,
         data: Union[str, Path, Any],
@@ -128,6 +247,25 @@ class Plotter:
             return np.asarray(source, dtype=np.float32), None
 
         dem, plot_extent = _load(data)
+
+        finite_dem = dem[np.isfinite(dem)]
+        if finite_dem.size == 0:
+            raise ValueError(
+                "DEM contains no finite elevation values at all (all NaN) — "
+                "nothing to render. Check the source raster and AOI overlap."
+            )
+        elev_range = float(np.nanmax(finite_dem) - np.nanmin(finite_dem))
+        if elev_range < 1.0:
+            import warnings
+
+            warnings.warn(
+                f"DEM elevation range is only {elev_range:.2f}m across the "
+                f"whole AOI — the 3D plot will look flat/empty regardless of "
+                f"vert_exaggeration. This usually means the AOI barely "
+                f"overlaps real terrain (e.g. mostly ocean/water) or the "
+                f"wrong band was loaded, not a plotting bug.",
+                stacklevel=2,
+            )
         drape_arr = None
         if drape is not None:
             drape_arr, drape_extent = _load(drape)

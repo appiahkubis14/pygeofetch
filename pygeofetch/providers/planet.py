@@ -137,7 +137,7 @@ class PlanetProvider(AbstractBaseProvider):
             provider=self.PROVIDER_ID,
             access_token=_plain(api_key),
             expires_at=datetime.now(timezone.utc) + timedelta(days=365),
-            session_data={"api_key": api_key},
+            session_data={"api_key": _plain(api_key)},
         )
         self._session = session
         self._logger.info("Planet Labs: authenticated successfully")
